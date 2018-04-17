@@ -1,0 +1,35 @@
+package: github.com/open-policy-agent/opa-istio-plugin
+import:
+- package: github.com/istio/api
+  version: c3900719e8f44a2180393b43c4fb8538fd141de1
+  subpackages:
+  - mixer/v1
+- package: github.com/istio/gogo-genproto
+  subpackages:
+  - googleapis/google/rpc
+- package: github.com/mwitkow/grpc-proxy
+  version: 67591eb23c48346a480470e462289835d96f70da
+- package: github.com/golang/lint
+- package: golang.org/x/tools
+  subpackages:
+  - cmd/goimports
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: google.golang.org/grpc
+  version: 1.10.0
+  subpackages:
+  - codes
+  - metadata
+  - reflection
+- package: github.com/open-policy-agent/opa
+  version: master
+- package: github.com/spf13/cobra
+  version: b4dbd37a01839e0653eec12aa4bbb2a2ce7b2a37
+- package: github.com/spf13/pflag
+  version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
+- package: github.com/sirupsen/logrus
+  version: v1.0.3
+- package: golang.org/x/lint
+  subpackages:
+  - golint

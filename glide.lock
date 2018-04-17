@@ -1,0 +1,199 @@
+hash: 67775e99d8f678a648087bbe6520ba18816db66f0d0e4e8a22ffb1157625a5dd
+updated: 2018-04-17T12:07:49.574088-07:00
+imports:
+- name: github.com/beorn7/perks
+  version: 3a771d992973f24aa725d07868b467d1ddfceafb
+  subpackages:
+  - quantile
+- name: github.com/dchest/siphash
+  version: 4ebf1de738443ea7f45f02dc394c4df1942a126d
+- name: github.com/ghodss/yaml
+  version: 0ca9ea5df5451ffdf184b4428c902747c2c11cd7
+- name: github.com/gogo/googleapis
+  version: 08a7655d27152912db7aaf4f983275eaf8d128ef
+  subpackages:
+  - google/rpc
+- name: github.com/gogo/protobuf
+  version: 1ef32a8b9fc3f8ec940126907cedb5998f6318e4
+  subpackages:
+  - gogoproto
+  - proto
+  - protoc-gen-gogo/descriptor
+  - sortkeys
+  - types
+- name: github.com/golang/lint
+  version: 85993ffd0a6cd043291f3f63d45d656d97b165bd
+- name: github.com/golang/protobuf
+  version: e09c5db296004fbe3f74490e84dcd62c3c5ddb1b
+  subpackages:
+  - proto
+  - protoc-gen-go/descriptor
+  - ptypes
+  - ptypes/any
+  - ptypes/duration
+  - ptypes/timestamp
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+- name: github.com/gorilla/mux
+  version: b57cb1605fd11ba2ecfa7f68992b4b9cc791934d
+- name: github.com/inconshreveable/mousetrap
+  version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/istio/api
+  version: c3900719e8f44a2180393b43c4fb8538fd141de1
+  subpackages:
+  - mixer/v1
+- name: github.com/istio/gogo-genproto
+  version: dd2b5b6a8f1400838165245e704a011a30154a44
+  subpackages:
+  - googleapis/google/rpc
+- name: github.com/mattn/go-runewidth
+  version: ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
+- name: github.com/mwitkow/grpc-proxy
+  version: 67591eb23c48346a480470e462289835d96f70da
+  subpackages:
+  - proxy
+- name: github.com/olekukonko/tablewriter
+  version: b8a9be070da40449e501c3c4730a889e42d87a9e
+- name: github.com/open-policy-agent/opa
+  version: c7a985b6bb54eb37cad8d9897c8a3a4dc0a97bfa
+  subpackages:
+  - ast
+  - bundle
+  - cmd
+  - cover
+  - dependencies
+  - format
+  - loader
+  - metrics
+  - plugins
+  - plugins/bundle
+  - plugins/logs
+  - plugins/rest
+  - plugins/status
+  - rego
+  - repl
+  - runtime
+  - server
+  - server/authorizer
+  - server/identifier
+  - server/types
+  - server/writer
+  - storage
+  - storage/inmem
+  - tester
+  - topdown
+  - topdown/builtins
+  - types
+  - util
+  - version
+  - watch
+- name: github.com/peterh/liner
+  version: bf27d3ba8e1d9899d45a457ffac16c953eb2d647
+- name: github.com/pkg/errors
+  version: 816c9085562cd7ee03e7f8188a1cfd942858cded
+- name: github.com/prometheus/client_golang
+  version: 82f5ff156b29e276022b1a958f7d385870fb9814
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: 99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: d0f7cd64bda49e08b22ae8a730aa57aa0db125d6
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: 8b1c2da0d56deffdbb9e48d4414b4e674bd8083e
+  subpackages:
+  - internal/util
+  - nfs
+  - xfs
+- name: github.com/rcrowley/go-metrics
+  version: d932a24a8ccb8fcadc993e5c6c58f93dac168294
+- name: github.com/sirupsen/logrus
+  version: f006c2ac4710855cf0f916dd6b77acf6b048dc6e
+- name: github.com/spf13/cobra
+  version: b4dbd37a01839e0653eec12aa4bbb2a2ce7b2a37
+- name: github.com/spf13/pflag
+  version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
+- name: github.com/yashtewari/glob-intersection
+  version: 7af743e8ec8480fee1932a737a406f7ec817f910
+- name: golang.org/x/crypto
+  version: d6449816ce06963d9d136eee5a56fca5b0616e7e
+  subpackages:
+  - ssh/terminal
+- name: golang.org/x/lint
+  version: 85993ffd0a6cd043291f3f63d45d656d97b165bd
+  subpackages:
+  - golint
+- name: golang.org/x/net
+  version: 8d16fa6dc9a85c1cd3ed24ad08ff21cf94f10888
+  subpackages:
+  - context
+  - http/httpguts
+  - http2
+  - http2/hpack
+  - idna
+  - internal/timeseries
+  - lex/httplex
+  - trace
+- name: golang.org/x/sys
+  version: b126b21c05a91c856b027c16779c12e3bf236954
+  subpackages:
+  - unix
+  - windows
+- name: golang.org/x/text
+  version: 7922cc490dd5a7dbaa7fd5d6196b49db59ac042f
+  subpackages:
+  - secure/bidirule
+  - transform
+  - unicode/bidi
+  - unicode/norm
+- name: golang.org/x/tools
+  version: 94b14834a20132093826ea5e2da5502a13908ad3
+  subpackages:
+  - cmd/goimports
+- name: google.golang.org/genproto
+  version: 7fd901a49ba6a7f87732eb344f6e3c5b19d1b200
+  subpackages:
+  - googleapis/rpc/status
+- name: google.golang.org/grpc
+  version: 8e4536a86ab602859c20df5ebfd0bd4228d08655
+  subpackages:
+  - balancer
+  - balancer/base
+  - balancer/roundrobin
+  - codes
+  - connectivity
+  - credentials
+  - encoding
+  - encoding/proto
+  - grpclb/grpc_lb_v1/messages
+  - grpclog
+  - internal
+  - keepalive
+  - metadata
+  - naming
+  - peer
+  - reflection
+  - reflection/grpc_reflection_v1alpha
+  - resolver
+  - resolver/dns
+  - resolver/passthrough
+  - stats
+  - status
+  - tap
+  - transport
+- name: gopkg.in/fsnotify.v1
+  version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
+- name: gopkg.in/yaml.v2
+  version: 5420a8b6744d3b0345ab293f6fcba19c978f1183
+testImports: []
