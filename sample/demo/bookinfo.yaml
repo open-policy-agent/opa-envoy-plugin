@@ -39,7 +39,7 @@ spec:
   template:
     metadata:
       annotations:
-        sidecar.istio.io/status: '{"version":"77fb517dd12bd096837d43f4cd0987ecac794c4de4b46cf7df64d1fe96425001","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
+        sidecar.istio.io/status: '{"version":"15bbcd92b59e99a83360c48bd7af9e84ffd5b961b914e8febcee0e38d08b773e","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
       creationTimestamp: null
       labels:
         app: details
@@ -62,17 +62,17 @@ spec:
         - --serviceCluster
         - details
         - --drainDuration
-        - 2s
+        - 45s
         - --parentShutdownDuration
-        - 3s
+        - 1m0s
         - --discoveryAddress
-        - istio-pilot.istio-system:15003
+        - istio-pilot.istio-system:8080
         - --discoveryRefreshDelay
         - 1s
         - --zipkinAddress
         - zipkin.istio-system:9411
         - --connectTimeout
-        - 1s
+        - 10s
         - --statsdUdpAddress
         - istio-mixer.istio-system:9125
         - --proxyAdminPort
@@ -92,13 +92,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        image: docker.io/istio/proxy:0.5.1
+        image: docker.io/istio/proxy_debug:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-proxy
         resources: {}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: true
+          privileged: true
+          readOnlyRootFilesystem: false
           runAsUser: 1337
         volumeMounts:
         - mountPath: /etc/istio/proxy
@@ -112,7 +112,7 @@ spec:
         - "15001"
         - -u
         - "1337"
-        image: docker.io/istio/proxy_init:0.5.1
+        image: docker.io/istio/proxy_init:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-init
         resources: {}
@@ -120,6 +120,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+          privileged: true
       - args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c
@@ -169,7 +170,7 @@ spec:
   template:
     metadata:
       annotations:
-        sidecar.istio.io/status: '{"version":"77fb517dd12bd096837d43f4cd0987ecac794c4de4b46cf7df64d1fe96425001","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
+        sidecar.istio.io/status: '{"version":"15bbcd92b59e99a83360c48bd7af9e84ffd5b961b914e8febcee0e38d08b773e","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
       creationTimestamp: null
       labels:
         app: ratings
@@ -192,17 +193,17 @@ spec:
         - --serviceCluster
         - ratings
         - --drainDuration
-        - 2s
+        - 45s
         - --parentShutdownDuration
-        - 3s
+        - 1m0s
         - --discoveryAddress
-        - istio-pilot.istio-system:15003
+        - istio-pilot.istio-system:8080
         - --discoveryRefreshDelay
         - 1s
         - --zipkinAddress
         - zipkin.istio-system:9411
         - --connectTimeout
-        - 1s
+        - 10s
         - --statsdUdpAddress
         - istio-mixer.istio-system:9125
         - --proxyAdminPort
@@ -222,13 +223,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        image: docker.io/istio/proxy:0.5.1
+        image: docker.io/istio/proxy_debug:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-proxy
         resources: {}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: true
+          privileged: true
+          readOnlyRootFilesystem: false
           runAsUser: 1337
         volumeMounts:
         - mountPath: /etc/istio/proxy
@@ -242,7 +243,7 @@ spec:
         - "15001"
         - -u
         - "1337"
-        image: docker.io/istio/proxy_init:0.5.1
+        image: docker.io/istio/proxy_init:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-init
         resources: {}
@@ -250,6 +251,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+          privileged: true
       - args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c
@@ -299,7 +301,7 @@ spec:
   template:
     metadata:
       annotations:
-        sidecar.istio.io/status: '{"version":"77fb517dd12bd096837d43f4cd0987ecac794c4de4b46cf7df64d1fe96425001","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
+        sidecar.istio.io/status: '{"version":"15bbcd92b59e99a83360c48bd7af9e84ffd5b961b914e8febcee0e38d08b773e","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
       creationTimestamp: null
       labels:
         app: reviews
@@ -322,17 +324,17 @@ spec:
         - --serviceCluster
         - reviews
         - --drainDuration
-        - 2s
+        - 45s
         - --parentShutdownDuration
-        - 3s
+        - 1m0s
         - --discoveryAddress
-        - istio-pilot.istio-system:15003
+        - istio-pilot.istio-system:8080
         - --discoveryRefreshDelay
         - 1s
         - --zipkinAddress
         - zipkin.istio-system:9411
         - --connectTimeout
-        - 1s
+        - 10s
         - --statsdUdpAddress
         - istio-mixer.istio-system:9125
         - --proxyAdminPort
@@ -352,13 +354,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        image: docker.io/istio/proxy:0.5.1
+        image: docker.io/istio/proxy_debug:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-proxy
         resources: {}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: true
+          privileged: true
+          readOnlyRootFilesystem: false
           runAsUser: 1337
         volumeMounts:
         - mountPath: /etc/istio/proxy
@@ -372,7 +374,7 @@ spec:
         - "15001"
         - -u
         - "1337"
-        image: docker.io/istio/proxy_init:0.5.1
+        image: docker.io/istio/proxy_init:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-init
         resources: {}
@@ -380,6 +382,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+          privileged: true
       - args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c
@@ -413,7 +416,7 @@ spec:
   template:
     metadata:
       annotations:
-        sidecar.istio.io/status: '{"version":"77fb517dd12bd096837d43f4cd0987ecac794c4de4b46cf7df64d1fe96425001","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
+        sidecar.istio.io/status: '{"version":"15bbcd92b59e99a83360c48bd7af9e84ffd5b961b914e8febcee0e38d08b773e","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
       creationTimestamp: null
       labels:
         app: reviews
@@ -436,17 +439,17 @@ spec:
         - --serviceCluster
         - reviews
         - --drainDuration
-        - 2s
+        - 45s
         - --parentShutdownDuration
-        - 3s
+        - 1m0s
         - --discoveryAddress
-        - istio-pilot.istio-system:15003
+        - istio-pilot.istio-system:8080
         - --discoveryRefreshDelay
         - 1s
         - --zipkinAddress
         - zipkin.istio-system:9411
         - --connectTimeout
-        - 1s
+        - 10s
         - --statsdUdpAddress
         - istio-mixer.istio-system:9125
         - --proxyAdminPort
@@ -466,13 +469,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        image: docker.io/istio/proxy:0.5.1
+        image: docker.io/istio/proxy_debug:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-proxy
         resources: {}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: true
+          privileged: true
+          readOnlyRootFilesystem: false
           runAsUser: 1337
         volumeMounts:
         - mountPath: /etc/istio/proxy
@@ -486,7 +489,7 @@ spec:
         - "15001"
         - -u
         - "1337"
-        image: docker.io/istio/proxy_init:0.5.1
+        image: docker.io/istio/proxy_init:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-init
         resources: {}
@@ -494,6 +497,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+          privileged: true
       - args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c
@@ -527,7 +531,7 @@ spec:
   template:
     metadata:
       annotations:
-        sidecar.istio.io/status: '{"version":"77fb517dd12bd096837d43f4cd0987ecac794c4de4b46cf7df64d1fe96425001","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
+        sidecar.istio.io/status: '{"version":"15bbcd92b59e99a83360c48bd7af9e84ffd5b961b914e8febcee0e38d08b773e","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
       creationTimestamp: null
       labels:
         app: reviews
@@ -550,17 +554,17 @@ spec:
         - --serviceCluster
         - reviews
         - --drainDuration
-        - 2s
+        - 45s
         - --parentShutdownDuration
-        - 3s
+        - 1m0s
         - --discoveryAddress
-        - istio-pilot.istio-system:15003
+        - istio-pilot.istio-system:8080
         - --discoveryRefreshDelay
         - 1s
         - --zipkinAddress
         - zipkin.istio-system:9411
         - --connectTimeout
-        - 1s
+        - 10s
         - --statsdUdpAddress
         - istio-mixer.istio-system:9125
         - --proxyAdminPort
@@ -580,13 +584,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        image: docker.io/istio/proxy:0.5.1
+        image: docker.io/istio/proxy_debug:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-proxy
         resources: {}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: true
+          privileged: true
+          readOnlyRootFilesystem: false
           runAsUser: 1337
         volumeMounts:
         - mountPath: /etc/istio/proxy
@@ -600,7 +604,7 @@ spec:
         - "15001"
         - -u
         - "1337"
-        image: docker.io/istio/proxy_init:0.5.1
+        image: docker.io/istio/proxy_init:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-init
         resources: {}
@@ -608,6 +612,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+          privileged: true
       - args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c
@@ -657,7 +662,7 @@ spec:
   template:
     metadata:
       annotations:
-        sidecar.istio.io/status: '{"version":"77fb517dd12bd096837d43f4cd0987ecac794c4de4b46cf7df64d1fe96425001","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
+        sidecar.istio.io/status: '{"version":"15bbcd92b59e99a83360c48bd7af9e84ffd5b961b914e8febcee0e38d08b773e","initContainers":["istio-init","enable-core-dump"],"containers":["istio-proxy"],"volumes":["istio-envoy","istio-certs"]}'
       creationTimestamp: null
       labels:
         app: productpage
@@ -673,24 +678,24 @@ spec:
       - args:
         - proxy
         - sidecar
-        - --customConfigFile
-        - /etc/istio/envoy_product.json
+        - --configPath
+        - /etc/istio/proxy
         - --binaryPath
         - /usr/local/bin/envoy
         - --serviceCluster
         - productpage
         - --drainDuration
-        - 2s
+        - 45s
         - --parentShutdownDuration
-        - 3s
+        - 1m0s
         - --discoveryAddress
-        - istio-pilot.istio-system:15003
+        - istio-pilot.istio-system:8080
         - --discoveryRefreshDelay
         - 1s
         - --zipkinAddress
         - zipkin.istio-system:9411
         - --connectTimeout
-        - 1s
+        - 10s
         - --statsdUdpAddress
         - istio-mixer.istio-system:9125
         - --proxyAdminPort
@@ -710,12 +715,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        image: docker.io/istio/proxy:0.7.1
+        image: docker.io/istio/proxy_debug:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-proxy
         resources: {}
         securityContext:
-          privileged: false
+          privileged: true
           readOnlyRootFilesystem: false
           runAsUser: 1337
         volumeMounts:
@@ -724,9 +729,9 @@ spec:
         - mountPath: /etc/certs/
           name: istio-certs
           readOnly: true
-      - image: openpolicyagent/opa:0.8.0-dev-istio
+      - image: 10.1.10.155:5000/grpc-proxy:v95
         imagePullPolicy: IfNotPresent
-        name: opa-istio-plugin
+        name: grpc-proxy
         volumeMounts:
         - mountPath: /config
           name: plugin-config
@@ -742,7 +747,7 @@ spec:
         - "15001"
         - -u
         - "1337"
-        image: docker.io/istio/proxy_init:0.5.1
+        image: docker.io/istio/proxy_init:0.7.1
         imagePullPolicy: IfNotPresent
         name: istio-init
         resources: {}
@@ -750,6 +755,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+          privileged: true
       - args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c
@@ -791,10 +797,6 @@ spec:
   rules:
   - http:
       paths:
-      - path: /people.*
-        backend:
-          serviceName: productpage
-          servicePort: 9080
       - path: /productpage
         backend:
           serviceName: productpage

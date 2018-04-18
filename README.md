@@ -64,7 +64,7 @@ mixerAddress: localhost:50051
 ```
 
 Below is the Istio mesh config. Notice the value of the _mixerCheckServer_
-field is the plugin's address.
+field is the plugin's address. This demo uses Istio 0.7.1.
 
 ```bash
 ################################
@@ -127,12 +127,12 @@ Below is the app deployment section to include the plugin as a sidecar container
    - "--log-level=debug"
 
  volumes:
-      - name: plugin-config
-        configMap:
-          name: opa-istio-plugin-config
-          items:
-          - key: config_istio.yaml
-            path: config.yaml
+ - name: plugin-config
+   configMap:
+     name: opa-istio-plugin-config
+     items:
+     - key: config_istio.yaml
+       path: config.yaml
 ```
 
 More information about the _Bookinfo_ app such as the different services that
