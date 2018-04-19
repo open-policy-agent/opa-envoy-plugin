@@ -1,6 +1,6 @@
 # OPA-Istio Plugin
 
-[![Build Status](https://travis-ci.org/ashutosh-narkar/opa-istio-plugin.svg?branch=master)](https://travis-ci.org/ashutosh-narkar/opa-istio-plugin) [![Go Report Card](https://goreportcard.com/badge/github.com/ashutosh-narkar/opa-istio-plugin)](https://goreportcard.com/report/github.com/ashutosh-narkar/opa-istio-plugin)
+[![Build Status](https://travis-ci.org/open-policy-agent/opa-istio-plugin.svg?branch=master)](https://travis-ci.org/open-policy-agent/opa-istio-plugin) [![Go Report Card](https://goreportcard.com/badge/github.com/open-policy-agent/opa-istio-plugin)](https://goreportcard.com/report/github.com/open-policy-agent/opa-istio-plugin)
 
 This repository contains the OPA-Istio plugin that extends OPA with a
 gRPC API which implements Istio Mixer's _Check_ API. 
