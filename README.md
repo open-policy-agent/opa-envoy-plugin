@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/open-policy-agent/opa-istio-plugin.svg?branch=master)](https://travis-ci.org/open-policy-agent/opa-istio-plugin) [![Go Report Card](https://goreportcard.com/badge/github.com/open-policy-agent/opa-istio-plugin)](https://goreportcard.com/report/github.com/open-policy-agent/opa-istio-plugin)
 
 This repository contains the OPA-Istio plugin that extends OPA with a
-gRPC API which implements Istio Mixer's _Check_ API. 
+gRPC API which implements Istio Mixer's _Check_ API.
 
 ## Overview
 
@@ -42,7 +42,7 @@ locally at the proxy layer.
 
 Install Istio's core components:
 ```bash
-kubectl apply -f config/install/istio.yaml
+kubectl apply -f sample/install/istio.yaml
 ```
 
 Istio's installation config file has been modified to include changes as
@@ -50,9 +50,9 @@ described below.
 
 The following field is valid for Istio v0.6.0 and higher.
 
-The _mixerCheckServer_ field in Istio's configMap is modified to point 
-to the plugin instead of Istio Mixer. 
-The default listening port of the plugin is 50051. So the  _mixerCheckServer_ 
+The _mixerCheckServer_ field in Istio's configMap is modified to point
+to the plugin instead of Istio Mixer.
+The default listening port of the plugin is 50051. So the  _mixerCheckServer_
 field is:
 
 ```bash
@@ -108,7 +108,7 @@ data:
 
 ## Install Bookinfo App
 ```bash
-kubectl apply -f config/demo/bookinfo.yaml
+kubectl apply -f sample/demo/bookinfo.yaml
 ```
 
 Below is the app deployment section to include the plugin as a sidecar container.
@@ -198,7 +198,7 @@ allow {
     user_pass = base64url.decode(userAuth[1])
     user_parts = split(user_pass, ":")
     user = user_parts[0]
-    
+
     # lookup the list of roles for the user
     roles = user_roles[user]
     # for each role in that list
