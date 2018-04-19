@@ -1,0 +1,18 @@
+services:
+  - name: ashcorp
+    url: https://ashcorp.com/v1
+    credentials:
+      bearer:
+        scheme: "Ash-Token"
+        token: "<some_token>"
+bundle:
+  name: istio/authz
+  service: ashcorp
+  polling:
+    min_delay_seconds: 60
+    max_delay_seconds: 120
+
+plugins:
+  istio_policy_server:
+    plugin_addr: ":50052"
+    policy_query: "data.istio.authz.allow"
