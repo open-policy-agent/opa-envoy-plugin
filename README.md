@@ -37,7 +37,8 @@ locally at the proxy layer.
 
 **Any existing Istio installation needs to be removed to run the OPA-Istio**
 **plugin. The plugin relies on a custom Istio config map which is needed for the**
-**proper working on the demo.**
+**proper working on the demo. Istio is working on adding watchers to track**
+**changes in the config map. See [this](https://github.com/istio/istio/issues/1449) for details.**
 
 Install Istio's core components:
 ```bash
@@ -86,7 +87,7 @@ data:
 
     rdsRefreshDelay: 1s
 
-	defaultConfig:
+    defaultConfig:
       connectTimeout: 10s
 
       configPath: "/etc/istio/proxy"
