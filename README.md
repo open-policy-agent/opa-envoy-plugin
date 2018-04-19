@@ -67,7 +67,7 @@ mixerAddress: localhost:50051
 Below is the Istio mesh config. Notice the value of the _mixerCheckServer_
 field is the plugin's address. This demo uses Istio 0.7.1.
 
-```bash
+```yaml
 ################################
 # Istio configMap cluster-wide
 ################################
