@@ -55,7 +55,7 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
     kubectl -n istio-system \
         replace configmap istio \
         -f <(kubectl -n istio-system get configmap istio -o yaml \
-                | sed 's/mixerCheckServer: .*/mixerCheckServer: localhost:15004/g')
+                | sed 's/mixerCheckServer: .*/mixerCheckServer: localhost:50051/g')
     ```
 
     **Istio v0.5 and lower**:
@@ -64,7 +64,7 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
     kubectl -n istio-system \
         replace configmap istio \
         -f <(kubectl -n istio-system get configmap istio -o yaml \
-                | sed 's/mixerAddress: .*/mixerAddress: localhost:15004/g')
+                | sed 's/mixerAddress: .*/mixerAddress: localhost:50051/g')
     ```
 
     **Restart Istio Pilot**:
