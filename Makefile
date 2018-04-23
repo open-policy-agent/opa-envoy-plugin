@@ -76,6 +76,9 @@ tag-latest:
 push-latest:
 	docker push $(IMAGE):latest
 
+update-opa:
+	@./build/update-opa-version.sh $(TAG)
+
 test: generate
 	$(DISABLE_CGO) $(GO) test $(PACKAGES)
 
