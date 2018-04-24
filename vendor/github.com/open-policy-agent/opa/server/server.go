@@ -25,7 +25,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
-	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server/authorizer"
 	"github.com/open-policy-agent/opa/server/identifier"
@@ -83,9 +82,9 @@ type Server struct {
 	authorization     AuthorizationScheme
 	cert              *tls.Certificate
 	mtx               sync.RWMutex
+	compiler          *ast.Compiler
 	partials          map[string]rego.PartialResult
 	store             storage.Store
-	manager           *plugins.Manager
 	watcher           *watch.Watcher
 	decisionIDFactory func() string
 	diagnostics       Buffer
@@ -122,7 +121,6 @@ func New() *Server {
 
 	// Initialize HTTP handlers.
 	router := mux.NewRouter()
-	router.UseEncodedPath()
 	router.Handle("/metrics", promhttp.HandlerFor(promRegistry, promhttp.HandlerOpts{})).Methods(http.MethodGet)
 	s.registerHandler(router, 0, "/data/{path:.+}", http.MethodPost, promhttp.InstrumentHandlerDuration(v0DataDur, http.HandlerFunc(s.v0DataPost)))
 	s.registerHandler(router, 0, "/data", http.MethodPost, promhttp.InstrumentHandlerDuration(v0DataDur, http.HandlerFunc(s.v0DataPost)))
@@ -191,6 +189,12 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 		return nil, err
 	}
 
+	// Load policies from storage and initialize server's cached compiler.
+	if err := s.reloadCompiler(ctx, txn); err != nil {
+		s.store.Abort(ctx, txn)
+		return nil, err
+	}
+
 	// Register triggers so that if runtime reloads the policies, the
 	// server sees the change.
 	config := storage.TriggerConfig{
@@ -200,15 +204,10 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 		s.store.Abort(ctx, txn)
 		return nil, err
 	}
-
-	s.manager.RegisterCompilerTrigger(s.migrateWatcher)
-
 	s.watcher, err = watch.New(ctx, s.store, s.getCompiler(), txn)
 	if err != nil {
 		return nil, err
 	}
-
-	s.partials = map[string]rego.PartialResult{}
 
 	return s, s.store.Commit(ctx, txn)
 }
@@ -246,12 +245,6 @@ func (s *Server) WithCertificate(cert *tls.Certificate) *Server {
 // WithStore sets the storage used by the server.
 func (s *Server) WithStore(store storage.Store) *Server {
 	s.store = store
-	return s
-}
-
-// WithManager sets the plugins manager used by the server.
-func (s *Server) WithManager(manager *plugins.Manager) *Server {
-	s.manager = manager
 	return s
 }
 
@@ -429,12 +422,12 @@ func (s *Server) reload(ctx context.Context, txn storage.Transaction, event stor
 	if !event.PolicyChanged() {
 		return
 	}
-	s.partials = map[string]rego.PartialResult{}
-}
 
-func (s *Server) migrateWatcher(txn storage.Transaction) {
-	var err error
-	s.watcher, err = s.watcher.Migrate(s.manager.GetCompiler(), txn)
+	if err := s.reloadCompiler(ctx, txn); err != nil {
+		panic(err)
+	}
+
+	s.watcher, err = s.watcher.Migrate(s.getCompiler(), txn)
 	if err != nil {
 		// The only way migration can fail is if the old watcher is closed or if
 		// the new one cannot register a trigger with the store. Since we're
@@ -442,6 +435,24 @@ func (s *Server) migrateWatcher(txn storage.Transaction) {
 		// be possible.
 		panic(err)
 	}
+}
+
+func (s *Server) reloadCompiler(ctx context.Context, txn storage.Transaction) error {
+
+	modules, err := s.loadModules(ctx, txn)
+	if err != nil {
+		return err
+	}
+
+	compiler := ast.NewCompiler().SetErrorLimit(s.errLimit)
+
+	if compiler.Compile(modules); compiler.Failed() {
+		return compiler.Errors
+	}
+
+	s.resetCompilers(compiler)
+
+	return nil
 }
 
 func (s *Server) unversionedPost(w http.ResponseWriter, r *http.Request) {
@@ -823,7 +834,7 @@ func (s *Server) v1DataPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path, ok := storage.ParsePathEscaped("/" + strings.Trim(vars["path"], "/"))
+	path, ok := storage.ParsePath("/" + strings.Trim(vars["path"], "/"))
 	if !ok {
 		writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, "bad path: %v", vars["path"]))
 		return
@@ -868,7 +879,7 @@ func (s *Server) v1DataDelete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
 
-	path, ok := storage.ParsePathEscaped("/" + strings.Trim(vars["path"], "/"))
+	path, ok := storage.ParsePath("/" + strings.Trim(vars["path"], "/"))
 	if !ok {
 		writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, "bad path: %v", vars["path"]))
 		return
@@ -1318,7 +1329,22 @@ func (s *Server) loadModules(ctx context.Context, txn storage.Transaction) (map[
 }
 
 func (s *Server) getCompiler() *ast.Compiler {
-	return s.manager.GetCompiler()
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.compiler
+}
+
+func (s *Server) setCompiler(compiler *ast.Compiler) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	s.compiler = compiler
+}
+
+func (s *Server) resetCompilers(compiler *ast.Compiler) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	s.compiler = compiler
+	s.partials = map[string]rego.PartialResult{}
 }
 
 func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transaction, input interface{}, path string, m metrics.Metrics, instrument bool, tracer topdown.Tracer, opts []func(*rego.Rego)) (*rego.Rego, error) {
@@ -1386,7 +1412,7 @@ func (s *Server) prepareV1PatchSlice(root string, ops []types.PatchV1) (result [
 		}
 
 		var ok bool
-		impl.path, ok = storage.ParsePathEscaped(path)
+		impl.path, ok = storage.ParsePath(path)
 		if !ok {
 			return nil, types.BadPatchPathErr(op.Path)
 		}
@@ -1427,9 +1453,6 @@ func stringPathToRef(s string) (r ast.Ref) {
 	for _, x := range p {
 		if x == "" {
 			continue
-		}
-		if y, err := url.PathUnescape(x); err == nil {
-			x = y
 		}
 		i, err := strconv.Atoi(x)
 		if err != nil {
