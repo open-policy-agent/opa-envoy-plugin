@@ -85,7 +85,7 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
 1. Deploy the BookInfo application.
 
     ```bash
-    kubectl apply -f <(istioctl kube-inject --debug -f https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/kube/bookinfo.yaml)
+    kubectl apply -f <(istioctl kube-inject --debug -f <(curl -s -L https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/kube/bookinfo.yaml))
     ```
 
     > **NOTE:** This command assumes you have `istioctl` in your path. You can find `istioctl` under the `<ISTIO_INSTALL_DIR>/bin` directory.
