@@ -8,9 +8,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
-	"sync"
 
-	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins/rest"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/util"
@@ -25,14 +23,10 @@ type Plugin interface {
 // Manager implements lifecycle management of plugins and gives plugins access
 // to engine-wide components like storage.
 type Manager struct {
-	Labels                map[string]string
-	Store                 storage.Store
-	compiler              *ast.Compiler
-	services              map[string]rest.Client
-	plugins               []Plugin
-	registeredTriggers    []func(txn storage.Transaction)
-	registeredTriggersMux sync.Mutex
-	compilerMux           sync.RWMutex
+	Labels   map[string]string
+	Store    storage.Store
+	services map[string]rest.Client
+	plugins  []Plugin
 }
 
 // New creates a new Manager using config.
@@ -78,92 +72,17 @@ func (m *Manager) Register(plugin Plugin) {
 	m.plugins = append(m.plugins, plugin)
 }
 
-// GetCompiler returns the manager's compiler.
-func (m *Manager) GetCompiler() *ast.Compiler {
-	m.compilerMux.RLock()
-	defer m.compilerMux.RUnlock()
-	return m.compiler
-}
-
-func (m *Manager) setCompiler(compiler *ast.Compiler) {
-	m.compilerMux.Lock()
-	defer m.compilerMux.Unlock()
-	m.compiler = compiler
-}
-
-// RegisterCompilerTrigger registers for change notifications when the compiler
-// is changed.
-func (m *Manager) RegisterCompilerTrigger(f func(txn storage.Transaction)) {
-	m.registeredTriggersMux.Lock()
-	defer m.registeredTriggersMux.Unlock()
-	m.registeredTriggers = append(m.registeredTriggers, f)
-}
-
 // Start starts the manager.
 func (m *Manager) Start(ctx context.Context) error {
 	if m == nil {
 		return nil
 	}
-
-	err := storage.Txn(ctx, m.Store, storage.TransactionParams{}, func(txn storage.Transaction) error {
-		compiler, err := loadCompilerFromStore(ctx, m.Store, txn)
-		if err != nil {
-			return err
-		}
-		m.setCompiler(compiler)
-		return nil
-	})
-
-	if err != nil {
-		return err
-	}
-
 	for _, p := range m.plugins {
 		if err := p.Start(ctx); err != nil {
 			return err
 		}
 	}
-
-	config := storage.TriggerConfig{OnCommit: m.onCommit}
-
-	return storage.Txn(ctx, m.Store, storage.WriteParams, func(txn storage.Transaction) error {
-		_, err := m.Store.Register(ctx, txn, config)
-		return err
-	})
-}
-
-func (m *Manager) onCommit(ctx context.Context, txn storage.Transaction, event storage.TriggerEvent) {
-	if event.PolicyChanged() {
-		compiler, _ := loadCompilerFromStore(ctx, m.Store, txn)
-		m.setCompiler(compiler)
-		for _, f := range m.registeredTriggers {
-			f(txn)
-		}
-	}
-}
-
-func loadCompilerFromStore(ctx context.Context, store storage.Store, txn storage.Transaction) (*ast.Compiler, error) {
-	policies, err := store.ListPolicies(ctx, txn)
-	if err != nil {
-		return nil, err
-	}
-	modules := map[string]*ast.Module{}
-
-	for _, policy := range policies {
-		bs, err := store.GetPolicy(ctx, txn, policy)
-		if err != nil {
-			return nil, err
-		}
-		module, err := ast.ParseModule(policy, string(bs))
-		if err != nil {
-			return nil, err
-		}
-		modules[policy] = module
-	}
-
-	compiler := ast.NewCompiler()
-	compiler.Compile(modules)
-	return compiler, nil
+	return nil
 }
 
 // Client returns a client for communicating with a remote service.
