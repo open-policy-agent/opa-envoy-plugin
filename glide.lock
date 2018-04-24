@@ -1,5 +1,5 @@
-hash: 67775e99d8f678a648087bbe6520ba18816db66f0d0e4e8a22ffb1157625a5dd
-updated: 2018-04-17T12:07:49.574088-07:00
+hash: e28aa2171036f03f26cd07af0706a54a6f8cc44d98ff1afc87c4ede129891fac
+updated: 2018-04-24T14:45:59.438884-07:00
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
@@ -14,7 +14,7 @@ imports:
   subpackages:
   - google/rpc
 - name: github.com/gogo/protobuf
-  version: 1ef32a8b9fc3f8ec940126907cedb5998f6318e4
+  version: c0656edd0d9eab7c66d1eb0c568f9039345796f7
   subpackages:
   - gogoproto
   - proto
@@ -24,7 +24,7 @@ imports:
 - name: github.com/golang/lint
   version: 85993ffd0a6cd043291f3f63d45d656d97b165bd
 - name: github.com/golang/protobuf
-  version: e09c5db296004fbe3f74490e84dcd62c3c5ddb1b
+  version: 4bd1920723d7b7c925de087aa32e2187708897f7
   subpackages:
   - proto
   - protoc-gen-go/descriptor
@@ -59,7 +59,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: b8a9be070da40449e501c3c4730a889e42d87a9e
 - name: github.com/open-policy-agent/opa
-  version: c7a985b6bb54eb37cad8d9897c8a3a4dc0a97bfa
+  version: a165fc7e082c1b3e1e6b2fdb1c21b3f2145b7033
   subpackages:
   - ast
   - bundle
@@ -135,10 +135,9 @@ imports:
   subpackages:
   - golint
 - name: golang.org/x/net
-  version: 8d16fa6dc9a85c1cd3ed24ad08ff21cf94f10888
+  version: dfe83d419c9403b40b19d08cdba2afec27b002f7
   subpackages:
   - context
-  - http/httpguts
   - http2
   - http2/hpack
   - idna
