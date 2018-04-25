@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/server/identifier"
 	"github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/storage"
@@ -434,16 +433,6 @@ p = true { false }`
 			tr{http.MethodGet, "/data/a/b/c/d", "", 200, `{}`},
 			tr{http.MethodGet, "/data/a", "", 200, `{"result": {}}`},
 			tr{http.MethodGet, "/data/a/b/c", "", 200, `{}`},
-		}},
-		{"escaped paths", []tr{
-			tr{http.MethodPut, "/data/a%2Fb", `{"c/d": 1}`, 204, ""},
-			tr{http.MethodGet, "/data", "", 200, `{"result": {"a/b": {"c/d": 1}}}`},
-			tr{http.MethodGet, "/data/a%2Fb/c%2Fd", "", 200, `{"result": 1}`},
-			tr{http.MethodGet, "/data/a/b", "", 200, `{}`},
-			tr{http.MethodPost, "/data/a%2Fb/c%2Fd", "", 200, `{"result": 1}`},
-			tr{http.MethodPost, "/data/a/b", "", 200, `{}`},
-			tr{http.MethodPatch, "/data/a%2Fb", `[{"op": "add", "path": "/e%2Ff", "value": 2}]`, 204, ""},
-			tr{http.MethodPost, "/data", "", 200, `{"result": {"a/b": {"c/d": 1, "e/f": 2}}}`},
 		}},
 	}
 
@@ -1461,7 +1450,6 @@ func TestDiagnostics(t *testing.T) {
 	f.server, _ = New().
 		WithAddress(":8182").
 		WithStore(f.server.store).
-		WithManager(f.server.manager).
 		WithDiagnosticsBuffer(NewBoundedBuffer(8)).
 		Init(context.Background())
 
@@ -2049,15 +2037,6 @@ func TestAuthorization(t *testing.T) {
 
 	ctx := context.Background()
 	store := inmem.New()
-	m, err := plugins.New([]byte{}, "test", store)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := m.Start(ctx); err != nil {
-		panic(err)
-	}
-
 	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
 
 	authzPolicy := `package system.authz
@@ -2082,7 +2061,6 @@ func TestAuthorization(t *testing.T) {
 	server, err := New().
 		WithAddress(":8182").
 		WithStore(store).
-		WithManager(m).
 		WithAuthorization(AuthorizationBasic).
 		Init(ctx)
 
@@ -2213,16 +2191,8 @@ func TestQueryBindingIterationError(t *testing.T) {
 
 	ctx := context.Background()
 	mock := &queryBindingErrStore{}
-	m, err := plugins.New([]byte{}, "test", mock)
-	if err != nil {
-		panic(err)
-	}
 
-	if err := m.Start(ctx); err != nil {
-		panic(err)
-	}
-
-	server, err := New().WithStore(mock).WithManager(m).WithAddress(":8182").Init(ctx)
+	server, err := New().WithStore(mock).WithAddress(":8182").Init(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -2261,19 +2231,9 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	ctx := context.Background()
 	store := inmem.New()
-	m, err := plugins.New([]byte{}, "test", store)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := m.Start(ctx); err != nil {
-		panic(err)
-	}
-
 	server, err := New().
 		WithAddress(":8182").
 		WithStore(store).
-		WithManager(m).
 		Init(ctx)
 	if err != nil {
 		panic(err)
