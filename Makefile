@@ -2,7 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := 0.8.0-dev-istio
+VERSION := $(shell ./build/get-opa-version.sh)-istio$(shell ./build/get-plugin-rev.sh)
 
 PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 
