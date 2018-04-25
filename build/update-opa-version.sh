@@ -29,7 +29,7 @@ if [ $? -eq 0 ]; then
   sed -i '' "s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio/" README.md
 
   # update plugin image version in quick_start.yaml
-  sed -i '' "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"/;}" quick_start.yaml
+  sed -i '' "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
 
   # run glide update
   glide up -v
