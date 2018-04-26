@@ -70,12 +70,6 @@ image-quick:
 push:
 	docker push $(IMAGE):$(VERSION)
 
-tag-latest:
-	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest
-
-push-latest:
-	docker push $(IMAGE):latest
-
 update-opa:
 	@./build/update-opa-version.sh $(TAG)
 
