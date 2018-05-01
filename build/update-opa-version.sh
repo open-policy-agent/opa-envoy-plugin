@@ -17,7 +17,7 @@ if [ $# -eq 0 ]
 fi
 
 # Update the OPA verison in glide.yaml
-sed -i '' "/opa/{N;s/version: .*/version: $1/;}" glide.yaml
+sed -i "/opa/{N;s/version: .*/version: $1/;}" glide.yaml
 
 # Check if OPA version has changed
 git status |  grep  glide.yaml
@@ -26,10 +26,10 @@ if [ $? -eq 0 ]; then
   tag=$(echo $1 | cut -c 2-)   # Remove 'v' in Tag. Eg. v0.8.0 -> 0.8.0
 
   # update plugin image version in README
-  sed -i '' "s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio/" README.md
+  sed -i "s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio/" README.md
 
   # update plugin image version in quick_start.yaml
-  sed -i '' "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
+  sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
 
   # run glide update
   glide up -v
