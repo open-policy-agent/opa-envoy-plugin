@@ -37,6 +37,7 @@ option go_package = "github.com/golang/protobuf/ptypes/any";
 option java_package = "com.google.protobuf";
 option java_outer_classname = "AnyProto";
 option java_multiple_files = true;
+option java_generate_equals_and_hash = true;
 option objc_class_prefix = "GPB";
 
 // `Any` contains an arbitrary serialized protocol buffer message along with a
@@ -64,7 +65,7 @@ option objc_class_prefix = "GPB";
 //       foo = any.unpack(Foo.class);
 //     }
 //
-// Example 3: Pack and unpack a message in Python.
+//  Example 3: Pack and unpack a message in Python.
 //
 //     foo = Foo(...)
 //     any = Any()
@@ -74,16 +75,6 @@ option objc_class_prefix = "GPB";
 //       any.Unpack(foo)
 //       ...
 //
-// Example 4: Pack and unpack a message in Go
-//
-//      foo := &pb.Foo{...}
-//      any, err := ptypes.MarshalAny(foo)
-//      ...
-//      foo := &pb.Foo{}
-//      if err := ptypes.UnmarshalAny(any, foo); err != nil {
-//        ...
-//      }
-//
 // The pack methods provided by protobuf library will by default use
 // 'type.googleapis.com/full.type.name' as the type URL and the unpack
 // methods only use the fully qualified type name after the last '/'
@@ -92,7 +83,7 @@ option objc_class_prefix = "GPB";
 //
 //
 // JSON
-//
+// ====
 // The JSON representation of an `Any` value uses the regular
 // representation of the deserialized, embedded message, with an
 // additional field `@type` which contains the type URL. Example:
