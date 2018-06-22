@@ -34,28 +34,57 @@ type RegoFile struct {
 	Raw    []byte
 }
 
+// Filter defines the interface for filtering files during loading. If the
+// filter returns true, the file should be excluded from the result.
+type Filter func(abspath string, info os.FileInfo, depth int) bool
+
+// GlobExcludeName excludes files and directories whose names do not match the
+// shell style pattern at minDepth or greater.
+func GlobExcludeName(pattern string, minDepth int) Filter {
+	return func(abspath string, info os.FileInfo, depth int) bool {
+		match, _ := filepath.Match(pattern, info.Name())
+		return match && depth >= minDepth
+	}
+}
+
 // All returns a Result object loaded (recursively) from the specified paths.
 func All(paths []string) (*Result, error) {
-	return all(paths, func(curr *Result, path string) error {
-		result, err := loadFile(path)
-		if err != nil {
-			return err
-		}
-		return curr.merge(path, result)
-	})
+	return Filtered(paths, nil)
 }
 
 // AllRegos returns a Result object loaded (recursively) with all Rego source
 // files from the specified paths.
 func AllRegos(paths []string) (*Result, error) {
-	return all(paths, func(curr *Result, path string) error {
-		if !strings.HasSuffix(path, bundle.RegoExt) {
-			return nil
-		}
-		result, err := Rego(path)
+	return Filtered(paths, func(_ string, info os.FileInfo, depth int) bool {
+		return !info.IsDir() && !strings.HasSuffix(info.Name(), bundle.RegoExt)
+	})
+}
+
+// Filtered returns a Result object loaded (recursively) from the specified
+// paths while applying the given filters. If any filter returns true, the
+// file/directory is excluded.
+func Filtered(paths []string, filter Filter) (*Result, error) {
+	return all(paths, filter, func(curr *Result, path string, depth int) error {
+
+		bs, err := ioutil.ReadFile(path)
 		if err != nil {
 			return err
 		}
+
+		result, err := loadKnownTypes(path, bs)
+		if err != nil {
+			if !isUnrecognizedFile(err) {
+				return err
+			}
+			if depth > 0 {
+				return nil
+			}
+			result, err = loadFileForAnyType(path, bs)
+			if err != nil {
+				return err
+			}
+		}
+
 		return curr.merge(path, result)
 	})
 }
@@ -129,12 +158,15 @@ func (l *Result) withParent(p string) *Result {
 	}
 }
 
-func all(paths []string, f func(*Result, string) error) (*Result, error) {
+func all(paths []string, filter Filter, f func(*Result, string, int) error) (*Result, error) {
 	errors := loaderErrors{}
 	root := newResult()
 
 	for _, path := range paths {
 
+		// Paths can be prefixed with a string that specifies where content should be
+		// loaded under data. E.g., foo.bar:/path/to/some.json will load the content
+		// of some.json under {"foo": {"bar": ...}}.
 		loaded := root
 		prefix, path := SplitPrefix(path)
 		if len(prefix) > 0 {
@@ -143,21 +175,7 @@ func all(paths []string, f func(*Result, string) error) (*Result, error) {
 			}
 		}
 
-		info, err := os.Stat(path)
-		if err != nil {
-			errors.Add(err)
-			continue
-		}
-
-		if info.IsDir() {
-			loadDirRecursive(&errors, path, loaded)
-		} else {
-			err := f(loaded, path)
-			if err != nil {
-				errors.Add(err)
-			}
-		}
-
+		allRec(path, filter, &errors, loaded, 0, f)
 	}
 
 	if len(errors) > 0 {
@@ -166,40 +184,49 @@ func all(paths []string, f func(*Result, string) error) (*Result, error) {
 
 	return root, nil
 }
-func loadDirRecursive(errors *loaderErrors, dirPath string, loaded *Result) {
-	files, err := ioutil.ReadDir(dirPath)
+
+func allRec(path string, filter Filter, errors *loaderErrors, loaded *Result, depth int, f func(*Result, string, int) error) {
+	info, err := os.Stat(path)
 	if err != nil {
 		errors.Add(err)
 		return
 	}
-	for _, file := range files {
-		filePath := filepath.Join(dirPath, file.Name())
-		info, err := os.Stat(filePath)
-		if err != nil {
-			errors.Add(err)
-		} else {
-			if info.IsDir() {
-				loadDirRecursive(errors, filePath, loaded.withParent(info.Name()))
-			} else {
-				bs, err := ioutil.ReadFile(filePath)
-				if err != nil {
-					errors.Add(err)
-				} else {
-					result, err := loadKnownTypes(filePath, bs)
-					if err != nil {
-						if _, ok := err.(unrecognizedFile); !ok {
-							errors.Add(err)
-						}
-					} else {
-						if err := loaded.merge(filePath, result); err != nil {
-							errors.Add(err)
-						}
-					}
 
-				}
-			}
+	if filter != nil && filter(path, info, depth) {
+		return
+	}
+
+	if !info.IsDir() {
+		if err := f(loaded, path, depth); err != nil {
+			errors.Add(err)
+		}
+		return
+	}
+
+	// If we are recursing on directories then content must be loaded under path
+	// speciifed by directory hierarchy.
+	if depth > 0 {
+		loaded = loaded.withParent(info.Name())
+	}
+
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		errors.Add(err)
+		return
+	}
+
+	for _, file := range files {
+		allRec(filepath.Join(path, file.Name()), filter, errors, loaded, depth+1, f)
+	}
+}
+
+func exclude(filters []Filter, path string, info os.FileInfo, depth int) bool {
+	for _, f := range filters {
+		if f(path, info, depth) {
+			return true
 		}
 	}
+	return false
 }
 
 func loadKnownTypes(path string, bs []byte) (interface{}, error) {
@@ -228,21 +255,6 @@ func loadFileForAnyType(path string, bs []byte) (interface{}, error) {
 		return doc, nil
 	}
 	return nil, unrecognizedFile(path)
-}
-
-func loadFile(path string) (interface{}, error) {
-	bs, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	result, err := loadKnownTypes(path, bs)
-	if err != nil {
-		if isUnrecognizedFile(err) {
-			return loadFileForAnyType(path, bs)
-		}
-		return nil, err
-	}
-	return result, nil
 }
 
 func loadRego(path string, bs []byte) (*RegoFile, error) {

@@ -778,7 +778,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 
 			return nil
 		case "Duration":
-			unq, err := strconv.Unquote(string(inputValue))
+			unq, err := unquote(string(inputValue))
 			if err != nil {
 				return err
 			}
@@ -795,7 +795,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 			target.Field(1).SetInt(ns)
 			return nil
 		case "Timestamp":
-			unq, err := strconv.Unquote(string(inputValue))
+			unq, err := unquote(string(inputValue))
 			if err != nil {
 				return err
 			}
@@ -842,7 +842,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_NullValue{}))
 			} else if v, err := strconv.ParseFloat(ivStr, 0); err == nil {
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_NumberValue{v}))
-			} else if v, err := strconv.Unquote(ivStr); err == nil {
+			} else if v, err := unquote(ivStr); err == nil {
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_StringValue{v}))
 			} else if v, err := strconv.ParseBool(ivStr); err == nil {
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_BoolValue{v}))
@@ -877,6 +877,9 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		if target.Kind() == reflect.Ptr { // proto2
 			target.Set(reflect.New(targetType.Elem()))
 			target = target.Elem()
+		}
+		if targetType.Kind() != reflect.Int32 {
+			return fmt.Errorf("invalid target %q for enum %s", targetType.Kind(), prop.Enum)
 		}
 		target.SetInt(int64(n))
 		return nil
@@ -1025,13 +1028,6 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		return nil
 	}
 
-	// 64-bit integers can be encoded as strings. In this case we drop
-	// the quotes and proceed as normal.
-	isNum := targetType.Kind() == reflect.Int64 || targetType.Kind() == reflect.Uint64
-	if isNum && strings.HasPrefix(string(inputValue), `"`) {
-		inputValue = inputValue[1 : len(inputValue)-1]
-	}
-
 	// Non-finite numbers can be encoded as strings.
 	isFloat := targetType.Kind() == reflect.Float32 || targetType.Kind() == reflect.Float64
 	if isFloat {
@@ -1041,8 +1037,23 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		}
 	}
 
+	// integers & floats can be encoded as strings. In this case we drop
+	// the quotes and proceed as normal.
+	isNum := targetType.Kind() == reflect.Int64 || targetType.Kind() == reflect.Uint64 ||
+		targetType.Kind() == reflect.Int32 || targetType.Kind() == reflect.Uint32 ||
+		targetType.Kind() == reflect.Float32 || targetType.Kind() == reflect.Float64
+	if isNum && strings.HasPrefix(string(inputValue), `"`) {
+		inputValue = inputValue[1 : len(inputValue)-1]
+	}
+
 	// Use the encoding/json for parsing other value types.
 	return json.Unmarshal(inputValue, target.Addr().Interface())
+}
+
+func unquote(s string) (string, error) {
+	var ret string
+	err := json.Unmarshal([]byte(s), &ret)
+	return ret, err
 }
 
 // jsonProperties returns parsed proto.Properties for the field and corrects JSONName attribute.

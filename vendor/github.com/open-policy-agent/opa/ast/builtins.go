@@ -98,12 +98,14 @@ var DefaultBuiltins = [...]*Builtin{
 	Base64UrlDecode,
 	URLQueryDecode,
 	URLQueryEncode,
+	URLQueryEncodeObject,
 	YAMLMarshal,
 	YAMLUnmarshal,
 
 	// Tokens
 	JWTDecode,
 	JWTVerifyRS256,
+	JWTVerifyHS256,
 
 	// Time
 	NowNanos,
@@ -720,6 +722,23 @@ var URLQueryEncode = &Builtin{
 	),
 }
 
+// URLQueryEncodeObject encodes the given JSON into a URL encoded query string.
+var URLQueryEncodeObject = &Builtin{
+	Name: "urlquery.encode_object",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(
+					types.S,
+					types.NewAny(
+						types.S,
+						types.NewArray(nil, types.S),
+						types.NewSet(types.S))))),
+		types.S,
+	),
+}
+
 // YAMLMarshal serializes the input term.
 var YAMLMarshal = &Builtin{
 	Name: "yaml.marshal",
@@ -758,6 +777,18 @@ var JWTDecode = &Builtin{
 // JWTVerifyRS256 verifies if a RS256 JWT signature is valid or not.
 var JWTVerifyRS256 = &Builtin{
 	Name: "io.jwt.verify_rs256",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyHS256 verifies if a HS256 (secret) JWT signature is valid or not.
+var JWTVerifyHS256 = &Builtin{
+	Name: "io.jwt.verify_hs256",
 	Decl: types.NewFunction(
 		types.Args(
 			types.S,

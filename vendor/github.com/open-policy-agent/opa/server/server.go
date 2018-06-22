@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,7 +79,7 @@ var systemMainPath = ast.MustParseRef("data.system.main")
 type Server struct {
 	Handler http.Handler
 
-	addr              string
+	addrs             []string
 	insecureAddr      string
 	authentication    AuthenticationScheme
 	authorization     AuthorizationScheme
@@ -98,6 +100,9 @@ type cachedCompiler struct {
 	queryPath string
 	compiler  *ast.Compiler
 }
+
+// Loop will contain all the calls from the server that we'll be listening on.
+type Loop func() error
 
 // New returns a new Server.
 func New() *Server {
@@ -213,9 +218,9 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 	return s, s.store.Commit(ctx, txn)
 }
 
-// WithAddress sets the listening address that the server will bind to.
-func (s *Server) WithAddress(addr string) *Server {
-	s.addr = addr
+// WithAddresses sets the listening addresses that the server will bind to.
+func (s *Server) WithAddresses(addrs []string) *Server {
+	s.addrs = addrs
 	return s
 }
 
@@ -281,36 +286,89 @@ func (s *Server) WithDecisionIDFactory(f func() string) *Server {
 }
 
 // Listeners returns functions that listen and serve connections.
-func (s *Server) Listeners() (func() error, func() error) {
+func (s *Server) Listeners() ([]Loop, error) {
+	loops := []Loop{}
+	for _, addr := range s.addrs {
+		parsedURL, err := parseURL(addr, s.cert != nil)
+		if err != nil {
+			return nil, err
+		}
+		var loop Loop
+		switch parsedURL.Scheme {
+		case "unix":
+			loop, err = s.getListenerForUNIXSocket(parsedURL)
+		case "http":
+			loop, err = s.getListenerForHTTPServer(parsedURL)
+		case "https":
+			loop, err = s.getListenerForHTTPSServer(parsedURL)
+		default:
+			err = fmt.Errorf("invalid url scheme %q", parsedURL.Scheme)
+		}
+		if err != nil {
+			return nil, err
+		}
+		loops = append(loops, loop)
+	}
 
-	server1 := http.Server{
-		Addr:    s.addr,
+	if s.insecureAddr != "" {
+		parsedURL, err := parseURL(s.insecureAddr, false)
+		if err != nil {
+			return nil, err
+		}
+		loop, err := s.getListenerForHTTPServer(parsedURL)
+		if err != nil {
+			return nil, err
+		}
+		loops = append(loops, loop)
+	}
+
+	return loops, nil
+}
+
+func (s *Server) getListenerForHTTPServer(u *url.URL) (Loop, error) {
+	httpServer := http.Server{
+		Addr:    u.Host,
 		Handler: s.Handler,
 	}
 
-	loop1 := func() error { return server1.ListenAndServe() }
+	httpLoop := func() error { return httpServer.ListenAndServe() }
+
+	return httpLoop, nil
+}
+
+func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
 
 	if s.cert == nil {
-		return loop1, nil
+		return nil, fmt.Errorf("TLS certificate required but not supplied")
 	}
 
-	server2 := http.Server{
-		Addr:    s.addr,
+	httpsServer := http.Server{
+		Addr:    u.Host,
 		Handler: s.Handler,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{*s.cert},
 		},
 	}
 
-	loop2 := func() error { return server2.ListenAndServeTLS("", "") }
+	httpsLoop := func() error { return httpsServer.ListenAndServeTLS("", "") }
 
-	if s.insecureAddr == "" {
-		return loop2, nil
+	return httpsLoop, nil
+}
+
+func (s *Server) getListenerForUNIXSocket(u *url.URL) (Loop, error) {
+	socketPath := u.Host + u.Path
+
+	// Remove domain socket file in case it already exists.
+	os.Remove(socketPath)
+
+	domainSocketServer := http.Server{Handler: s.Handler}
+	unixListener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, err
 	}
 
-	server1.Addr = s.insecureAddr
-
-	return loop2, loop1
+	domainSocketLoop := func() error { return domainSocketServer.Serve(unixListener) }
+	return domainSocketLoop, nil
 }
 
 func (s *Server) execQuery(ctx context.Context, r *http.Request, query string, input ast.Value, explainMode types.ExplainModeV1, includeMetrics, includeInstrumentation, pretty bool) (results types.QueryResponseV1, err error) {
@@ -426,9 +484,6 @@ func (s *Server) reload(ctx context.Context, txn storage.Transaction, event stor
 		}
 	}
 
-	if !event.PolicyChanged() {
-		return
-	}
 	s.partials = map[string]rego.PartialResult{}
 }
 
@@ -881,6 +936,10 @@ func (s *Server) v1DataDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = s.store.Read(ctx, txn, path)
+	if err != nil {
+		s.abortAuto(ctx, txn, w, err)
+		return
+	}
 
 	if err := s.store.Write(ctx, txn, storage.RemoveOp, path, nil); err != nil {
 		s.abortAuto(ctx, txn, w, err)
@@ -1722,4 +1781,15 @@ type patchImpl struct {
 	path  storage.Path
 	op    storage.PatchOp
 	value interface{}
+}
+
+func parseURL(s string, useHTTPSByDefault bool) (*url.URL, error) {
+	if !strings.Contains(s, "://") {
+		scheme := "http://"
+		if useHTTPSByDefault {
+			scheme = "https://"
+		}
+		s = scheme + s
+	}
+	return url.Parse(s)
 }

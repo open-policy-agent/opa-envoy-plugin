@@ -28,6 +28,7 @@ func init() {
 	var serverMode bool
 	var tlsCertFile string
 	var tlsPrivateKeyFile string
+	var ignore []string
 
 	authentication := util.NewEnumFlag("off", []string{"token", "off"})
 
@@ -103,6 +104,9 @@ the data document with the following syntax:
 			}
 			params.DiagnosticsBuffer = server.NewBoundedBuffer(serverDiagnosticsBufferSize)
 			params.Paths = args
+			params.Filter = loaderFilter{
+				Ignore: ignore,
+			}.Apply
 
 			ctx := context.Background()
 
@@ -123,7 +127,7 @@ the data document with the following syntax:
 	runCommand.Flags().StringVarP(&params.ConfigFile, "config-file", "c", "", "set path of configuration file")
 	runCommand.Flags().BoolVarP(&serverMode, "server", "s", false, "start the runtime in server mode")
 	runCommand.Flags().StringVarP(&params.HistoryPath, "history", "H", historyPath(), "set path of history file")
-	runCommand.Flags().StringVarP(&params.Addr, "addr", "a", defaultAddr, "set listening address of the server")
+	params.Addrs = runCommand.Flags().StringSliceP("addr", "a", []string{defaultAddr}, "set listening address of the server (e.g., [ip]:<port> for TCP, unix://<path> for UNIX domain socket)")
 	runCommand.Flags().StringVarP(&params.InsecureAddr, "insecure-addr", "", "", "set insecure listening address of the server")
 	runCommand.Flags().StringVarP(&params.OutputFormat, "format", "f", "pretty", "set shell output format, i.e, pretty, json")
 	runCommand.Flags().BoolVarP(&params.Watch, "watch", "w", false, "watch command line files for changes")
@@ -135,6 +139,7 @@ the data document with the following syntax:
 	runCommand.Flags().VarP(authorization, "authorization", "", "set authorization scheme")
 	runCommand.Flags().VarP(logLevel, "log-level", "l", "set log level")
 	runCommand.Flags().VarP(logFormat, "log-format", "", "set log format")
+	setIgnore(runCommand.Flags(), &ignore)
 
 	usageTemplate := `Usage:
   {{.UseLine}} [flags] [files]

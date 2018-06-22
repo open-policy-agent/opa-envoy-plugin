@@ -33,6 +33,7 @@ type eval struct {
 	query         ast.Body
 	bindings      *bindings
 	store         storage.Store
+	baseCache     *baseCache
 	txn           storage.Transaction
 	compiler      *ast.Compiler
 	input         *ast.Term
@@ -100,6 +101,10 @@ func (e *eval) traceRedo(x interface{}) {
 
 func (e *eval) traceSave(x interface{}) {
 	e.traceEvent(SaveOp, x)
+}
+
+func (e *eval) traceIndex(x interface{}) {
+	e.traceEvent(IndexOp, x)
 }
 
 func (e *eval) traceEvent(op Op, x interface{}) {
@@ -776,7 +781,17 @@ func (e *eval) getRulesIndexed(ref ast.Ref) (*ast.IndexResult, error) {
 	if index == nil {
 		return nil, nil
 	}
-	return index.Lookup(e)
+
+	result, err := index.Lookup(e)
+
+	var msg string
+	if len(result.Rules) == 1 {
+		msg = fmt.Sprintf("%v (matched 1 rule)", e.query[0])
+	} else {
+		msg = fmt.Sprintf("%v (matched %v rules)", e.query[0], len(result.Rules))
+	}
+	e.traceIndex(msg)
+	return result, err
 }
 
 func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
@@ -796,6 +811,21 @@ func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
 	}
 
 	if ref[0].Equal(ast.DefaultRootDocument) {
+
+		// Converting large JSON values into AST values can be fairly expensive. For
+		// example, a 2MB JSON value can take upwards of 30 millisceonds to convert.
+		// We cache the result of conversion here in case the same base document is
+		// being read multiple times during evaluation.
+		//
+		// NOTE(tsandall): If we introduce data mocking the cache will need to be
+		// invalidated.
+		if value := e.baseCache.Get(ref); value != nil {
+			e.instr.counterIncr(evalOpBaseCacheHit)
+			return value, nil
+		}
+
+		e.instr.counterIncr(evalOpBaseCacheMiss)
+
 		path, err := storage.NewPathForRef(ref)
 		if err != nil {
 			if !storage.IsNotFound(err) {
@@ -826,7 +856,14 @@ func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
 			}
 		}
 
-		return ast.InterfaceToValue(blob)
+		v, err := ast.InterfaceToValue(blob)
+		if err != nil {
+			return nil, err
+		}
+
+		e.baseCache.Put(ref, v)
+
+		return v, nil
 	}
 
 	return nil, fmt.Errorf("illegal ref")

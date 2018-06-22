@@ -236,8 +236,8 @@ func TestSetFail(t *testing.T) {
 
 func TestEmptyComposites(t *testing.T) {
 	assertParseOneTerm(t, "empty object", "{}", ObjectTerm())
-	assertParseOneTerm(t, "emtpy array", "[]", ArrayTerm())
-	assertParseOneTerm(t, "emtpy set", "set()", SetTerm())
+	assertParseOneTerm(t, "empty array", "[]", ArrayTerm())
+	assertParseOneTerm(t, "empty set", "set()", SetTerm())
 }
 
 func TestNestedComposites(t *testing.T) {
@@ -904,11 +904,11 @@ func TestRuleElseKeyword(t *testing.T) {
 	expected := &Module{
 		Package: MustParsePackage(`package test`),
 		Rules: []*Rule{
-			&Rule{
+			{
 				Head: head,
 				Body: MustParseBody(`"p0"`),
 			},
-			&Rule{
+			{
 				Head: head,
 				Body: MustParseBody(`"p1"`),
 				Else: &Rule{
@@ -930,11 +930,11 @@ func TestRuleElseKeyword(t *testing.T) {
 					},
 				},
 			},
-			&Rule{
+			{
 				Head: head,
 				Body: MustParseBody(`"p2"`),
 			},
-			&Rule{
+			{
 				Head: &Head{
 					Name:  Var("f"),
 					Args:  Args{VarTerm("x")},
@@ -968,11 +968,11 @@ func TestRuleElseKeyword(t *testing.T) {
 	notExpected := &Module{
 		Package: MustParsePackage(`package test`),
 		Rules: []*Rule{
-			&Rule{
+			{
 				Head: head,
 				Body: MustParseBody(`"p0"`),
 			},
-			&Rule{
+			{
 				Head: head,
 				Body: MustParseBody(`"p1"`),
 				Else: &Rule{
@@ -994,7 +994,7 @@ func TestRuleElseKeyword(t *testing.T) {
 					},
 				},
 			},
-			&Rule{
+			{
 				Head: head,
 				Body: MustParseBody(`"p2"`),
 			},

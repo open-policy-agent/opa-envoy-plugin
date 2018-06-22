@@ -40,12 +40,14 @@ pre .ln {
 }
 
 a,
-.exampleHeading .text {
+.exampleHeading .text,
+.expandAll {
 	color: #375EAB;
 	text-decoration: none;
 }
 a:hover,
-.exampleHeading .text:hover {
+.exampleHeading .text:hover,
+.expandAll:hover {
 	text-decoration: underline;
 }
 .article a {
@@ -160,6 +162,20 @@ div#nav table td {
 .top-heading a {
 	color: #222;
 	text-decoration: none;
+}
+
+#pkg-examples h3 {
+	float: left;
+}
+
+#pkg-examples dl {
+	clear: both;
+}
+
+.expandAll {
+	cursor: pointer;
+	float: left;
+	margin: 1.25rem 0;
 }
 
 div#topbar {
@@ -474,6 +490,22 @@ div#blog .when {
 }
 div#blog .read {
 	text-align: right;
+}
+
+@supports (--c: 0) {
+	[style*="--aspect-ratio-padding:"] {
+		position: relative;
+		overflow: hidden;
+		padding-top: var(--aspect-ratio-padding);
+	}
+
+	[style*="--aspect-ratio-padding:"]>* {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+	}
 }
 
 .toggleButton { cursor: pointer; }

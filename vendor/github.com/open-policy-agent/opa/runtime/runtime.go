@@ -64,8 +64,8 @@ type Params struct {
 	// the runtime will generate one.
 	ID string
 
-	// Addr is the listening address that the OPA server will bind to.
-	Addr string
+	// Addrs are the listening addresses that the OPA server will bind to.
+	Addrs *[]string
 
 	// InsecureAddr is the listening address that the OPA server will bind to
 	// in addition to Addr if TLS is enabled.
@@ -93,6 +93,9 @@ type Params struct {
 	// startup. Data files may be prefixed with "<dotted-path>:" to indicate
 	// where the contained document should be loaded.
 	Paths []string
+
+	// Optional filter that will be passed to the file loader.
+	Filter loader.Filter
 
 	// Watch flag controls whether OPA will watch the Paths files for changes.
 	// If this flag is true, OPA will watch the Paths files for changes and
@@ -155,7 +158,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		}
 	}
 
-	loaded, err := loader.All(params.Paths)
+	loaded, err := loader.Filtered(params.Paths, params.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +215,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 	setupLogging(rt.Params.Logging)
 
 	logrus.WithFields(logrus.Fields{
-		"addr":          rt.Params.Addr,
+		"addrs":         *rt.Params.Addrs,
 		"insecure_addr": rt.Params.InsecureAddr,
 	}).Infof("First line of log stream.")
 
@@ -224,7 +227,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 		WithStore(rt.Store).
 		WithManager(rt.Manager).
 		WithCompilerErrorLimit(rt.Params.ErrorLimit).
-		WithAddress(rt.Params.Addr).
+		WithAddresses(*rt.Params.Addrs).
 		WithInsecureAddress(rt.Params.InsecureAddr).
 		WithCertificate(rt.Params.Certificate).
 		WithAuthentication(rt.Params.Authentication).
@@ -240,26 +243,29 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 
 	if rt.Params.Watch {
 		if err := rt.startWatcher(ctx, rt.Params.Paths, onReloadLogger); err != nil {
-			fmt.Fprintln(rt.Params.Output, "error opening watch:", err)
-			os.Exit(1)
+			logrus.WithField("err", err).Fatalf("Unable to open watch.")
 		}
 	}
 
 	s.Handler = NewLoggingHandler(s.Handler)
 
-	loop1, loop2 := s.Listeners()
-	if loop2 != nil {
-		go func() {
-			if err := loop2(); err != nil {
-				logrus.WithField("err", err).Fatalf("Server exiting.")
-			}
-		}()
+	loops, err := s.Listeners()
+	if err != nil {
+		logrus.WithField("err", err).Fatalf("Unable to create listeners.")
 	}
 
-	if err := loop1(); err != nil {
-		logrus.WithField("err", err).Fatalf("Server exiting.")
+	errc := make(chan error)
+	for _, loop := range loops {
+		go func(serverLoop func() error) {
+			errc <- serverLoop()
+		}(loop)
 	}
-
+	for {
+		select {
+		case err := <-errc:
+			logrus.WithField("err", err).Fatal("Listener failed.")
+		}
+	}
 }
 
 // StartREPL starts the runtime in REPL mode. This function will block the calling goroutine.
@@ -313,7 +319,7 @@ func (rt *Runtime) readWatcher(ctx context.Context, watcher *fsnotify.Watcher, p
 
 func (rt *Runtime) processWatcherUpdate(ctx context.Context, paths []string, removed string) error {
 
-	loaded, err := loader.All(paths)
+	loaded, err := loader.Filtered(paths, rt.Params.Filter)
 	if err != nil {
 		return err
 	}
@@ -337,7 +343,7 @@ func (rt *Runtime) processWatcherUpdate(ctx context.Context, paths []string, rem
 				// This branch get hit in two cases.
 				// 1. Another piece of code has access to the store and inserts
 				//    a policy out-of-band.
-				// 2. In between FS notification and loader.All() call above, a
+				// 2. In between FS notification and loader.Filtered() call above, a
 				//    policy is removed from disk.
 				bs, err := rt.Store.GetPolicy(ctx, txn, id)
 				if err != nil {
