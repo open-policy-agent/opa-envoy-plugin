@@ -171,7 +171,7 @@ type saveStack struct {
 func newSaveStack() *saveStack {
 	return &saveStack{
 		Stack: []saveStackQuery{
-			saveStackQuery{},
+			{},
 		},
 	}
 }
@@ -231,6 +231,9 @@ func (e saveStackElem) Plug(caller *bindings) *ast.Expr {
 		}
 	case *ast.Term:
 		expr.Terms = e.B1.PlugNamespaced(terms, caller)
+	}
+	for i := range expr.With {
+		expr.With[i].Value = e.B1.PlugNamespaced(expr.With[i].Value, caller)
 	}
 	return expr
 }

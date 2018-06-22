@@ -1306,10 +1306,12 @@ func TestTopDownStrings(t *testing.T) {
 		{"trim: multi-cutset-none", []string{`p = x { trim("...foo.bar...", ".o", x) }`}, `"foo.bar"`},
 		{"sprintf: none", []string{`p = x { sprintf("hi", [], x) }`}, `"hi"`},
 		{"sprintf: string", []string{`p = x { sprintf("hi %s", ["there"], x) }`}, `"hi there"`},
-		{"sprintf: int", []string{`p = x { sprintf("hi %s", [5], x) }`}, `"hi 5"`},
-		{"sprintf: float", []string{`p = x { sprintf("hi %s", [3.14], x) }`}, `"hi 3.14"`},
+		{"sprintf: int", []string{`p = x { sprintf("hi %02d", [5], x) }`}, `"hi 05"`},
+		{"sprintf: hex", []string{`p = x { sprintf("hi %02X.%02X", [127, 1], x) }`}, `"hi 7F.01"`},
+		{"sprintf: float", []string{`p = x { sprintf("hi %.2f", [3.1415], x) }`}, `"hi 3.14"`},
+		{"sprintf: float too big", []string{`p = x { sprintf("hi %v", [2e308], x) }`}, `"hi 2e+308"`},
 		{"sprintf: bool", []string{`p = x { sprintf("hi %s", [true], x) }`}, `"hi true"`},
-		{"sprintf: composite", []string{`p = x { sprintf("hi %s", [["there", 5, 3.14]], x) }`}, `"hi [\"there\", 5, 3.14]"`},
+		{"sprintf: composite", []string{`p = x { sprintf("hi %v", [["there", 5, 3.14]], x) }`}, `"hi [\"there\", 5, 3.14]"`},
 	}
 
 	data := loadSmallTestData()
@@ -1388,7 +1390,13 @@ func TestTopDownURLBuiltins(t *testing.T) {
 		expected interface{}
 	}{
 		{"encode", []string{`p = x { urlquery.encode("a=b+1", x) }`}, `"a%3Db%2B1"`},
+		{"encode empty", []string{`p = x { urlquery.encode("", x) }`}, `""`},
 		{"decode", []string{`p = x { urlquery.decode("a%3Db%2B1", x) }`}, `"a=b+1"`},
+		{"encode_object empty", []string{`p = x { urlquery.encode_object({}, x) }`}, `""`},
+		{"encode_object strings", []string{`p = x { urlquery.encode_object({"a": "b", "c": "d"}, x) }`}, `"a=b&c=d"`},
+		{"encode_object escape", []string{`p = x { urlquery.encode_object({"a": "c=b+1"}, x) }`}, `"a=c%3Db%2B1"`},
+		{"encode_object array", []string{`p = x { urlquery.encode_object({"a": ["b+1","c+2"]}, x) }`}, `"a=b%2B1&a=c%2B2"`},
+		{"encode_object set", []string{`p = x { urlquery.encode_object({"a": {"b+1"}}, x) }`}, `"a=b%2B1"`},
 	}
 
 	data := loadSmallTestData()
@@ -1601,6 +1609,65 @@ func TestTopDownJWTVerifyRS256(t *testing.T) {
 		tests = append(tests, test{
 			p.note,
 			[]string{fmt.Sprintf(`p = x { io.jwt.verify_rs256("%s", "%s", x) }`, p.input1, p.input2)},
+			exp,
+		})
+	}
+
+	data := loadSmallTestData()
+
+	for _, tc := range tests {
+		runTopDownTestCase(t, data, tc.note, tc.rules, tc.expected)
+	}
+}
+
+func TestTopDownJWTVerifyHS256(t *testing.T) {
+	params := []struct {
+		note   string
+		input1 string
+		input2 string
+		result bool
+		err    string
+	}{
+		{
+			"success",
+			`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWxpY2UiLCJhenAiOiJhbGljZSIsInN1Ym9yZGluYXRlcyI6W10sImhyIjpmYWxzZX0.rz3jTY033z-NrKfwrK89_dcLF7TN4gwCMj-fVBDyLoM`,
+			"secret",
+			true,
+			"",
+		},
+		{
+			"failure-bad token",
+			`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWxpY2UiLCJhenAiOiJhbGljZSIsInN1Ym9yZGluYXRlcyI6W10sImhyIjpmYWxzZX0.R0NDxM1gHTucWQKwayMDre2PbMNR9K9efmOfygDZWcE`,
+			"secret",
+			false,
+			"",
+		},
+		{
+			"failure-invalid token",
+			`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWxpY2UiLCJhenAiOiJhbGljZSIsInN1Ym9yZGluYXRlcyI6W10sImhyIjpmYWxzZX0`,
+			"secret",
+			false,
+			"encoded JWT must have 3 sections, found 2",
+		},
+	}
+
+	type test struct {
+		note     string
+		rules    []string
+		expected interface{}
+	}
+	tests := []test{}
+
+	for _, p := range params {
+		var exp interface{}
+		exp = fmt.Sprintf(`%t`, p.result)
+		if p.err != "" {
+			exp = errors.New(p.err)
+		}
+
+		tests = append(tests, test{
+			p.note,
+			[]string{fmt.Sprintf(`p = x { io.jwt.verify_hs256("%s", "%s", x) }`, p.input1, p.input2)},
 			exp,
 		})
 	}
@@ -2738,8 +2805,9 @@ func assertTopDownWithPath(t *testing.T, compiler *ast.Compiler, store storage.S
 	}
 
 	rhs := ast.VarTerm(ast.WildcardPrefix + "result")
+	body := ast.NewBody(ast.Equality.Expr(lhs, rhs))
 
-	query := NewQuery(ast.NewBody(ast.Equality.Expr(lhs, rhs))).
+	query := NewQuery(body).
 		WithCompiler(compiler).
 		WithStore(store).
 		WithTransaction(txn).
@@ -2791,9 +2859,15 @@ func assertTopDownWithPath(t *testing.T, compiler *ast.Compiler, store storage.S
 				t.Fatal(err)
 			}
 
-			expected := util.MustUnmarshalJSON([]byte(e))
+			var requiresSort bool
 
 			if rules := compiler.GetRulesExact(lhs.Value.(ast.Ref)); len(rules) > 0 && rules[0].Head.DocKind() == ast.PartialSetDoc {
+				requiresSort = true
+			}
+
+			expected := util.MustUnmarshalJSON([]byte(e))
+
+			if requiresSort {
 				sort.Sort(resultSet(result.([]interface{})))
 				if sl, ok := expected.([]interface{}); ok {
 					sort.Sort(resultSet(sl))
@@ -2803,8 +2877,83 @@ func assertTopDownWithPath(t *testing.T, compiler *ast.Compiler, store storage.S
 			if util.Compare(expected, result) != 0 {
 				t.Fatalf("Unexpected result:\nGot: %v\nExp:\n%v", result, expected)
 			}
+
+			// If the test case involved the input document, re-run it with partial
+			// evaluation enabled and input marked as unknown. Then replay the query and
+			// verify the partial evaluation result is the same. Note, we cannot evaluate
+			// the result of a query against `data` because the queries need to be
+			// converted into rules (which would result in recursion.)
+			if len(path) > 0 {
+				runTopDownPartialTestCase(ctx, t, compiler, store, txn, inputTerm, rhs, body, requiresSort, expected)
+			}
 		}
 	})
+}
+
+func runTopDownPartialTestCase(ctx context.Context, t *testing.T, compiler *ast.Compiler, store storage.Store, txn storage.Transaction, input *ast.Term, output *ast.Term, body ast.Body, requiresSort bool, expected interface{}) {
+
+	partialQuery := NewQuery(body).
+		WithCompiler(compiler).
+		WithStore(store).
+		WithUnknowns([]*ast.Term{ast.MustParseTerm("input")}).
+		WithTransaction(txn)
+
+	partials, support, err := partialQuery.PartialRun(ctx)
+
+	if err != nil {
+		t.Fatal("Unexpected error on partial evaluation comparison:", err)
+	}
+
+	module := ast.MustParseModule("package topdown_test_partial")
+	module.Rules = make([]*ast.Rule, len(partials))
+	for i, body := range partials {
+		module.Rules[i] = &ast.Rule{
+			Head:   ast.NewHead(ast.Var("__result__"), nil, output),
+			Body:   body,
+			Module: module,
+		}
+	}
+
+	compiler.Modules["topdown_test_partial"] = module
+	for i, module := range support {
+		compiler.Modules[fmt.Sprintf("topdown_test_support_%d", i)] = module
+	}
+
+	compiler.Compile(compiler.Modules)
+	if compiler.Failed() {
+		t.Fatal("Unexpected error on partial evaluation result compile:", compiler.Errors)
+	}
+
+	query := NewQuery(ast.MustParseBody("data.topdown_test_partial.__result__ = x")).
+		WithCompiler(compiler).
+		WithStore(store).
+		WithTransaction(txn).
+		WithInput(input)
+
+	qrs, err := query.Run(ctx)
+	if err != nil {
+		t.Fatal("Unexpected error on query after partial evaluation:", err)
+	}
+
+	if len(qrs) == 0 {
+		t.Fatalf("Expected %v but got undefined from query after partial evaluation", expected)
+	}
+
+	result, err := ast.JSON(qrs[0][ast.Var("x")].Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if requiresSort {
+		sort.Sort(resultSet(result.([]interface{})))
+		if sl, ok := expected.([]interface{}); ok {
+			sort.Sort(resultSet(sl))
+		}
+	}
+
+	if util.Compare(expected, result) != 0 {
+		t.Fatalf("Unexpected result after partial evaluation:\nGot:\n%v\nExp:\n%v", result, expected)
+	}
 }
 
 type resultSet []interface{}

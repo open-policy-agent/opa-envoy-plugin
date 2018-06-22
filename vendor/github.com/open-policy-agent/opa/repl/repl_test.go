@@ -230,7 +230,7 @@ func TestDumpPath(t *testing.T) {
 
 	var result map[string]interface{}
 	if err := util.UnmarshalJSON(bs, &result); err != nil {
-		t.Fatalf("Expected json unmarhsal to suceed but got: %v", err)
+		t.Fatalf("Expected json unmarshal to succeed but got: %v", err)
 	}
 
 	if !reflect.DeepEqual(data, result) {
@@ -341,7 +341,7 @@ func TestTypes(t *testing.T) {
 
 }
 
-func TestPartial(t *testing.T) {
+func TestUnknown(t *testing.T) {
 	ctx := context.Background()
 	store := inmem.New()
 	var buffer bytes.Buffer
@@ -349,7 +349,7 @@ func TestPartial(t *testing.T) {
 
 	repl.OneShot(ctx, "xs = [1,2,3]")
 
-	err := repl.OneShot(ctx, "partial input")
+	err := repl.OneShot(ctx, "unknown input")
 	if err != nil {
 		t.Fatal("Unexpected command error:", err)
 	}

@@ -151,17 +151,17 @@ All documents pushed into OPA or computed by rules are nested under a built-in r
 
 ![data model logical](images/data-model-logical.svg "data model logical")
 
+Example `data` document:
+
 ```json
 {
-  "data": {
-    "servers": [...],
-    "ports": [...],
-    "networks": [...],
-    "opa": {
-      "examples": {
-        "violations": [...],
-        "public_servers": [...]
-      }
+  "servers": [...],
+  "ports": [...],
+  "networks": [...],
+  "opa": {
+    "examples": {
+      "violations": [...],
+      "public_servers": [...]
     }
   }
 }
@@ -186,132 +186,124 @@ GET https://example.com/v1/data/opa/examples/violations HTTP/1.1
 
 ### The `input` Document
 
-In some cases, to evaluate a policy, the query must specify additional documents
-as arguments.
+In some cases, policies require input values. In addition to the built-in
+`data` document, OPA also has a built-in `input` document. When you query
+OPA, you can set the value of the `input` document.
 
-Query arguments are nested under a built-in root document named input (similar to data).
+Example `input` document:
 
 ```json
 {
-  "input": {
-      "method": "GET",
-      "path": "/servers/s2",
-      "user": "alice"
-  }
+    "method": "GET",
+    "path": "/servers/s2",
+    "user": "alice"
 }
 ```
 
-Query arguments can be accessed hierarchically starting from the root input
-node:
+The `input` document can be referenced just like the `data` document.
 
 ```ruby
-allow { input.user = "alice" }
-```
+# Let 'bob' perform read-only operations.
+allow {
+  input.user = "bob"
+  input.method = "GET"
+}
 
-Just like state stored in OPA, documents supplied with the query can be aliased:
-
-```ruby
-package opa.examples
-
-import input.method
-import input.user
-
-# allow "bob" to perform read-only operations
-allow { user = "bob"; method = "GET" }
-
-# allow "alice" to perform any operation
-allow { user = "alice" }
+# Let 'alice' perform any operation.
+allow {
+  input.user = "alice"
+}
 ```
 
 ## Putting It All Together
 
 Let’s take a look at some documents representing the state of a hypothetical service and a policy module that uses this data. The following documents describe a set of servers, the protocols they use, the ports they open, and the networks those ports are connected to.
 
+Example `data` document:
+
 ```json
 {
-  "data": {
-    "servers": [
-      {
-        "id": "s1",
-        "name": "app",
-        "protocols": [
-          "https",
-          "ssh"
-        ],
-        "ports": [
-          "p1",
-          "p2",
-          "p3"
-        ]
-      },
-      {
-        "id": "s2",
-        "name": "db",
-        "protocols": [
-          "mysql"
-        ],
-        "ports": [
-          "p3"
-        ]
-      },
-      {
-        "id": "s3",
-        "name": "cache",
-        "protocols": [
-          "memcache",
-          "http"
-        ],
-        "ports": [
-          "p3"
-        ]
-      },
-      {
-        "id": "s4",
-        "name": "dev",
-        "protocols": [
-          "http"
-        ],
-        "ports": [
-          "p1",
-          "p2"
-        ]
-      }
-    ],
-    "networks": [
-      {
-        "id": "n1",
-        "public": false
-      },
-      {
-        "id": "n2",
-        "public": false
-      },
-      {
-        "id": "n3",
-        "public": true
-      }
-    ],
-    "ports": [
-      {
-        "id": "p1",
-        "networks": [
-          "n1"
-        ]
-      },
-      {
-        "id": "p2",
-        "networks": [
-          "n3"
-        ]
-      },
-      {
-        "id": "p3",
-        "networks": [
-          "n2"
-        ]
-      }
-    ]
-  }
+  "servers": [
+    {
+      "id": "s1",
+      "name": "app",
+      "protocols": [
+        "https",
+        "ssh"
+      ],
+      "ports": [
+        "p1",
+        "p2",
+        "p3"
+      ]
+    },
+    {
+      "id": "s2",
+      "name": "db",
+      "protocols": [
+        "mysql"
+      ],
+      "ports": [
+        "p3"
+      ]
+    },
+    {
+      "id": "s3",
+      "name": "cache",
+      "protocols": [
+        "memcache",
+        "http"
+      ],
+      "ports": [
+        "p3"
+      ]
+    },
+    {
+      "id": "s4",
+      "name": "dev",
+      "protocols": [
+        "http"
+      ],
+      "ports": [
+        "p1",
+        "p2"
+      ]
+    }
+  ],
+  "networks": [
+    {
+      "id": "n1",
+      "public": false
+    },
+    {
+      "id": "n2",
+      "public": false
+    },
+    {
+      "id": "n3",
+      "public": true
+    }
+  ],
+  "ports": [
+    {
+      "id": "p1",
+      "networks": [
+        "n1"
+      ]
+    },
+    {
+      "id": "p2",
+      "networks": [
+        "n3"
+      ]
+    },
+    {
+      "id": "p3",
+      "networks": [
+        "n2"
+      ]
+    }
+  ]
 }
 ```
 
@@ -395,7 +387,7 @@ violations[server] {
     # ...and any of the server’s protocols is HTTP
     server.protocols[_] = "http"
     # ...and the server is public.
-    public_servers[server] = true
+    public_servers[server]
 }
 
 # A server exists in the public_servers set if...
@@ -419,11 +411,23 @@ Note that:
   * Expressions can reference nested documents. For example, `ports[i].networks[_]` refers to each network ID listed in each port document.
   * Expressions can reference virtual documents. For example, `public_servers[server] = true` matches only if `server` is in the list produced by the `public_servers` rule.
 
-After publishing this policy module, data will include additional documents corresponding to the module’s package declaration (opa.examples) and the virtual documents its rules generate.
+
+After publishing this policy module, the `data` document will include
+additional documents corresponding to the module’s package declaration
+(opa.examples) and the virtual documents its rules generate.
+
+```http
+GET https://example.com/v1/data HTTP/1.1
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
 
 ```json
 {
-  "data": {
+  "result": {
     "servers": [...],
     "networks": [...],
     "ports": [...],
@@ -474,7 +478,8 @@ After publishing this policy module, data will include additional documents corr
 }
 ```
 
-If we use OPA’s API to inspect the violations virtual document…
+In this case, we are only interested in the set of servers that violate the
+policy. We can use OPA's API to query for just those servers.
 
 ```http
 GET https://example.com/v1/data/opa/examples/violations HTTP/1.1

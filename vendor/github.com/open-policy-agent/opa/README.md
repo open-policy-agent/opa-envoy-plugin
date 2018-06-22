@@ -1,7 +1,7 @@
 # ![logo](./logo/logo.png) Open Policy Agent
 
 [![Slack Status](http://slack.openpolicyagent.org/badge.svg)](http://slack.openpolicyagent.org) [![Build Status](https://travis-ci.org/open-policy-agent/opa.svg?branch=master)](https://travis-ci.org/open-policy-agent/opa) [![Go Report Card](https://goreportcard.com/badge/open-policy-agent/opa)](https://goreportcard.com/report/open-policy-agent/opa)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fopen-policy-agent%2Fopa.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fopen-policy-agent%2Fopa?ref=badge_shield)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fopen-policy-agent%2Fopa.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fopen-policy-agent%2Fopa?ref=badge_shield) [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/1768/badge)](https://bestpractices.coreinfrastructure.org/projects/1768)
 
 The Open Policy Agent (OPA) is an open source, general-purpose policy engine that enables unified, context-aware policy enforcement across the entire stack.
 
@@ -32,10 +32,10 @@ OPA is hosted by the [Cloud Native Computing Foundation](https://cncf.io) (CNCF)
 * See [DEVELOPMENT.md](./docs/devel/DEVELOPMENT.md) to build and test OPA itself.
 * See [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
 * Use [GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
-* Join weekly meetings every Tuesday at 10:00 (Pacific Timezone):
+* Join bi-weekly meetings every other Tuesday at 10:00 (Pacific Timezone):
     * [Meeting Notes](https://docs.google.com/document/d/1v6l2gmkRKAn5UIg3V2QdeeCcXMElxsNzEzDkVlWDVg8/edit?usp=sharing)
     * [Google Hangouts](https://plus.google.com/hangouts/_/styra.com/opa-weekly)
-    * [Calendar Invite](https://calendar.google.com/event?action=TEMPLATE&tmeid=N3AzamxzYWY2MG9wa2J0cmFjODNzaXI3MDhfMjAxODAxMTZUMTgwMDAwWiB0b3JpbkBzdHlyYS5jb20&tmsrc=torin%40styra.com&scp=ALL)
+    * [Calendar Invite](https://calendar.google.com/event?action=TEMPLATE&tmeid=NHY2YmpnYjVwcjU3Y21mNHE0dWFodHU5czRfMjAxODA2MjZUMTcwMDAwWiB0b3JpbkBzdHlyYS5jb20&tmsrc=torin%40styra.com&scp=ALL)
 
 ## How does OPA work?
 
@@ -281,12 +281,20 @@ true
 
 ### Presentations
 
+- Open Policy Agent Introduction @ CloudNativeCon EU 2018: [video](https://youtu.be/XEHeexPpgrA), [slides](https://www.slideshare.net/TorinSandall/opa-the-cloud-native-policy-engine)
+- Rego Deep Dive @ CloudNativeCon EU 2018: [video](https://youtu.be/4mBJSIhs2xQ), [slides](https://www.slideshare.net/TorinSandall/rego-deep-dive)
 - How Netflix Is Solving Authorization Across Their Cloud @ CloudNativeCon US 2017: [video](https://www.youtube.com/watch?v=R6tUNpRpdnY), [slides](https://www.slideshare.net/TorinSandall/how-netflix-is-solving-authorization-across-their-cloud).
 - Policy-based Resource Placement in Kubernetes Federation @ LinuxCon Beijing 2017: [slides](https://www.slideshare.net/TorinSandall/policybased-resource-placement-across-hybrid-cloud), [screencast](https://www.youtube.com/watch?v=hRz13baBhfg&feature=youtu.be).
 - Enforcing Bespoke Policies In Kubernetes @ KubeCon US 2017: [video](https://www.youtube.com/watch?v=llDI8VvkUj8), [slides](https://www.slideshare.net/TorinSandall/enforcing-bespoke-policies-in-kubernetes).
 - Istio's Mixer: Policy Enforcement with Custom Adapters @ CloudNativeCon US 2017: [video](https://www.youtube.com/watch?v=czZLXUqzd24), [slides](https://www.slideshare.net/TorinSandall/istios-mixer-policy-enforcement-with-custom-adapters-cloud-nativecon-17).
-- The Open Policy Agent Project @ Netflix OSS Meetup Season 5 Episode 1 (2017): [video](https://www.youtube.com/watch?v=SfpsnlQf5bY&feature=youtu.be&t=33m45s), [slides](https://www.slideshare.net/aspyker/netflix-oss-meetup-season-5-episode-1).
 
+## Reporting Security Vulnerabilities
+
+Please report vulnerabilities by email to [open-policy-agent-security](mailto:open-policy-agent-security@googlegroups.com).
+We will send a confirmation message to acknowledge that we have received the
+report and then we will send additional messages to follow up once the issue
+has been investigated.
 
 ## License
+
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fopen-policy-agent%2Fopa.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fopen-policy-agent%2Fopa?ref=badge_large)
