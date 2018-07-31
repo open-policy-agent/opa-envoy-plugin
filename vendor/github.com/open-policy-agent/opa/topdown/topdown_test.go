@@ -983,47 +983,6 @@ func TestTopDownDefaultKeyword(t *testing.T) {
 	}
 }
 
-func TestTopDownAggregates(t *testing.T) {
-
-	tests := []struct {
-		note     string
-		rules    []string
-		expected interface{}
-	}{
-		{"count", []string{`p[x] { count(a, x) }`}, "[4]"},
-		{"count virtual", []string{`p[x] { count([y | q[y]], x) }`, `q[x] { x = a[_] }`}, "[4]"},
-		{"count keys", []string{`p[x] { count(b, x) }`}, "[2]"},
-		{"count keys virtual", []string{`p[x] { count([k | q[k] = _], x) }`, `q[k] = v { b[k] = v }`}, "[2]"},
-		{"count set", []string{`p = x { count(q, x) }`, `q[x] { x = a[_] }`}, "4"},
-		{"sum", []string{`p[x] { sum([1, 2, 3, 4], x) }`}, "[10]"},
-		{"sum set", []string{`p = x { sum({1, 2, 3, 4}, x) }`}, "10"},
-		{"sum virtual", []string{`p[x] { sum([y | q[y]], x) }`, `q[x] { a[_] = x }`}, "[10]"},
-		{"sum virtual set", []string{`p = x { sum(q, x) }`, `q[x] { a[_] = x }`}, "10"},
-		{"product", []string{"p { product([1,2,3,4], 24) }"}, "true"},
-		{"product set", []string{`p = x { product({1, 2, 3, 4}, x) }`}, "24"},
-		{"max", []string{`p[x] { max([1, 2, 3, 4], x) }`}, "[4]"},
-		{"max set", []string{`p = x { max({1, 2, 3, 4}, x) }`}, "4"},
-		{"max virtual", []string{`p[x] { max([y | q[y]], x) }`, `q[x] { a[_] = x }`}, "[4]"},
-		{"max virtual set", []string{`p = x { max(q, x) }`, `q[x] { a[_] = x }`}, "4"},
-		{"min", []string{`p[x] { min([1, 2, 3, 4], x) }`}, "[1]"},
-		{"min dups", []string{`p[x] { min([1, 2, 1, 3, 4], x) }`}, "[1]"},
-		{"min out-of-order", []string{`p[x] { min([3, 2, 1, 4, 6, -7, 10], x) }`}, "[-7]"},
-		{"min set", []string{`p = x { min({1, 2, 3, 4}, x) }`}, "1"},
-		{"min virtual", []string{`p[x] { min([y | q[y]], x) }`, `q[x] { a[_] = x }`}, "[1]"},
-		{"min virtual set", []string{`p = x { min(q, x) }`, `q[x] { a[_] = x }`}, "1"},
-		{"reduce ref dest", []string{`p = true { max([1, 2, 3, 4], a[3]) }`}, "true"},
-		{"reduce ref dest (2)", []string{`p = true { not max([1, 2, 3, 4, 5], a[3]) }`}, "true"},
-		{"sort", []string{`p = x { sort([4, 3, 2, 1], x) }`}, "[1 ,2, 3, 4]"},
-		{"sort set", []string{`p = x { sort({4,3,2,1}, x) }`}, "[1,2,3,4]"},
-	}
-
-	data := loadSmallTestData()
-
-	for _, tc := range tests {
-		runTopDownTestCase(t, data, tc.note, tc.rules, tc.expected)
-	}
-}
-
 func TestTopDownArithmetic(t *testing.T) {
 	tests := []struct {
 		note     string
@@ -1716,6 +1675,15 @@ func TestTopDownTime(t *testing.T) {
 
 	runTopDownTestCase(t, data, "clock too big", []string{`
 		p = [hour, minute, second] { [hour, minute, second] := time.clock(1582977600*1000*1000*1000*1000) }`}, fmt.Errorf("timestamp too big"))
+
+	for i, day := range []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"} {
+		ts := 1517832000*1000*1000*1000 + i*24*int(time.Hour)
+		runTopDownTestCase(t, data, "weekday", []string{fmt.Sprintf(`p = weekday { weekday := time.weekday(%d)}`, ts)},
+			fmt.Sprintf("%q", day))
+	}
+
+	runTopDownTestCase(t, data, "weekday too big", []string{`
+		p = weekday { weekday := time.weekday(1582977600*1000*1000*1000*1000) }`}, fmt.Errorf("timestamp too big"))
 }
 
 func TestTopDownWalkBuiltin(t *testing.T) {
@@ -2632,71 +2600,6 @@ func compileRules(imports []string, input []string) (*ast.Compiler, error) {
 	}
 
 	return c, nil
-}
-
-func parseExpr(s string, idx int) *ast.Expr {
-	expr := ast.MustParseBody(s)[0]
-	expr.Index = idx
-	return expr
-}
-
-func parseBindings(s string) *ast.ValueMap {
-	t := ast.MustParseTerm(s)
-	obj, ok := t.Value.(ast.Object)
-	if !ok {
-		return nil
-	}
-	r := ast.NewValueMap()
-	obj.Iter(func(k, v *ast.Term) error {
-		r.Put(k.Value, v.Value)
-		return nil
-	})
-	return r
-}
-
-func parseVars(s string) map[ast.Var]ast.Value {
-	t := ast.MustParseTerm(s)
-	obj, ok := t.Value.(ast.Object)
-	if !ok {
-		return nil
-	}
-	r := map[ast.Var]ast.Value{}
-	stop := obj.Until(func(k, v *ast.Term) bool {
-		if asVar, ok := k.Value.(ast.Var); ok {
-			r[asVar] = v.Value
-			return false
-		}
-		return true
-	})
-	if stop {
-		return nil
-	}
-	return r
-}
-
-func parseVarsSlice(s string) []map[ast.Var]ast.Value {
-	t := ast.MustParseTerm(s)
-	arr, ok := t.Value.(ast.Array)
-	if !ok {
-		return nil
-	}
-	r := []map[ast.Var]ast.Value{}
-	for _, elem := range arr {
-		if vars := parseVars(elem.String()); vars != nil {
-			r = append(r, vars)
-		} else {
-			return nil
-		}
-	}
-	return r
-}
-
-func parseJSON(input string) interface{} {
-	var data interface{}
-	if err := util.UnmarshalJSON([]byte(input), &data); err != nil {
-		panic(err)
-	}
-	return data
 }
 
 // loadSmallTestData returns base documents that are referenced

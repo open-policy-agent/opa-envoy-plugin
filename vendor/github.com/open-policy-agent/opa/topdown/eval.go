@@ -191,26 +191,7 @@ func (e *eval) evalStep(index int, iter evalIterator) error {
 				return err
 			})
 		} else {
-
-			if e.saveSet != nil {
-				// Check if call can be evaluated during partial eval. Some
-				// calls, such as time.now_ns() should not be evaluated during
-				// partial evaluation.
-				mustSave := false
-				for _, bi := range ast.IgnoreDuringPartialEval {
-					if bi.Ref().Equal(terms[0].Value) {
-						mustSave = true
-						break
-					}
-				}
-				if mustSave || e.saveSet.ContainsRecursiveAny(plugSlice(terms[1:], e.bindings)) {
-					return e.saveCall(terms[0], terms[1:len(terms)-1], terms[len(terms)-1], func() error {
-						return e.evalExpr(index+1, iter)
-					})
-				}
-			}
-
-			err = e.evalCall(index, terms[0], terms[1:], func() error {
+			err = e.evalCall(index, terms, func() error {
 				defined = true
 				err := e.evalExpr(index+1, iter)
 				e.traceRedo(expr)
@@ -221,9 +202,7 @@ func (e *eval) evalStep(index int, iter evalIterator) error {
 		rterm := e.generateVar(fmt.Sprintf("term_%d_%d", e.queryID, index))
 		err = e.unify(terms, rterm, func() error {
 			if e.saveSet.Contains(rterm) {
-				operator := ast.NewTerm(ast.NotEqual.Ref())
-				args := []*ast.Term{rterm, ast.BooleanTerm(false)}
-				return e.saveVoidCall(operator, args, func() error {
+				return e.saveTerm(rterm, func() error {
 					return e.evalExpr(index+1, iter)
 				})
 			}
@@ -374,9 +353,9 @@ func (e *eval) evalNotPartial(index int, iter evalIterator) error {
 	return e.evalExpr(index+1, iter)
 }
 
-func (e *eval) evalCall(index int, operator *ast.Term, terms []*ast.Term, iter unifyIterator) error {
+func (e *eval) evalCall(index int, terms []*ast.Term, iter unifyIterator) error {
 
-	ref := operator.Value.(ast.Ref)
+	ref := terms[0].Value.(ast.Ref)
 
 	if ref[0].Equal(ast.DefaultRootDocument) {
 		eval := evalFunc{
@@ -390,6 +369,23 @@ func (e *eval) evalCall(index int, operator *ast.Term, terms []*ast.Term, iter u
 	bi := ast.BuiltinMap[ref.String()]
 	if bi == nil {
 		return unsupportedBuiltinErr(e.query[index].Location)
+	}
+
+	if e.partial() {
+		// Check if call can be evaluated during partial eval. Some
+		// calls, such as time.now_ns() should not be evaluated during
+		// partial evaluation.
+		mustSave := false
+		for _, ignore := range ast.IgnoreDuringPartialEval {
+			if bi == ignore {
+				mustSave = true
+				break
+			}
+		}
+		if mustSave || e.saveSet.ContainsRecursiveAny(plugSlice(terms[1:], e.bindings)) {
+			return e.saveCall(len(bi.Decl.Args()), terms, iter)
+
+		}
 	}
 
 	f := builtinFunctions[bi.Name]
@@ -415,7 +411,7 @@ func (e *eval) evalCall(index int, operator *ast.Term, terms []*ast.Term, iter u
 		bi:    bi,
 		bctx:  bctx,
 		f:     f,
-		terms: terms,
+		terms: terms[1:],
 	}
 	return eval.eval(iter)
 }
@@ -610,11 +606,13 @@ func (e *eval) biunifyRef(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) 
 	}
 
 	var term *ast.Term
+	var termbindings *bindings
 
 	if ref[0].Equal(ast.InputRootDocument) {
 		term = e.input
+		termbindings = b1
 	} else {
-		term = b1.Plug(ref[0])
+		term, termbindings = b1.apply(ref[0])
 		if term == ref[0] {
 			term = nil
 		}
@@ -630,7 +628,7 @@ func (e *eval) biunifyRef(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) 
 		pos:          1,
 		bindings:     b1,
 		term:         term,
-		termbindings: b1,
+		termbindings: termbindings,
 		rterm:        b,
 		rbindings:    b2,
 	}
@@ -695,6 +693,18 @@ func (e *eval) biunifyComprehensionObject(x *ast.ObjectComprehension, b *ast.Ter
 	return e.biunify(ast.NewTerm(result), b, b1, b2, iter)
 }
 
+func (e *eval) getSaveTerms(x interface{}) (result []*ast.Term) {
+	vis := ast.NewVarVisitor().WithParams(ast.VarVisitorParams{
+		SkipClosures: true,
+		SkipRefHead:  true,
+	})
+	ast.Walk(vis, x)
+	for v := range vis.Vars() {
+		result = append(result, ast.NewTerm(v))
+	}
+	return
+}
+
 func (e *eval) saveExpr(expr *ast.Expr, b *bindings, iter unifyIterator) error {
 	e.saveStack.Push(expr, b, nil)
 	defer e.saveStack.Pop()
@@ -704,39 +714,39 @@ func (e *eval) saveExpr(expr *ast.Expr, b *bindings, iter unifyIterator) error {
 
 func (e *eval) saveUnify(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) error {
 	expr := ast.Equality.Expr(a, b)
-	elem := newSaveSetElem(e.getUnifyOutputs(expr))
-	e.saveSet.Push(elem)
-	defer e.saveSet.Pop()
+	if ts := e.getSaveTerms(expr); len(ts) > 0 {
+		elem := newSaveSetElem(ts)
+		e.saveSet.Push(elem)
+		defer e.saveSet.Pop()
+	}
 	e.saveStack.Push(expr, b1, b2)
 	defer e.saveStack.Pop()
 	e.traceSave(expr)
 	return iter()
 }
 
-func (e *eval) saveVoidCall(operator *ast.Term, args []*ast.Term, iter unifyIterator) error {
-	terms := make([]*ast.Term, len(args)+1)
-	terms[0] = operator
-	for i := 1; i < len(terms); i++ {
-		terms[i] = args[i-1]
-	}
-	expr := ast.NewExpr(terms)
+func (e *eval) saveTerm(x *ast.Term, iter unifyIterator) error {
+	expr := ast.NewExpr(x)
+	elem := newSaveSetElem(nil)
+	e.saveSet.Push(elem)
+	defer e.saveSet.Pop()
 	e.saveStack.Push(expr, e.bindings, nil)
 	defer e.saveStack.Pop()
 	e.traceSave(expr)
 	return iter()
 }
 
-func (e *eval) saveCall(operator *ast.Term, args []*ast.Term, result *ast.Term, iter unifyIterator) error {
-	terms := make([]*ast.Term, len(args)+2)
-	terms[0] = operator
-	for i := 1; i < len(terms)-1; i++ {
-		terms[i] = args[i-1]
-	}
-	terms[len(terms)-1] = result
+func (e *eval) saveCall(declArgsLen int, terms []*ast.Term, iter unifyIterator) error {
 	expr := ast.NewExpr(terms)
-	elem := newSaveSetElem([]*ast.Term{result})
-	e.saveSet.Push(elem)
-	defer e.saveSet.Pop()
+	// If call-site includes output value then partial eval must add vars in output
+	// position to the save set.
+	if declArgsLen == len(terms)-2 {
+		if ts := e.getSaveTerms(terms[len(terms)-1]); len(ts) > 0 {
+			elem := newSaveSetElem(ts)
+			e.saveSet.Push(elem)
+			defer e.saveSet.Pop()
+		}
+	}
 	e.saveStack.Push(expr, e.bindings, nil)
 	defer e.saveStack.Pop()
 	e.traceSave(expr)
@@ -744,39 +754,9 @@ func (e *eval) saveCall(operator *ast.Term, args []*ast.Term, result *ast.Term, 
 }
 
 func (e *eval) getRules(ref ast.Ref) (*ast.IndexResult, error) {
-
 	e.instr.startTimer(evalOpRuleIndex)
 	defer e.instr.stopTimer(evalOpRuleIndex)
 
-	// If partial evaluation is being performed, the rule index cannot be used
-	// because the input may not be known and want to partially evaluate all
-	// rules.
-	if e.partial() {
-		return e.getAllRules(ref), nil
-	}
-
-	return e.getRulesIndexed(ref)
-}
-
-func (e *eval) getAllRules(ref ast.Ref) *ast.IndexResult {
-	var ir *ast.IndexResult
-	for _, rule := range e.compiler.GetRulesExact(ref) {
-		if ir == nil {
-			ir = ast.NewIndexResult(rule.Head.DocKind())
-		}
-		if rule.Default {
-			ir.Default = rule
-		} else {
-			ir.Rules = append(ir.Rules, rule)
-			for els := rule.Else; els != nil; els = els.Else {
-				ir.Else[rule] = append(ir.Else[rule], els)
-			}
-		}
-	}
-	return ir
-}
-
-func (e *eval) getRulesIndexed(ref ast.Ref) (*ast.IndexResult, error) {
 	index := e.compiler.RuleIndex(ref)
 	if index == nil {
 		return nil, nil
@@ -798,6 +778,10 @@ func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
 
 	e.instr.startTimer(evalOpResolve)
 	defer e.instr.stopTimer(evalOpResolve)
+
+	if e.saveSet.Contains(ast.NewTerm(ref)) {
+		return nil, ast.UnknownValueErr{}
+	}
 
 	if ref[0].Equal(ast.InputRootDocument) {
 		if e.input != nil {
@@ -869,21 +853,6 @@ func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
 	return nil, fmt.Errorf("illegal ref")
 }
 
-func (e *eval) getUnifyOutputs(expr *ast.Expr) []*ast.Term {
-	vars := expr.Vars(ast.VarVisitorParams{
-		SkipClosures: true,
-		SkipRefHead:  true,
-	})
-	outputs := make([]*ast.Term, 0, len(vars))
-	for v := range vars {
-		term := e.bindings.Plug(ast.NewTerm(v))
-		if !term.IsGround() {
-			outputs = append(outputs, term)
-		}
-	}
-	return outputs
-}
-
 func (e *eval) generateVar(suffix string) *ast.Term {
 	return ast.VarTerm(fmt.Sprintf("%v_%v", e.genvarprefix, suffix))
 }
@@ -941,6 +910,12 @@ func (e evalFunc) eval(iter unifyIterator) error {
 		return nil
 	}
 
+	// Partial evaluation of ordered rules is not supported currently. Save the
+	// expression and continue. This could be revisited in the future.
+	if e.e.partial() && len(ir.Else) > 0 {
+		return e.e.saveCall(len(ir.Rules[0].Head.Args), e.terms, iter)
+	}
+
 	var prev *ast.Term
 
 	for i := range ir.Rules {
@@ -971,7 +946,7 @@ func (e evalFunc) evalOneRule(iter unifyIterator, rule *ast.Rule, prev *ast.Term
 
 	child := e.e.child(rule.Body)
 
-	args := make(ast.Array, len(e.terms))
+	args := make(ast.Array, len(e.terms)-1)
 
 	for i := range rule.Head.Args {
 		args[i] = rule.Head.Args[i]
@@ -985,12 +960,12 @@ func (e evalFunc) evalOneRule(iter unifyIterator, rule *ast.Rule, prev *ast.Term
 
 	child.traceEnter(rule)
 
-	err := child.biunifyArrays(e.terms, args, e.e.bindings, child.bindings, func() error {
+	err := child.biunifyArrays(e.terms[1:], args, e.e.bindings, child.bindings, func() error {
 		return child.eval(func(child *eval) error {
 			child.traceExit(rule)
 			result = child.bindings.Plug(rule.Head.Value)
 
-			if len(e.terms) == len(rule.Head.Args) {
+			if len(rule.Head.Args) == len(e.terms)-1 {
 				if result.Value.Compare(ast.Boolean(false)) == 0 {
 					return nil
 				}
@@ -1468,11 +1443,20 @@ func (e evalVirtualComplete) eval(iter unifyIterator) error {
 		return e.evalValue(iter)
 	}
 
-	if e.ir.Default == nil {
-		return e.partialEval(iter)
+	if e.ir.Default != nil {
+		rterm := e.rbindings.Plug(e.rterm)
+
+		// If the other term is not constant OR it's equal to the default value, then
+		// a support rule must be produced as the default value _may_ be required. On
+		// the other hand, if the other term is constant (i.e., it does not require
+		// evaluation) and it differs from the default value then the default value is
+		// _not_ required, so partially evaluate the rule normally.
+		if !ast.IsConstant(rterm.Value) || e.ir.Default.Head.Value.Equal(rterm) {
+			return e.partialEvalDefault(iter)
+		}
 	}
 
-	return e.partialEvalDefault(iter)
+	return e.partialEval(iter)
 }
 
 func (e evalVirtualComplete) evalValue(iter unifyIterator) error {

@@ -524,6 +524,10 @@ func makeRawString(loc *Location, text interface{}) (interface{}, error) {
 	return StringTerm(s).SetLocation(loc), nil
 }
 
+func makeNonterminatedString(loc *Location, s string) (interface{}, error) {
+	return StringTerm(s).SetLocation(loc), fmt.Errorf("found non-terminated string literal")
+}
+
 func makeBool(loc *Location, text interface{}) (interface{}, error) {
 	var term *Term
 	if string(text.([]byte)) == "true" {
@@ -552,14 +556,4 @@ func makeComments(c *current, text interface{}) (interface{}, error) {
 	c.globalStore[commentsKey] = comments
 
 	return comment, nil
-}
-
-func ifacesToBody(i interface{}, a ...interface{}) Body {
-	var buf Body
-	buf = append(buf, i.(*Expr))
-	for _, s := range a {
-		expr := s.([]interface{})[3].(*Expr)
-		buf = append(buf, expr)
-	}
-	return buf
 }

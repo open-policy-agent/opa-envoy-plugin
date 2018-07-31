@@ -306,6 +306,38 @@ type trieNode struct {
 	rules     []*ruleNode
 }
 
+func (node *trieNode) String() string {
+	var flags []string
+	flags = append(flags, fmt.Sprintf("self:%p", node))
+	if len(node.ref) > 0 {
+		flags = append(flags, node.ref.String())
+	}
+	if node.next != nil {
+		flags = append(flags, fmt.Sprintf("next:%p", node.next))
+	}
+	if node.any != nil {
+		flags = append(flags, fmt.Sprintf("any:%p", node.any))
+	}
+	if node.undefined != nil {
+		flags = append(flags, fmt.Sprintf("undefined:%p", node.undefined))
+	}
+	if node.array != nil {
+		flags = append(flags, fmt.Sprintf("array:%p", node.array))
+	}
+	if len(node.scalars) > 0 {
+		buf := []string{}
+		for k, v := range node.scalars {
+			buf = append(buf, fmt.Sprintf("scalar(%v):%p", k, v))
+		}
+		sort.Strings(buf)
+		flags = append(flags, strings.Join(buf, " "))
+	}
+	if len(node.rules) > 0 {
+		flags = append(flags, fmt.Sprintf("%d rule(s)", len(node.rules)))
+	}
+	return strings.Join(flags, " ")
+}
+
 type ruleNode struct {
 	prio [2]int
 	rule *Rule
@@ -322,10 +354,6 @@ func (node *trieNode) Do(walker trieWalker) {
 	if next == nil {
 		return
 	}
-	if node.next != nil {
-		node.next.Do(next)
-		return
-	}
 	if node.any != nil {
 		node.any.Do(next)
 	}
@@ -337,6 +365,9 @@ func (node *trieNode) Do(walker trieWalker) {
 	}
 	if node.array != nil {
 		node.array.Do(next)
+	}
+	if node.next != nil {
+		node.next.Do(next)
 	}
 }
 
@@ -425,6 +456,9 @@ func (node *trieNode) traverse(resolver ValueResolver, tr *trieTraversalResult) 
 
 	v, err := resolver.Resolve(node.ref)
 	if err != nil {
+		if IsUnknownValueErr(err) {
+			return node.traverseUnknown(resolver, tr)
+		}
 		return err
 	}
 
@@ -466,10 +500,7 @@ func (node *trieNode) traverseValue(resolver ValueResolver, tr *trieTraversalRes
 func (node *trieNode) traverseArray(resolver ValueResolver, tr *trieTraversalResult, arr Array) error {
 
 	if len(arr) == 0 {
-		if node.next != nil || len(node.rules) > 0 {
-			return node.Traverse(resolver, tr)
-		}
-		return nil
+		return node.Traverse(resolver, tr)
 	}
 
 	head := arr[0].Value
@@ -490,6 +521,37 @@ func (node *trieNode) traverseArray(resolver ValueResolver, tr *trieTraversalRes
 	return child.traverseArray(resolver, tr, arr[1:])
 }
 
+func (node *trieNode) traverseUnknown(resolver ValueResolver, tr *trieTraversalResult) error {
+
+	if node == nil {
+		return nil
+	}
+
+	if err := node.Traverse(resolver, tr); err != nil {
+		return err
+	}
+
+	if err := node.undefined.traverseUnknown(resolver, tr); err != nil {
+		return err
+	}
+
+	if err := node.any.traverseUnknown(resolver, tr); err != nil {
+		return err
+	}
+
+	if err := node.array.traverseUnknown(resolver, tr); err != nil {
+		return err
+	}
+
+	for _, child := range node.scalars {
+		if err := child.traverseUnknown(resolver, tr); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 type triePrinter struct {
 	depth int
 	w     io.Writer
@@ -500,9 +562,4 @@ func (p triePrinter) Do(x interface{}) trieWalker {
 	fmt.Fprintf(p.w, "%v%v\n", padding, x)
 	p.depth++
 	return p
-}
-
-func printTrie(w io.Writer, trie *trieNode) {
-	pp := triePrinter{0, w}
-	trie.Do(pp)
 }
