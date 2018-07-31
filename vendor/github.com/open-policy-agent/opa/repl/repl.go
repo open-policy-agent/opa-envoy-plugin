@@ -15,13 +15,12 @@ import (
 	"html/template"
 	"io"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
+	pr "github.com/open-policy-agent/opa/internal/presentation"
 	"github.com/open-policy-agent/opa/rego"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/format"
 	"github.com/open-policy-agent/opa/metrics"
@@ -805,84 +804,52 @@ func (r *REPL) evalBody(ctx context.Context, compiler *ast.Compiler, input ast.V
 
 	rs, err := eval.Eval(ctx)
 
+	output := pr.Output{
+		Error:   err,
+		Result:  rs,
+		Metrics: r.metrics,
+	}
+
+	output = output.WithLimit(r.prettyLimit)
+
 	if buf != nil {
-		r.printTrace(ctx, compiler, *buf)
+		mangleTrace(ctx, r.store, r.txn, *buf)
+		output.Explanation = *buf
 	}
 
-	if r.metrics != nil {
-		r.printMetrics(r.metrics)
+	// TODO(tsandall): add profiler output
+
+	switch r.outputFormat {
+	case "json":
+		return pr.JSON(r.output, output)
+	default:
+		return pr.Pretty(r.output, output)
 	}
-
-	if err != nil {
-		return err
-	}
-
-	if len(rs) == 0 {
-		fmt.Fprintln(r.output, "undefined")
-		return nil
-	}
-
-	if len(rs) == 1 {
-		if len(rs[0].Bindings) == 0 && len(rs[0].Expressions) == 1 {
-			r.printJSON(rs[0].Expressions[0].Value)
-			return nil
-		}
-	}
-
-	keys := []resultKey{}
-
-	for k := range rs[0].Bindings {
-		keys = append(keys, resultKey{
-			varName: k,
-		})
-	}
-
-	for i, expr := range rs[0].Expressions {
-		if _, ok := expr.Value.(bool); !ok {
-			keys = append(keys, resultKey{
-				exprIndex: i,
-				exprText:  expr.Text,
-			})
-		}
-	}
-
-	sort.Slice(keys, func(i, j int) bool {
-		return resultKeyLess(keys[i], keys[j])
-	})
-
-	r.printResults(keys, rs)
-
-	return nil
 }
 
 func (r *REPL) evalPartial(ctx context.Context, compiler *ast.Compiler, input ast.Value, body ast.Body) error {
-
-	q := topdown.NewQuery(body).
-		WithCompiler(compiler).
-		WithStore(r.store).
-		WithTransaction(r.txn).
-		WithUnknowns(r.unknowns)
-
-	if input != nil {
-		q = q.WithInput(ast.NewTerm(input))
-	}
-
-	if r.metrics != nil {
-		q = q.WithMetrics(r.metrics)
-	}
-
-	if r.instrument {
-		q = q.WithInstrumentation(topdown.NewInstrumentation(r.metrics))
-	}
 
 	var buf *topdown.BufferTracer
 
 	if r.explain != explainOff {
 		buf = topdown.NewBufferTracer()
-		q = q.WithTracer(buf)
 	}
 
-	queries, support, err := q.PartialRun(ctx)
+	eval := rego.New(
+		rego.Compiler(compiler),
+		rego.Store(r.store),
+		rego.Transaction(r.txn),
+		rego.ParsedImports(r.modules[r.currentModuleID].Imports),
+		rego.ParsedPackage(r.modules[r.currentModuleID].Package),
+		rego.ParsedQuery(body),
+		rego.ParsedInput(input),
+		rego.Metrics(r.metrics),
+		rego.Tracer(buf),
+		rego.Instrument(r.instrument),
+		rego.ParsedUnknowns(r.unknowns),
+	)
+
+	pq, err := eval.Partial(ctx)
 	if err != nil {
 		return err
 	}
@@ -891,15 +858,11 @@ func (r *REPL) evalPartial(ctx context.Context, compiler *ast.Compiler, input as
 		r.printTrace(ctx, compiler, *buf)
 	}
 
-	for i := range queries {
-		fmt.Fprintln(r.output, queries[i])
+	if r.metrics != nil {
+		r.printMetricsJSON(r.metrics)
 	}
 
-	for i := range support {
-		fmt.Fprintln(r.output)
-		fmt.Fprintf(r.output, "# support module %d\n", i+1)
-		fmt.Fprintln(r.output, support[i])
-	}
+	r.printPartialResults(pq)
 
 	return nil
 }
@@ -975,69 +938,33 @@ func (r *REPL) loadModules(ctx context.Context, txn storage.Transaction) (map[st
 	return modules, nil
 }
 
-func (r *REPL) printResults(keys []resultKey, results rego.ResultSet) {
+func (r *REPL) printPartialResults(pq *rego.PartialQueries) {
 	switch r.outputFormat {
 	case "json":
-		output := make([]map[string]interface{}, len(results))
-		for i := range output {
-			output[i] = results[i].Bindings
-		}
-		r.printJSON(output)
+		pr.JSON(r.output, pq)
 	default:
-		r.printPretty(keys, results)
+		r.printPartialPretty(pq)
 	}
 }
 
-func (r *REPL) printJSON(x interface{}) {
-	buf, err := json.MarshalIndent(x, "", "  ")
-	if err != nil {
-		fmt.Fprintln(r.output, err)
-		return
-	}
-	fmt.Fprintln(r.output, string(buf))
-}
+func (r *REPL) printPartialPretty(pq *rego.PartialQueries) {
 
-func (r *REPL) printPretty(keys []resultKey, results rego.ResultSet) {
-	table := tablewriter.NewWriter(r.output)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetAutoFormatHeaders(false)
-	header := make([]string, len(keys))
-	for i := range header {
-		header[i] = keys[i].String()
+	for i := range pq.Queries {
+		fmt.Fprintln(r.output, pq.Queries[i])
 	}
-	table.SetHeader(header)
-	for _, row := range results {
-		r.printPrettyRow(table, keys, row)
-	}
-	table.Render()
-}
 
-func (r *REPL) printPrettyRow(table *tablewriter.Table, keys []resultKey, result rego.Result) {
-	buf := []string{}
-	for _, k := range keys {
-		v, ok := k.Select(result)
-		if ok {
-			js, err := json.Marshal(v)
-			if err != nil {
-				buf = append(buf, err.Error())
-			} else {
-				s := string(js)
-				if r.prettyLimit > 0 && len(s) > r.prettyLimit {
-					s = s[:r.prettyLimit] + "..."
-				}
-				buf = append(buf, s)
-			}
-		}
+	for i := range pq.Support {
+		fmt.Fprintln(r.output)
+		fmt.Fprintf(r.output, "# support module %d\n", i+1)
+		fmt.Fprintln(r.output, pq.Support[i])
 	}
-	table.Append(buf)
 }
 
 func (r *REPL) printTrace(ctx context.Context, compiler *ast.Compiler, trace []*topdown.Event) {
-	mangleTrace(ctx, r.store, r.txn, trace)
 	topdown.PrettyTrace(r.output, trace)
 }
 
-func (r *REPL) printMetrics(metrics metrics.Metrics) {
+func (r *REPL) printMetricsJSON(metrics metrics.Metrics) {
 	buf, err := json.MarshalIndent(metrics.All(), "", "  ")
 	if err != nil {
 		panic("not reached")
@@ -1070,40 +997,6 @@ func (r *REPL) saveHistory(prompt *liner.State) {
 		prompt.WriteHistory(f)
 		f.Close()
 	}
-}
-
-type resultKey struct {
-	varName   string
-	exprIndex int
-	exprText  string
-}
-
-func resultKeyLess(a, b resultKey) bool {
-	if a.varName != "" {
-		if b.varName == "" {
-			return true
-		}
-		return a.varName < b.varName
-	}
-	return a.exprIndex < b.exprIndex
-}
-
-func (rk resultKey) String() string {
-	if rk.varName != "" {
-		return rk.varName
-	}
-	return rk.exprText
-}
-
-func (rk resultKey) Select(result rego.Result) (interface{}, bool) {
-	if rk.varName != "" {
-		return result.Bindings[rk.varName], true
-	}
-	val := result.Expressions[rk.exprIndex].Value
-	if _, ok := val.(bool); ok {
-		return nil, false
-	}
-	return val, true
 }
 
 type commandDesc struct {

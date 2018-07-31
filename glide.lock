@@ -1,5 +1,5 @@
-hash: 35c27d3b1e6096c0885c649c8653cf1d0183b77f0b0c2063a737f6ccbb9e7e49
-updated: 2018-06-22T22:07:46.235263174Z
+hash: 3411daab7db6e798610606b38bfd6eb8941be2edc28d85b604c6343d7764aaf8
+updated: 2018-07-31T21:37:54.058995634Z
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
@@ -14,7 +14,7 @@ imports:
   subpackages:
   - google/rpc
 - name: github.com/gogo/protobuf
-  version: 30cf7ac33676b5786e78c746683f0d4cd64fa75b
+  version: 5440bafee1ae178913104d83f4911bff630d6472
   subpackages:
   - gogoproto
   - proto
@@ -22,9 +22,9 @@ imports:
   - sortkeys
   - types
 - name: github.com/golang/lint
-  version: 470b6b0bb3005eda157f0275e2e4895055396a81
+  version: 06c8688daad7faa9da5a0c2f163a3d14aac986ca
 - name: github.com/golang/protobuf
-  version: 9eb2c01ac278a5d89ce4b2be68fe4500955d8179
+  version: 560bdb64431cc123098c2db67f16053a923a0688
   subpackages:
   - proto
   - protoc-gen-go/descriptor
@@ -59,7 +59,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: d4647c9c7a84d847478d890b816b7d8b62b0b279
 - name: github.com/open-policy-agent/opa
-  version: 877d39f035d1756b07a6ce8582bf793b7f2c1714
+  version: 71d0e299b4563bacbea0cc39b404df1e1e51a876
   subpackages:
   - ast
   - bundle
@@ -67,6 +67,7 @@ imports:
   - cover
   - dependencies
   - format
+  - internal/presentation
   - loader
   - metrics
   - plugins
@@ -74,6 +75,7 @@ imports:
   - plugins/logs
   - plugins/rest
   - plugins/status
+  - profiler
   - rego
   - repl
   - runtime
@@ -87,6 +89,7 @@ imports:
   - tester
   - topdown
   - topdown/builtins
+  - topdown/copypropagation
   - types
   - util
   - version
@@ -96,12 +99,12 @@ imports:
 - name: github.com/pkg/errors
   version: 816c9085562cd7ee03e7f8188a1cfd942858cded
 - name: github.com/prometheus/client_golang
-  version: faf4ec335fe01ae5a6a0eaa34a5a9333bfbd1a30
+  version: bcbbc08eb2ddff3af83bbf11e7ec13b4fd730b6e
   subpackages:
   - prometheus
   - prometheus/promhttp
 - name: github.com/prometheus/client_model
-  version: 99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c
+  version: 5c3871d89910bfb32f5fcab2aa4b9ec68e65a99f
   subpackages:
   - go
 - name: github.com/prometheus/common
@@ -111,7 +114,7 @@ imports:
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 7d6f385de8bea29190f15ba9931442a0eaef9af7
+  version: 05ee40e3a273f7245e8777337fc7b46e533a9a92
   subpackages:
   - internal/util
   - nfs
@@ -127,15 +130,15 @@ imports:
 - name: github.com/yashtewari/glob-intersection
   version: 7af743e8ec8480fee1932a737a406f7ec817f910
 - name: golang.org/x/crypto
-  version: a49355c7e3f8fe157a85be2f77e6e269a0f89602
+  version: c126467f60eb25f8f27e5a981f32a87e3965053f
   subpackages:
   - ssh/terminal
 - name: golang.org/x/lint
-  version: 470b6b0bb3005eda157f0275e2e4895055396a81
+  version: 06c8688daad7faa9da5a0c2f163a3d14aac986ca
   subpackages:
   - golint
 - name: golang.org/x/net
-  version: afe8f62b1d6bbd81f31868121a50b06d8188e1f9
+  version: 49c15d80dfbc983ea25246ee959d970efe09ec09
   subpackages:
   - context
   - http/httpguts
@@ -145,23 +148,23 @@ imports:
   - internal/timeseries
   - trace
 - name: golang.org/x/sys
-  version: 63fc586f45fe72d95d5240a5d5eb95e6503907d3
+  version: bd9dbc187b6e1dacfdd2722a87e83093c2d7bd6e
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 5cec4b58c438bd98288aeb248bab2c1840713d21
+  version: 0605a8320aceb4207a5fb3521281e17ec2075476
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: golang.org/x/tools
-  version: 25b95b48224cce18163c7d49dcfb89a2d5ecd209
+  version: 33176b2029f9538e722efa4a005f7aa00cf60010
   subpackages:
   - cmd/goimports
 - name: google.golang.org/genproto
-  version: 80063a038e333bbe006c878e4c5ce4c74d055498
+  version: daca94659cb50e9f37c1b834680f2e46358f10b0
   subpackages:
   - googleapis/rpc/status
 - name: google.golang.org/grpc

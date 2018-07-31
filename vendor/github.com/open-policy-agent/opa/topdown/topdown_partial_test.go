@@ -60,7 +60,7 @@ func TestTopDownPartialEval(t *testing.T) {
 		{
 			note:        "transitive",
 			query:       "input.x = y; y[0] = z; z = 1; plus(z, 2, 3)",
-			wantQueries: []string{`input.x = y; y[0] = z; z = 1; plus(z, 2, 3)`},
+			wantQueries: []string{`input.x = y; y[0] = 1; plus(1, 2, 3); z = 1`},
 		},
 		{
 			note:  "vars",
@@ -124,32 +124,32 @@ func TestTopDownPartialEval(t *testing.T) {
 				p[3]`,
 			},
 			wantQueries: []string{
-				`input.x = x; 1 = x; x_term_0_1 = 1`,
-				`input.x = x; 2 = x; x_term_0_1 = 2`,
-				`input.x = x; 3 = x; x_term_0_1 = 3`,
+				`input.x = 1; x = 1`,
+				`input.x = 2; x = 2`,
+				`input.x = 3; x = 3`,
 			},
 		},
 		{
 			note:  "iterate keys: sets",
 			query: `input = x; s = {1,2}; s[x] = y`,
 			wantQueries: []string{
-				`input = x; 1 = x; s = {1, 2}; y = 1`,
-				`input = x; 2 = x; s = {1, 2}; y = 2`,
+				`input = 1; s = {1, 2}; x = 1; y = 1`,
+				`input = 2; s = {1, 2}; x = 2; y = 2`,
 			},
 		},
 		{
 			note:  "iterate keys: objects",
 			query: `input = x; o = {"a": 1, "b": 2}; o[x] = y`,
 			wantQueries: []string{
-				`input = x; "a" = x; o = {"a": 1, "b": 2}; y = 1`,
-				`input = x; "b" = x; o = {"a": 1, "b": 2}; y = 2`,
+				`input = "a"; o = {"a": 1, "b": 2}; x = "a"; y = 1`,
+				`input = "b"; o = {"a": 1, "b": 2}; x = "b"; y = 2`,
 			},
 		},
 		{
 			note:  "iterate keys: saved",
 			query: `x = input; y = [x]; z = y[i][j] `,
 			wantQueries: []string{
-				`x = input; x[j] = z; i = 0; y = [x]`,
+				`x = input; x[j] = z; y = [x]; i = 0`,
 			},
 		},
 		{
@@ -161,8 +161,15 @@ func TestTopDownPartialEval(t *testing.T) {
 				p[z] { z = "bar" }`,
 			},
 			wantQueries: []string{
-				`input.x = x; y1 = x; y1 = "foo"; y1 = x_term_0_1; x_term_0_1 != false`,
-				`input.x = x; z2 = x; z2 = "bar"; z2 = x_term_0_1; x_term_0_1 != false`,
+				`input.x = "foo"; x = "foo"`,
+				`input.x = "bar"; x = "bar"`,
+			},
+		},
+		{
+			note:  "single term: false save",
+			query: `input = x; x = false; x`, // last expression must be preserved
+			wantQueries: []string{
+				`input = false; false; x = false`,
 			},
 		},
 		{
@@ -186,7 +193,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				p[x] { x = {y: z}; y = "bar"; z = input.x }`,
 			},
 			wantQueries: []string{
-				`z1 = input.x; z1 = 1; x = {"foo": z1}`,
+				`1 = input.x; x = {"foo": 1}`,
 			},
 		},
 		{
@@ -198,8 +205,37 @@ func TestTopDownPartialEval(t *testing.T) {
 				p = x { input.x = x }`,
 			},
 			wantQueries: []string{
-				`input.x = x1; x1 = 1`,
+				`input.x = 1`,
 			},
+		},
+		{
+			note:  "reference: head: from query",
+			query: "data.test.p[y] = 1",
+			modules: []string{
+				`package test
+
+				p[x] = 1 {
+					input.foo[x] = z
+					x.bar = 1
+				}
+				`,
+			},
+			wantQueries: []string{
+				`y.bar = 1; z1 = input.foo[y]`,
+			},
+		},
+		{
+			note:  "reference: default not required",
+			query: "data.test.p = true",
+			modules: []string{
+				`package test
+
+				default p = false
+				p {
+					input.x = 1
+				}`,
+			},
+			wantQueries: []string{`input.x = 1`},
 		},
 		{
 			note:  "namespace: complete",
@@ -209,7 +245,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				 p = 1 { input.y = x; x = 2 }`,
 			},
 			wantQueries: []string{
-				`input.y = x1; x1 = 2; 1 = x`,
+				`input.y = 2; x = 1`,
 			},
 		},
 		{
@@ -220,7 +256,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				p = x { input.x = x }`,
 			},
 			wantQueries: []string{
-				`input.x = x1; x1 = x`,
+				`input.x = x`,
 			},
 		},
 		{
@@ -231,7 +267,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				p[[y, x]] { input.z = z; z = y; a = input.a; a = x }`,
 			},
 			wantQueries: []string{
-				`input.z = z1; z1 = x; a1 = input.a; a1 = y; x_term_0_0 = [x, y]`,
+				`input.z = x; y = input.a; x_term_0_0 = [x, y]`,
 			},
 		},
 		{
@@ -242,7 +278,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				p[y] = x { y = "foo"; x = 2 }`,
 			},
 			wantQueries: []string{
-				`input.x = x; y1 = x; y1 = "foo"; x1 = 2; x1 = y; y = 2`,
+				`input.x = "foo"; x = "foo"; y = 2`,
 			},
 		},
 		{
@@ -253,7 +289,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				p = x { input.x = [y]; y = x }`,
 			},
 			wantQueries: []string{
-				`input.x = [y1]; y1 = x1; x1 = x`,
+				`input.x = [x]`,
 			},
 		},
 		{
@@ -265,7 +301,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				q = x { input.y = y; x =  y }`,
 			},
 			wantQueries: []string{
-				`input.x = y1; y1 = x1; input.y = y2; x2 = y2; x2 = z1; [x1, z1] = x`,
+				`[input.x, input.y] = x`,
 			},
 		},
 		{
@@ -282,7 +318,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				`,
 			},
 			wantQueries: []string{
-				`b1 = input.b; "a" != b1; x = true`,
+				`"a" != input.b; x = true`,
 			},
 		},
 		{
@@ -293,11 +329,79 @@ func TestTopDownPartialEval(t *testing.T) {
 
 				p {
 					input = x
-					x[0] = true
+					x.foo = true
 				}`,
 			},
 			wantQueries: []string{
-				`input = x1; x1[0] = true; true = x`,
+				`input.foo = true; x = true`,
+			},
+		},
+		{
+			note:  "namespace: reference head: from caller",
+			query: "data.test.p[x] = 1",
+			modules: []string{
+				`package test
+
+				p[x] = 1 {
+					x = input
+					x[0] = 1
+				}
+				`,
+			},
+			wantQueries: []string{
+				`x = input; x[0] = 1`,
+			},
+		},
+		{
+			note:  "namespace: function with call composite result (array, nested)",
+			query: `data.test.foo(input, [[x, _]]); startswith(x, "foo")`,
+			modules: []string{
+				`package test
+				foo(x) = o {
+				  o := [[x.x, x.y]]
+				}
+				`},
+			wantQueries: []string{
+				`[[x, _]] = __local0__1; __local0__1 = [[input.x, input.y]]; startswith(x, "foo")`,
+			},
+		},
+		{
+			note:  "namespace: function with call composite result (object)",
+			query: `data.test.foo(input, {"x": x}); startswith(x, "foo")`,
+			modules: []string{
+				`package test
+				foo(x) = o {
+				  o := { "x": x.y }
+				}
+				`},
+			wantQueries: []string{
+				`{"x": x} = __local0__1; __local0__1 = {"x": input.y}; startswith(x, "foo")`,
+			},
+		},
+		{
+			note:  "namespace: function with call composite result (object, nested)",
+			query: `data.test.foo(input, {"x": [y, z]}); startswith(y, "foo")`,
+			modules: []string{
+				`package test
+				foo(y) = z {
+				  z := { "x": [y.y, y.z] }
+				}
+				`},
+			wantQueries: []string{
+				`{"x": [y, z]} = __local0__1; __local0__1 = {"x": [input.y, input.z]}; startswith(y, "foo")`,
+			},
+		},
+		{
+			note:  "namespace: function with call composite result (array/object, mixed)",
+			query: `data.test.foo(input, {"x": [ { "a": y }, _]}); startswith(y, "foo")`,
+			modules: []string{
+				`package test
+				foo(y) = o {
+				  o := { "x": [ {"a": y.y }, y.z] }
+				}
+				`},
+			wantQueries: []string{
+				`{"x": [{"a": y}, _]} = __local0__1; __local0__1 = {"x": [{"a": input.y}, input.z]}; startswith(y, "foo")`,
 			},
 		},
 		{
@@ -324,6 +428,20 @@ func TestTopDownPartialEval(t *testing.T) {
 			wantQueries: []string{
 				`input.x = 1; x = true`,
 				`input.y = 1; x = false`,
+			},
+		},
+		{
+			note:  "ignore conflicts: functions: unknowns",
+			query: "data.test.f(input) = x",
+			modules: []string{
+				`package test
+				f(x) = true { x = 1 }
+				f(x) = false { x = 2 }
+				`,
+			},
+			wantQueries: []string{
+				`1 = input; x = true`,
+				`2 = input; x = false`,
 			},
 		},
 		{
@@ -357,7 +475,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				q = y { y = input.y }`,
 			},
 			wantQueries: []string{
-				`data.test.p = 1; y1 = input.y; y1 = 2`,
+				`data.test.p = 1; 2 = input.y`,
 			},
 			unknowns: []string{
 				"input",
@@ -407,7 +525,7 @@ func TestTopDownPartialEval(t *testing.T) {
 			wantQueries: []string{
 				`data.test.s = y; x = "s"`,
 				`data.test.p = y; x = "p"`,
-				`x1 = input.x; x1 = y; x = "r"`,
+				`y = input.x; x = "r"`,
 			},
 		},
 		{
@@ -415,6 +533,24 @@ func TestTopDownPartialEval(t *testing.T) {
 			query: "x = input; a = [x]; count([a], n)",
 			wantQueries: []string{
 				`x = input; count([[x]], n); a = [x]`,
+			},
+		},
+		{
+			note:  "save: function with call composite result (array)",
+			query: `split(input, "@", [x]); startswith(x, "foo")`,
+			wantQueries: []string{
+				`split(input, "@", [x]); startswith(x, "foo")`,
+			},
+		},
+		{
+			note:  "save: function: ordered",
+			query: `input = x; data.test.f(x)`,
+			modules: []string{`
+				package test
+				f(x) = true { x = 1 }
+				else = false { x = 2 }`},
+			wantQueries: []string{
+				`input = x; data.test.f(x)`,
 			},
 		},
 		{
@@ -438,7 +574,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				q = 100 { false } else = 200 { true }`,
 			},
 			wantQueries: []string{
-				`data.test.q = x1; x1 = x`,
+				`data.test.q = x`,
 			},
 		},
 		{
@@ -561,7 +697,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				`package test
 				default p = false
 				p { q = true; s } # using q = true syntax to avoid dealing with implicit != false expr
-				default q = false
+				default q = true  # same value as expr above so default must be kept
 				q { r }
 				r { input.x = 1 }
 				r { input.y = 2 }
@@ -574,7 +710,7 @@ func TestTopDownPartialEval(t *testing.T) {
 				`package partial.test
 				q = true { input.x = 1 }
 				q = true { input.y = 2 }
-				default q = false
+				default q = true
 				p = true { data.partial.test.q = true; input.z = 3 }
 				default p = false
 				`,
@@ -684,6 +820,149 @@ func TestTopDownPartialEval(t *testing.T) {
 
 				__not0_2__(x, y) { 0 = x; 1 = y }
 				__not0_2__(x, y) { 2 = x; 3 = y }`,
+			},
+		},
+		{
+			note:  "copy propagation: basic",
+			query: "input.x > 1",
+			wantQueries: []string{
+				"input.x > 1",
+			},
+		},
+		{
+			note:  "copy propagation: call terms",
+			query: "input.x+1 > 1",
+			wantQueries: []string{
+				"input.x+1 > 1",
+			},
+		},
+		{
+			note:  "copy propagation: virtual",
+			query: "data.test.p > 1",
+			modules: []string{
+				`package test
+
+				p = x { input.x = y; y = z; z = x }`,
+			},
+			wantQueries: []string{
+				`input.x > 1`,
+			},
+		},
+		{
+			note:  "copy propagation: virtual: call",
+			query: "data.test.p > 1",
+			modules: []string{
+				`package test
+
+				p = y { input.x = x; plus(x, 1, y) }`,
+			},
+			wantQueries: []string{
+				`input.x+1 > 1`,
+			},
+		},
+		{
+			note:  "copy propagation: composite",
+			query: "data.test.p[0][0] = 1",
+			modules: []string{
+				`package test
+
+				p = x { x = [input.x] }
+				`,
+			},
+			wantQueries: []string{
+				`input.x[0] = 1`,
+			},
+		},
+		{
+			note:  "copy propagation: reference head",
+			query: "data.test.p[0] > 1",
+			modules: []string{
+				`package test
+
+				p = x { input.x = x }`,
+			},
+			wantQueries: []string{
+				`input.x[0] > 1`,
+			},
+		},
+		{
+			note:  "copy propagation: reference head: call",
+			query: "data.test.p[0] > 1",
+			modules: []string{
+				`package test
+
+				p = x { sort(input.x, y); y = x }`,
+			},
+			wantQueries: []string{
+				// copy propagation cannot remove the intermediate variable currently because
+				// sort(input.x, y) is not killed (since y is ultimately used as a ref head.)
+				`sort(input.x, x1); x1[0] > 1`,
+			},
+		},
+		{
+			note:  "copy propagation: live built-in output",
+			query: "plus(input, 1, x); x = y",
+			wantQueries: []string{
+				`plus(input, 1, y); x = y`,
+			},
+		},
+		{
+			note:  "copy propagation: no dependencies",
+			query: "data.test.p",
+			modules: []string{
+				`package test
+
+				p {
+					input.x = ["foo", a]
+					input.y = a
+				}`,
+			},
+			wantQueries: []string{
+				`input.x = ["foo", a1]; a1 = input.y`,
+			},
+		},
+		{
+			note:  "copy propagation: union-find replace head",
+			query: "data.test.p = true",
+			modules: []string{
+				`package test
+
+				p {
+					input = y
+					x = y
+					x.foo = 1
+				}`,
+			},
+			wantQueries: []string{`input.foo = 1`},
+		},
+		{
+			note:  "copy propagation: union-find skip ref head",
+			query: "data.test.p = true",
+			modules: []string{
+				`package test
+
+				p {
+					input = y
+					x = y
+					x.foo = 1
+					x = {"foo": 1}
+				}`,
+			},
+			wantQueries: []string{`input.foo = 1; input = {"foo": 1}`},
+		},
+		{
+			note:  "copy propagation: remove equal(A,A) nop",
+			query: "data.test.p == 100",
+			modules: []string{
+				`package test
+
+				p = x {
+					input = x
+					x = 100
+				}`,
+			},
+			wantQueries: []string{
+				"input = 100",
 			},
 		},
 	}
@@ -878,8 +1157,12 @@ func (s moduleSet) String() string {
 
 func (s moduleSet) Contains(b *ast.Module) bool {
 	for i := range s {
-		if s[i].Equal(b) {
-			return true
+		if s[i].Package.Equal(b.Package) {
+			rs1 := ast.NewRuleSet(s[i].Rules...)
+			rs2 := ast.NewRuleSet(b.Rules...)
+			if rs1.Equal(rs2) {
+				return true
+			}
 		}
 	}
 	return false
