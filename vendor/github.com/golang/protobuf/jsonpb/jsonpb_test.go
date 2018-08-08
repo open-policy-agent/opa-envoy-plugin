@@ -453,8 +453,7 @@ var marshalingTests = []struct {
 	{"map<int64, string>", marshaler, &pb.Mappy{Buggy: map[int64]string{1234: "yup"}},
 		`{"buggy":{"1234":"yup"}}`},
 	{"map<bool, bool>", marshaler, &pb.Mappy{Booly: map[bool]bool{false: true}}, `{"booly":{"false":true}}`},
-	// TODO: This is broken.
-	//{"map<string, enum>", marshaler, &pb.Mappy{Enumy: map[string]pb.Numeral{"XIV": pb.Numeral_ROMAN}}, `{"enumy":{"XIV":"ROMAN"}`},
+	{"map<string, enum>", marshaler, &pb.Mappy{Enumy: map[string]pb.Numeral{"XIV": pb.Numeral_ROMAN}}, `{"enumy":{"XIV":"ROMAN"}}`},
 	{"map<string, enum as int>", Marshaler{EnumsAsInts: true}, &pb.Mappy{Enumy: map[string]pb.Numeral{"XIV": pb.Numeral_ROMAN}}, `{"enumy":{"XIV":2}}`},
 	{"map<int32, bool>", marshaler, &pb.Mappy{S32Booly: map[int32]bool{1: true, 3: false, 10: true, 12: false}}, `{"s32booly":{"1":true,"3":false,"10":true,"12":false}}`},
 	{"map<int64, bool>", marshaler, &pb.Mappy{S64Booly: map[int64]bool{1: true, 3: false, 10: true, 12: false}}, `{"s64booly":{"1":true,"3":false,"10":true,"12":false}}`},
@@ -573,7 +572,7 @@ func TestMarshalIllegalTime(t *testing.T) {
 
 func TestMarshalJSONPBMarshaler(t *testing.T) {
 	rawJson := `{ "foo": "bar", "baz": [0, 1, 2, 3] }`
-	msg := dynamicMessage{rawJson: rawJson}
+	msg := dynamicMessage{RawJson: rawJson}
 	str, err := new(Marshaler).MarshalToString(&msg)
 	if err != nil {
 		t.Errorf("an unexpected error occurred when marshalling JSONPBMarshaler: %v", err)
@@ -584,7 +583,7 @@ func TestMarshalJSONPBMarshaler(t *testing.T) {
 }
 
 func TestMarshalAnyJSONPBMarshaler(t *testing.T) {
-	msg := dynamicMessage{rawJson: `{ "foo": "bar", "baz": [0, 1, 2, 3] }`}
+	msg := dynamicMessage{RawJson: `{ "foo": "bar", "baz": [0, 1, 2, 3] }`}
 	a, err := ptypes.MarshalAny(&msg)
 	if err != nil {
 		t.Errorf("an unexpected error occurred when marshalling to Any: %v", err)
@@ -602,7 +601,7 @@ func TestMarshalAnyJSONPBMarshaler(t *testing.T) {
 }
 
 func TestMarshalWithCustomValidation(t *testing.T) {
-	msg := dynamicMessage{rawJson: `{ "foo": "bar", "baz": [0, 1, 2, 3] }`, dummy: &dynamicMessage{}}
+	msg := dynamicMessage{RawJson: `{ "foo": "bar", "baz": [0, 1, 2, 3] }`, Dummy: &dynamicMessage{}}
 
 	js, err := new(Marshaler).MarshalToString(&msg)
 	if err != nil {
@@ -748,8 +747,7 @@ var unmarshalingTests = []struct {
 	{"Any with message and indent", Unmarshaler{}, anySimplePrettyJSON, anySimple},
 	{"Any with WKT", Unmarshaler{}, anyWellKnownJSON, anyWellKnown},
 	{"Any with WKT and indent", Unmarshaler{}, anyWellKnownPrettyJSON, anyWellKnown},
-	// TODO: This is broken.
-	//{"map<string, enum>", Unmarshaler{}, `{"enumy":{"XIV":"ROMAN"}`, &pb.Mappy{Enumy: map[string]pb.Numeral{"XIV": pb.Numeral_ROMAN}}},
+	{"map<string, enum>", Unmarshaler{}, `{"enumy":{"XIV":"ROMAN"}}`, &pb.Mappy{Enumy: map[string]pb.Numeral{"XIV": pb.Numeral_ROMAN}}},
 	{"map<string, enum as int>", Unmarshaler{}, `{"enumy":{"XIV":2}}`, &pb.Mappy{Enumy: map[string]pb.Numeral{"XIV": pb.Numeral_ROMAN}}},
 	{"oneof", Unmarshaler{}, `{"salary":31000}`, &pb.MsgWithOneof{Union: &pb.MsgWithOneof_Salary{31000}}},
 	{"oneof spec name", Unmarshaler{}, `{"Country":"Australia"}`, &pb.MsgWithOneof{Union: &pb.MsgWithOneof_Country{"Australia"}}},
@@ -854,7 +852,7 @@ func TestUnmarshaling(t *testing.T) {
 
 		err := tt.unmarshaler.Unmarshal(strings.NewReader(tt.json), p)
 		if err != nil {
-			t.Errorf("%s: %v", tt.desc, err)
+			t.Errorf("unmarshalling %s: %v", tt.desc, err)
 			continue
 		}
 
@@ -1013,8 +1011,8 @@ func TestUnmarshalJSONPBUnmarshaler(t *testing.T) {
 	if err := Unmarshal(strings.NewReader(rawJson), &msg); err != nil {
 		t.Errorf("an unexpected error occurred when parsing into JSONPBUnmarshaler: %v", err)
 	}
-	if msg.rawJson != rawJson {
-		t.Errorf("message contents not set correctly after unmarshalling JSON: got %s, wanted %s", msg.rawJson, rawJson)
+	if msg.RawJson != rawJson {
+		t.Errorf("message contents not set correctly after unmarshalling JSON: got %s, wanted %s", msg.RawJson, rawJson)
 	}
 }
 
@@ -1038,7 +1036,7 @@ func TestUnmarshalAnyJSONPBUnmarshaler(t *testing.T) {
 		t.Errorf("an unexpected error occurred when parsing into JSONPBUnmarshaler: %v", err)
 	}
 
-	dm := &dynamicMessage{rawJson: `{"baz":[0,1,2,3],"foo":"bar"}`}
+	dm := &dynamicMessage{RawJson: `{"baz":[0,1,2,3],"foo":"bar"}`}
 	var want anypb.Any
 	if b, err := proto.Marshal(dm); err != nil {
 		t.Errorf("an unexpected error occurred when marshaling message: %v", err)
@@ -1099,30 +1097,30 @@ func (s *stringField) UnmarshalJSONPB(jum *Unmarshaler, js []byte) error {
 // dynamicMessage implements protobuf.Message but is not a normal generated message type.
 // It provides implementations of JSONPBMarshaler and JSONPBUnmarshaler for JSON support.
 type dynamicMessage struct {
-	rawJson string `protobuf:"bytes,1,opt,name=rawJson"`
+	RawJson string `protobuf:"bytes,1,opt,name=rawJson"`
 
 	// an unexported nested message is present just to ensure that it
 	// won't result in a panic (see issue #509)
-	dummy *dynamicMessage `protobuf:"bytes,2,opt,name=dummy"`
+	Dummy *dynamicMessage `protobuf:"bytes,2,opt,name=dummy"`
 }
 
 func (m *dynamicMessage) Reset() {
-	m.rawJson = "{}"
+	m.RawJson = "{}"
 }
 
 func (m *dynamicMessage) String() string {
-	return m.rawJson
+	return m.RawJson
 }
 
 func (m *dynamicMessage) ProtoMessage() {
 }
 
 func (m *dynamicMessage) MarshalJSONPB(jm *Marshaler) ([]byte, error) {
-	return []byte(m.rawJson), nil
+	return []byte(m.RawJson), nil
 }
 
 func (m *dynamicMessage) UnmarshalJSONPB(jum *Unmarshaler, js []byte) error {
-	m.rawJson = string(js)
+	m.RawJson = string(js)
 	return nil
 }
 

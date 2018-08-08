@@ -61,9 +61,17 @@ var DefaultBuiltins = [...]*Builtin{
 	Product,
 	Max,
 	Min,
+	Any,
+	All,
 
 	// Casting
 	ToNumber,
+	CastObject,
+	CastNull,
+	CastBoolean,
+	CastString,
+	CastSet,
+	CastArray,
 
 	// Regular Expressions
 	RegexMatch,
@@ -114,6 +122,7 @@ var DefaultBuiltins = [...]*Builtin{
 	ParseDurationNanos,
 	Date,
 	Clock,
+	Weekday,
 
 	// Crypto
 	CryptoX509ParseCertificates,
@@ -136,6 +145,9 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// HTTP
 	HTTPSend,
+
+	// Rego
+	RegoParseModule,
 
 	// Tracing
 	Trace,
@@ -429,6 +441,36 @@ var Min = &Builtin{
 	),
 }
 
+// All takes a list and returns true if all of the items
+// are true. A collection of length 0 returns true.
+var All = &Builtin{
+	Name: "all",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewAny(
+				types.NewSet(types.A),
+				types.NewArray(nil, types.A),
+			),
+		),
+		types.B,
+	),
+}
+
+// Any takes a collection and returns true if any of the items
+// is true. A collection of length 0 returns false.
+var Any = &Builtin{
+	Name: "any",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewAny(
+				types.NewSet(types.A),
+				types.NewArray(nil, types.A),
+			),
+		),
+		types.B,
+	),
+}
+
 /**
  * Casting
  */
@@ -448,6 +490,65 @@ var ToNumber = &Builtin{
 			),
 		),
 		types.N,
+	),
+}
+
+// CastArray checks the underlying type of the input. If it is array or set, an array
+// containing the values is returned. If it is not an array, an error is thrown.
+var CastArray = &Builtin{
+	Name: "cast_array",
+	Decl: types.NewFunction(
+		types.Args(types.A),
+		types.NewArray(nil, types.A),
+	),
+}
+
+// CastSet checks the underlying type of the input.
+// If it is a set, the set is returned.
+// If it is an array, the array is returned in set form (all duplicates removed)
+// If neither, an error is thrown
+var CastSet = &Builtin{
+	Name: "cast_set",
+	Decl: types.NewFunction(
+		types.Args(types.A),
+		types.NewSet(types.A),
+	),
+}
+
+// CastString returns input if it is a string; if not returns error.
+// For formatting variables, see sprintf
+var CastString = &Builtin{
+	Name: "cast_string",
+	Decl: types.NewFunction(
+		types.Args(types.A),
+		types.S,
+	),
+}
+
+// CastBoolean returns input if it is a boolean; if not returns error.
+var CastBoolean = &Builtin{
+	Name: "cast_boolean",
+	Decl: types.NewFunction(
+		types.Args(types.A),
+		types.B,
+	),
+}
+
+// CastNull returns null if input is null; if not returns error.
+var CastNull = &Builtin{
+	Name: "cast_null",
+	Decl: types.NewFunction(
+		types.Args(types.A),
+		types.NewNull(),
+	),
+}
+
+// CastObject returns the given object if it is null; throws an error otherwise
+var CastObject = &Builtin{
+	Name: "cast_object",
+	Decl: types.NewFunction(
+		types.Args(types.A),
+		types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
 	),
 }
 
@@ -860,6 +961,15 @@ var Clock = &Builtin{
 	),
 }
 
+// Weekday returns the day of the week (Monday, Tuesday, ...) for the nanoseconds since epoch.
+var Weekday = &Builtin{
+	Name: "time.weekday",
+	Decl: types.NewFunction(
+		types.Args(types.N),
+		types.S,
+	),
+}
+
 /**
  * Crypto.
  */
@@ -1024,6 +1134,23 @@ var HTTPSend = &Builtin{
 			types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)),
 		),
 		types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+	),
+}
+
+/**
+ * Rego
+ */
+
+// RegoParseModule parses the input Rego file and returns a JSON representation
+// of the AST.
+var RegoParseModule = &Builtin{
+	Name: "rego.parse_module",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)), // TODO(tsandall): import AST schema
 	),
 }
 
