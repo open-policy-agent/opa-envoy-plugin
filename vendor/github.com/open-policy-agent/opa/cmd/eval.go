@@ -5,17 +5,18 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
+	pr "github.com/open-policy-agent/opa/internal/presentation"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/metrics"
+	"github.com/open-policy-agent/opa/profiler"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
@@ -25,37 +26,63 @@ import (
 )
 
 type evalCommandParams struct {
-	dataPaths repeatedStringFlag
-	inputPath string
-	imports   repeatedStringFlag
-	pkg       string
-	stdin     bool
-	explain   *util.EnumFlag
-	metrics   bool
-	ignore    []string
+	dataPaths         repeatedStringFlag
+	inputPath         string
+	imports           repeatedStringFlag
+	pkg               string
+	stdin             bool
+	stdinInput        bool
+	explain           *util.EnumFlag
+	metrics           bool
+	ignore            []string
+	outputFormat      *util.EnumFlag
+	profile           bool
+	profileTopResults bool
+	profileCriteria   repeatedStringFlag
+	profileLimit      intFlag
+	prettyLimit       intFlag
 }
 
 const (
-	explainModeOff  = ""
-	explainModeFull = "full"
+	explainModeOff     = ""
+	explainModeFull    = "full"
+	evalJSONOutput     = "json"
+	evalValuesOutput   = "values"
+	evalBindingsOutput = "bindings"
+	evalPrettyOutput   = "pretty"
+
+	// number of profile results to return by default
+	defaultProfileLimit = 10
+
+	defaultPrettyLimit = 80
 )
 
-type evalResult struct {
-	Result      rego.ResultSet         `json:"result,omitempty"`
-	Explanation []string               `json:"explanation,omitempty"`
-	Metrics     map[string]interface{} `json:"metrics,omitempty"`
-}
+// default sorting order for profiler results
+var defaultSortOrder = []string{"total_time_ns", "num_eval", "num_redo", "file", "line"}
 
 func init() {
 
 	var params evalCommandParams
 
+	params.outputFormat = util.NewEnumFlag(evalJSONOutput, []string{
+		evalJSONOutput,
+		evalValuesOutput,
+		evalBindingsOutput,
+		evalPrettyOutput,
+	})
 	params.explain = util.NewEnumFlag(explainModeOff, []string{explainModeFull})
+
+	params.profileCriteria = newrepeatedStringFlag([]string{})
+	params.profileLimit = newIntFlag(defaultProfileLimit)
+	params.prettyLimit = newIntFlag(defaultPrettyLimit)
 
 	evalCommand := &cobra.Command{
 		Use:   "eval <query>",
 		Short: "Evaluate a Rego query",
 		Long: `Evaluate a Rego query and print the result.
+
+Examples
+--------
 
 To evaluate a simple query:
 
@@ -64,6 +91,9 @@ To evaluate a simple query:
 To evaluate a query against JSON data:
 
 	$ opa eval --data data.json 'data.names[_] = name'
+
+File Loading
+------------
 
 The --data flag will recursively load data files and Rego files contained in
 sub-directories under the path. For example, given /some/path:
@@ -82,7 +112,18 @@ Where /some/path contains:
 
 The JSON file 'foo/bar/data.json' would be loaded and rooted under
 'data.foo.bar' and the 'foo/baz.rego' would be loaded and rooted under the
-package path contained inside the file.`,
+package path contained inside the file.
+
+Output Formats
+--------------
+
+Set the output format with the --format flag.
+
+	--format=json      : output raw query results as JSON
+	--format=values    : output line separated JSON arrays containing expression values
+	--format=bindings  : output line separated JSON objects containing variable bindings
+	--format=pretty    : output query results in a human-readable format
+`,
 
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 && params.stdin {
@@ -91,6 +132,18 @@ package path contained inside the file.`,
 				return errors.New("specify query argument or --stdin")
 			} else if len(args) > 1 {
 				return errors.New("specify at most one query argument")
+			}
+			if params.stdin && params.stdinInput {
+				return errors.New("specify --stdin or --stdin-input but not both")
+			}
+			if params.stdinInput && params.inputPath != "" {
+				return errors.New("specify --stdin-input or --input but not both")
+			}
+			if params.profileLimit.isFlagSet() || params.profileCriteria.isFlagSet() {
+				params.profile = true
+			}
+			if params.profile {
+				params.metrics = true
 			}
 			return nil
 		},
@@ -107,8 +160,14 @@ package path contained inside the file.`,
 	evalCommand.Flags().VarP(&params.imports, "import", "", "set query import(s)")
 	evalCommand.Flags().StringVarP(&params.pkg, "package", "", "", "set query package")
 	evalCommand.Flags().BoolVarP(&params.stdin, "stdin", "", false, "read query from stdin")
+	evalCommand.Flags().BoolVarP(&params.stdinInput, "stdin-input", "I", false, "read input document from stdin")
 	evalCommand.Flags().BoolVarP(&params.metrics, "metrics", "", false, "report query performance metrics")
 	evalCommand.Flags().VarP(params.explain, "explain", "", "enable query explainations")
+	evalCommand.Flags().VarP(params.outputFormat, "format", "f", "set output format")
+	evalCommand.Flags().BoolVarP(&params.profile, "profile", "", false, "perform expression profiling")
+	evalCommand.Flags().VarP(&params.profileCriteria, "profile-sort", "", "set sort order of expression profiler results")
+	evalCommand.Flags().VarP(&params.profileLimit, "profile-limit", "", "set number of profiling results to show")
+	evalCommand.Flags().VarP(&params.prettyLimit, "pretty-limit", "", "set limit after which pretty output gets truncated")
 	setIgnore(evalCommand.Flags(), &params.ignore)
 
 	RootCommand.AddCommand(evalCommand)
@@ -154,11 +213,10 @@ func eval(args []string, params evalCommandParams) (err error) {
 		}
 	}
 
-	if params.inputPath != "" {
-		bs, err := ioutil.ReadFile(params.inputPath)
-		if err != nil {
-			return err
-		}
+	bs, err := readInputBytes(params)
+	if err != nil {
+		return err
+	} else if bs != nil {
 		term, err := ast.ParseTerm(string(bs))
 		if err != nil {
 			return err
@@ -181,44 +239,87 @@ func eval(args []string, params evalCommandParams) (err error) {
 		regoArgs = append(regoArgs, rego.Metrics(m))
 	}
 
-	eval := rego.New(regoArgs...)
-	ctx := context.Background()
-
-	rs, err := eval.Eval(ctx)
-	if err != nil {
-		return err
+	var p *profiler.Profiler
+	if params.profile {
+		p = profiler.New()
+		regoArgs = append(regoArgs, rego.Tracer(p))
 	}
 
-	result := evalResult{
+	eval := rego.New(regoArgs...)
+	ctx := context.Background()
+	rs, err := eval.Eval(ctx)
+
+	result := pr.Output{
+		Error:  err,
 		Result: rs,
 	}
 
-	if params.explain.String() != explainModeOff {
-		var traceBuffer bytes.Buffer
-		topdown.PrettyTrace(&traceBuffer, *tracer)
-		result.Explanation = strings.Split(traceBuffer.String(), "\n")
+	if tracer != nil {
+		result.Explanation = *tracer
 	}
 
-	if params.metrics {
-		result.Metrics = m.All()
+	if m != nil {
+		result.Metrics = m
 	}
 
-	bs, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return err
+	if params.profile {
+		var sortOrder = defaultSortOrder
+
+		if len(params.profileCriteria.v) != 0 {
+			sortOrder = getProfileSortOrder(strings.Split(params.profileCriteria.String(), ","))
+		}
+
+		result.Profile = p.ReportTopNResults(params.profileLimit.v, sortOrder)
 	}
 
-	fmt.Println(string(bs))
-	return nil
+	switch params.outputFormat.String() {
+	case evalBindingsOutput:
+		return pr.Bindings(os.Stdout, result)
+	case evalValuesOutput:
+		return pr.Values(os.Stdout, result)
+	case evalPrettyOutput:
+		return pr.Pretty(os.Stdout, result)
+	default:
+		return pr.JSON(os.Stdout, result)
+	}
+}
+
+func getProfileSortOrder(sortOrder []string) []string {
+
+	// convert the sort order slice to a map for faster lookups
+	sortOrderMap := make(map[string]bool)
+	for _, cr := range sortOrder {
+		sortOrderMap[cr] = true
+	}
+
+	// compare the given sort order and the default
+	for _, cr := range defaultSortOrder {
+		if _, ok := sortOrderMap[cr]; !ok {
+			sortOrder = append(sortOrder, cr)
+		}
+	}
+	return sortOrder
+}
+
+func readInputBytes(params evalCommandParams) ([]byte, error) {
+	if params.stdinInput {
+		return ioutil.ReadAll(os.Stdin)
+	} else if params.inputPath != "" {
+		return ioutil.ReadFile(params.inputPath)
+	}
+	return nil, nil
 }
 
 type repeatedStringFlag struct {
-	v []string
+	v     []string
+	isSet bool
 }
 
-func newRepeatedStringFlag() *repeatedStringFlag {
-	f := &repeatedStringFlag{}
-	return f
+func newrepeatedStringFlag(val []string) repeatedStringFlag {
+	return repeatedStringFlag{
+		v:     val,
+		isSet: false,
+	}
 }
 
 func (f *repeatedStringFlag) Type() string {
@@ -231,5 +332,41 @@ func (f *repeatedStringFlag) String() string {
 
 func (f *repeatedStringFlag) Set(s string) error {
 	f.v = append(f.v, s)
+	f.isSet = true
 	return nil
+}
+
+func (f *repeatedStringFlag) isFlagSet() bool {
+	return f.isSet
+}
+
+type intFlag struct {
+	v     int
+	isSet bool
+}
+
+func newIntFlag(val int) intFlag {
+	return intFlag{
+		v:     val,
+		isSet: false,
+	}
+}
+
+func (f *intFlag) Type() string {
+	return "int"
+}
+
+func (f *intFlag) String() string {
+	return strconv.Itoa(f.v)
+}
+
+func (f *intFlag) Set(s string) error {
+	v, err := strconv.ParseInt(s, 0, 64)
+	f.v = int(v)
+	f.isSet = true
+	return err
+}
+
+func (f *intFlag) isFlagSet() bool {
+	return f.isSet
 }

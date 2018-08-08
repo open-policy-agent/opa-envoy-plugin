@@ -42,6 +42,8 @@ complex types.
 | <span class="opa-keep-it-together">``max(array_or_set, output)``</span> | 1 | ``output`` is the maximum value in ``array_or_set`` |
 | <span class="opa-keep-it-together">``min(array_or_set, output)``</span> | 1 | ``output`` is the minimum value in ``array_or_set`` |
 | <span class="opa-keep-it-together">``sort(array_or_set, output)``</span> | 1 | ``output`` is the sorted ``array`` containing elements from ``array_or_set``. |
+| <span class="opa-keep-it-together">``all(array_or_set, output)``</span> | 1 | ``output`` is ``true`` if all of the values in ``array_or_set`` are ``true``. A collection of length 0 returns ``true``.|
+| <span class="opa-keep-it-together">``any(array_or_set, output)``</span> | 1 | ``output`` is ``true`` if any of the values in ``array_or_set`` is ``true``. A collection of length 0 returns ``false``.|
 
 ### Sets
 
@@ -84,11 +86,17 @@ complex types.
 | <span class="opa-keep-it-together">``to_number(x, output)``</span> | 1 | ``output`` is ``x`` converted to a number |
 | <span class="opa-keep-it-together">``is_number(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is a number |
 | <span class="opa-keep-it-together">``is_string(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is a string |
+| <span class="opa-keep-it-together">``cast_string(x, output)``</span> | 1 | ``output`` is ``x`` cast to a string |
 | <span class="opa-keep-it-together">``is_boolean(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is a boolean |
+| <span class="opa-keep-it-together">``cast_boolean(x, output)``</span> | 1 | ``output`` is ``x`` cast to a boolean |
 | <span class="opa-keep-it-together">``is_array(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is an array |
+| <span class="opa-keep-it-together">``cast_array(x, output)``</span> | 1 | ``output`` is ``x`` cast to an array |
 | <span class="opa-keep-it-together">``is_set(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is a set |
+| <span class="opa-keep-it-together">``cast_set(x, output)``</span> | 1 | ``output`` is ``x`` cast to a set |
 | <span class="opa-keep-it-together">``is_object(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is an object |
+| <span class="opa-keep-it-together">``cast_object(x, output)``</span> | 1 | ``output`` is ``x`` cast to an object |
 | <span class="opa-keep-it-together">``is_null(x, output)``</span> | 1 | ``output`` is ``true`` if ``x`` is null |
+| <span class="opa-keep-it-together">``cast_null(x, output)``</span> | 1 | ``output`` is ``x`` cast to null |
 | <span class="opa-keep-it-together">``type_name(x, output)``</span> | 1 | ``output`` is the type of ``x`` |
 
 ### Encoding
@@ -127,6 +135,7 @@ The input `string` is a JSON Web Token encoded with JWS Compact Serialization. J
 | <span class="opa-keep-it-together">``time.parse_duration_ns(duration, output)``</span> | 1 | ``output`` is ``number`` representing the duration ``duration`` in nanoseconds. See the [Go `time` package documentation](https://golang.org/pkg/time/#ParseDuration) for more details on ``duration``. |
 | <span class="opa-keep-it-together">``time.date(ns, [year, month, day])``</span> | 1 | outputs the ``year``, ``month`` (0-12), and ``day`` (0-31) as ``number``s representing the date from the nanoseconds since epoch (``ns``). |
 | <span class="opa-keep-it-together">``time.clock(ns, [hour, minute, second])``</span> | 1 | outputs the ``hour``, ``minute`` (0-59), and ``second`` (0-59) as ``number``s representing the time of day for the nanoseconds since epoch (``ns``). |
+| <span class="opa-keep-it-together">``time.weekday(ns, day)``</span> | 1 | outputs the ``day`` as ``string`` representing the day of the week for the nanoseconds since epoch (``ns``). |
 
 > Multiple calls to the `time.now_ns` built-in function within a single policy
 evaluation query will always return the same value.
@@ -147,6 +156,11 @@ evaluation query will always return the same value.
 | Built-in | Inputs | Description |
 | ------- |--------|-------------|
 | <span class="opa-keep-it-together">``http.send(request, output)``</span> | 1 | ``http.send`` executes a HTTP request and returns the response.``request`` is an object containing keys ``method``, ``url`` and  optionally ``body``. For example, ``http.send({"method": "get", "url": "http://www.openpolicyagent.org/"}, output)``. ``output`` is an object containing keys ``status``, ``status_code`` and ``body`` which represent the HTTP status, status code and response body respectively. Sample output, ``{"status": "200 OK", "status_code": 200, "body": null``}|
+
+### Rego
+| Built-in | Inputs | Description |
+| ------- |--------|-------------|
+| <span class="opa-keep-it-together">``rego.parse_module(filename, string, output)``</span> | 2 | ``rego.parse_module`` parses the input ``string`` as a Rego module and returns the AST as a JSON object ``output``. |
 
 ### Debugging
 | Built-in | Inputs | Description |

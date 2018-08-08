@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
@@ -63,7 +64,7 @@ baz(_) = y {
 	repl := newRepl(store, &buf)
 	repl.OneShot(ctx, "json")
 	repl.OneShot(ctx, "data.a.b.d.baz(null, x)")
-	exp := util.MustUnmarshalJSON([]byte(`[{"x": "foo"}]`))
+	exp := util.MustUnmarshalJSON([]byte(`{"result": [{"expressions": [{"text":"data.a.b.d.baz(null, x)", "value": true, "location": {"row": 1, "col": 1}}], "bindings": {"x": "foo"}}]}`))
 	result := util.MustUnmarshalJSON(buf.Bytes())
 	if !reflect.DeepEqual(exp, result) {
 		t.Fatalf("expected data.a.b.d.baz(x) to be %v, got %v", exp, result)
@@ -76,7 +77,25 @@ baz(_) = y {
 
 	buf.Reset()
 	repl.OneShot(ctx, "data.repl.p(5, y)")
-	exp = util.MustUnmarshalJSON([]byte(`[{"y": 9}]`))
+	exp = util.MustUnmarshalJSON([]byte(`{
+		"result": [
+			{
+				"expressions": [
+					{
+						"text": "data.repl.p(5, y)",
+						"value": true,
+						"location": {
+							"col": 1,
+							"row": 1
+						}
+					}
+				],
+				"bindings": {
+					"y": 9
+				}
+			}
+		]
+	}`))
 	result = util.MustUnmarshalJSON(buf.Bytes())
 	if !reflect.DeepEqual(exp, result) {
 		t.Fatalf("expected datrepl.p(x) to be %v, got %v", exp, result)
@@ -87,14 +106,50 @@ baz(_) = y {
 
 	buf.Reset()
 	repl.OneShot(ctx, "data.repl.f(1, 2, y)")
-	exp = util.MustUnmarshalJSON([]byte(`[{"y": 2}]`))
+	exp = util.MustUnmarshalJSON([]byte(`{
+		"result": [
+			{
+				"expressions": [
+					{
+						"text": "data.repl.f(1, 2, y)",
+						"location": {
+							"col": 1,
+							"row": 1
+						},
+						"value": true
+					}
+				],
+				"bindings": {
+					"y": 2
+				}
+			}
+		]
+	}`))
 	result = util.MustUnmarshalJSON(buf.Bytes())
 	if !reflect.DeepEqual(exp, result) {
 		t.Fatalf("expected data.repl.f(1, 2, y) to be %v, got %v", exp, result)
 	}
 	buf.Reset()
 	repl.OneShot(ctx, "data.repl.f(2, 2, y)")
-	exp = util.MustUnmarshalJSON([]byte(`[{"y": 4}]`))
+	exp = util.MustUnmarshalJSON([]byte(`{
+		"result": [
+			{
+				"expressions": [
+					{
+						"text": "data.repl.f(2, 2, y)",
+						"location": {
+							"col": 1,
+							"row": 1
+						},
+						"value": true
+					}
+				],
+				"bindings": {
+					"y": 4
+				}
+			}
+		]
+	}`))
 	result = util.MustUnmarshalJSON(buf.Bytes())
 	if !reflect.DeepEqual(exp, result) {
 		t.Fatalf("expected data.repl.f(2, 2, y) to be %v, got %v", exp, result)
@@ -367,6 +422,65 @@ input.x = 3; i = 2; x = 3
 		t.Fatalf("Unexpected output. Expected:\n\n%v\n\nGot:\n\n%v", expected, output)
 	}
 }
+func TestUnknownMetrics(t *testing.T) {
+	ctx := context.Background()
+	store := inmem.New()
+	var buffer bytes.Buffer
+	repl := newRepl(store, &buffer)
+
+	repl.OneShot(ctx, "xs = [1,2,3]")
+
+	err := repl.OneShot(ctx, "unknown input")
+	if err != nil {
+		t.Fatal("Unexpected command error:", err)
+	}
+
+	repl.OneShot(ctx, "metrics")
+
+	repl.OneShot(ctx, "data.repl.xs[i] = x; input.x = x")
+
+	output := strings.TrimSpace(buffer.String())
+	expected := strings.TrimSpace(`
+input.x = 1; i = 0; x = 1
+input.x = 2; i = 1; x = 2
+input.x = 3; i = 2; x = 3
+`)
+
+	if !strings.HasSuffix(output, expected) {
+		t.Fatalf("Unexpected partial eval results. Expected:\n\n%v\n\nGot:\n\n%v", expected, output)
+	}
+
+	if !strings.Contains(output, "timer_rego_partial_eval_ns") {
+		t.Fatal("Expected timer_rego_partial_eval_ns but got:\n\n", output)
+	}
+}
+
+func TestUnknownJSON(t *testing.T) {
+	ctx := context.Background()
+	store := inmem.New()
+	var buffer bytes.Buffer
+	repl := newRepl(store, &buffer)
+
+	repl.OneShot(ctx, "xs = [1,2,3]")
+
+	err := repl.OneShot(ctx, "unknown input")
+	if err != nil {
+		t.Fatal("Unexpected command error:", err)
+	}
+
+	repl.OneShot(ctx, "json")
+	repl.OneShot(ctx, "data.repl.xs[i] = x; input.x = x")
+
+	var result rego.PartialQueries
+
+	if err := json.NewDecoder(&buffer).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result.Queries) != 3 {
+		t.Fatalf("Expected exactly 3 queries in partial evaluation output but got: %v", result)
+	}
+}
 
 func TestUnset(t *testing.T) {
 	ctx := context.Background()
@@ -530,35 +644,58 @@ func TestOneShotJSON(t *testing.T) {
 	repl.outputFormat = "json"
 	repl.OneShot(ctx, "data.a[i] = x")
 	var expected interface{}
-	input := `
-	[
-		{
-			"i": 0,
-			"x": {
-			"b": {
-				"c": [
-				true,
-				2,
-				false
-				]
+	if err := util.UnmarshalJSON([]byte(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "data.a[i] = x",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "i": 0,
+			  "x": {
+				"b": {
+				  "c": [
+					true,
+					2,
+					false
+				  ]
+				}
+			  }
 			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "data.a[i] = x",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "i": 1,
+			  "x": {
+				"b": {
+				  "c": [
+					false,
+					true,
+					1
+				  ]
+				}
+			  }
 			}
-		},
-		{
-			"i": 1,
-			"x": {
-			"b": {
-				"c": [
-				false,
-				true,
-				1
-				]
-			}
-			}
-		}
-	]
-	`
-	if err := util.UnmarshalJSON([]byte(input), &expected); err != nil {
+		  }
+		]
+	  }`), &expected); err != nil {
 		panic(err)
 	}
 
@@ -568,8 +705,9 @@ func TestOneShotJSON(t *testing.T) {
 		t.Errorf("Unexpected output format: %v", err)
 		return
 	}
+
 	if !reflect.DeepEqual(expected, result) {
-		t.Errorf("Expected %v but got: %v", expected, result)
+		t.Errorf("Expected %v but got: %v", expected, buffer.String())
 	}
 }
 
@@ -720,21 +858,70 @@ func TestEvalSingleTermMultiValue(t *testing.T) {
 	repl := newRepl(store, &buffer)
 	repl.outputFormat = "json"
 
-	input := `
-	[
-		{
-			"i": 0
-		},
-		{
-			"i": 0
-		},
-		{
-			"i": 1
-		},
-		{
-			"i": 1
-		}
-	]`
+	input := `{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "data.a[i].b.c[_]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "i": 0
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 2,
+				"text": "data.a[i].b.c[_]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "i": 0
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "data.a[i].b.c[_]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "i": 1
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 1,
+				"text": "data.a[i].b.c[_]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "i": 1
+			}
+		  }
+		]
+	  }`
 
 	var expected interface{}
 	if err := util.UnmarshalJSON([]byte(input), &expected); err != nil {
@@ -749,7 +936,7 @@ func TestEvalSingleTermMultiValue(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(expected, result) {
-		t.Errorf("Expected %v but got: %v", expected, result)
+		t.Errorf("Expected %v but got: %v", expected, buffer.String())
 		return
 	}
 
@@ -757,7 +944,7 @@ func TestEvalSingleTermMultiValue(t *testing.T) {
 
 	repl.OneShot(ctx, "data.deadbeef[x]")
 	s := buffer.String()
-	if s != "undefined\n" {
+	if s != "{}\n" {
 		t.Errorf("Expected undefined from reference but got: %v", s)
 		return
 	}
@@ -769,20 +956,70 @@ func TestEvalSingleTermMultiValue(t *testing.T) {
 	repl.OneShot(ctx, "p[x]")
 
 	input = `
-	[
-		{
-			"x": 1
-		},
-		{
-			"x": 2
-		},
-		{
-			"x": 3
-		},
-		{
-			"x": 4
-		}
-	]
+	{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": 1,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 1
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 2,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 2
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 3,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 3
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 4,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 4
+			}
+		  }
+		]
+	}
 	`
 
 	if err := util.UnmarshalJSON([]byte(input), &expected); err != nil {
@@ -795,7 +1032,7 @@ func TestEvalSingleTermMultiValue(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(expected, result) {
-		t.Errorf("Exepcted %v but got: %v", expected, result)
+		t.Errorf("Exepcted %v but got: %v", expected, buffer.String())
 	}
 }
 
@@ -811,18 +1048,84 @@ func TestEvalSingleTermMultiValueSetRef(t *testing.T) {
 	repl.OneShot(ctx, `r = [x, y] { x = {5, 6}; y = [7, 8] }`)
 
 	repl.OneShot(ctx, "p[x]")
-	expected := parseJSON(`[{"x": 1}, {"x": 2}]`)
+	expected := parseJSON(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": 1,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 1
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 2,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 2
+			}
+		  }
+		]
+	  }`)
 	result := parseJSON(buffer.String())
 	if !reflect.DeepEqual(result, expected) {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 
 	buffer.Reset()
 	repl.OneShot(ctx, "q[x]")
-	expected = parseJSON(`[{"x": 3}, {"x": 4}]`)
+	expected = parseJSON(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": 3,
+				"text": "q[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 3
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 4,
+				"text": "q[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 4
+			}
+		  }
+		]
+	  }`)
 	result = parseJSON(buffer.String())
 	if !reflect.DeepEqual(result, expected) {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 
 	// Example below shows behavior for ref that iterates an embedded set. The
@@ -832,10 +1135,73 @@ func TestEvalSingleTermMultiValueSetRef(t *testing.T) {
 	// acceptable, as it should be an edge case.
 	buffer.Reset()
 	repl.OneShot(ctx, "r[_][x]")
-	expected = parseJSON(`[{"x": 5}, {"x": 6}, {"x": 0}, {"x": 1}]`)
+	expected = parseJSON(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": 5,
+				"text": "r[_][x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 5
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 6,
+				"text": "r[_][x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 6
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 7,
+				"text": "r[_][x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 0
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 8,
+				"text": "r[_][x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 1
+			}
+		  }
+		]
+	  }`)
 	result = parseJSON(buffer.String())
 	if !reflect.DeepEqual(result, expected) {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 }
 
@@ -870,20 +1236,45 @@ func TestEvalBodyCompileError(t *testing.T) {
 	}
 	buffer.Reset()
 	repl.OneShot(ctx, `x = 1; y = 2; y > x`)
-	var result2 []interface{}
-	err = util.UnmarshalJSON(buffer.Bytes(), &result2)
-	if err != nil {
-		t.Errorf("Expected valid JSON output but got: %v", buffer.String())
-		return
-	}
-	expected2 := []interface{}{
-		map[string]interface{}{
-			"x": json.Number("1"),
-			"y": json.Number("2"),
-		},
-	}
-	if !reflect.DeepEqual(expected2, result2) {
-		t.Errorf(`Expected [{"x": 1, "y": 2}] but got: %v"`, result2)
+	result := util.MustUnmarshalJSON(buffer.Bytes())
+	exp := util.MustUnmarshalJSON([]byte(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "x = 1",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  },
+			  {
+				"value": true,
+				"text": "y = 2",
+				"location": {
+				  "row": 1,
+				  "col": 8
+				}
+			  },
+			  {
+				"value": true,
+				"text": "y \u003e x",
+				"location": {
+				  "row": 1,
+				  "col": 15
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 1,
+			  "y": 2
+			}
+		  }
+		]
+	  }`))
+	if !reflect.DeepEqual(exp, result) {
+		t.Errorf(`Expected %v but got: %v"`, exp, buffer.String())
 		return
 	}
 }
@@ -1039,9 +1430,42 @@ func TestEvalBodyRewrittenBuiltin(t *testing.T) {
 	repl.OneShot(ctx, `p[x] { a[x]; a = [1,2,3,4] }`)
 	repl.OneShot(ctx, "p[x] > 1")
 	result := util.MustUnmarshalJSON(buffer.Bytes())
-	expected := util.MustUnmarshalJSON([]byte(`[{"x": 2}, {"x": 3}]`))
+	expected := util.MustUnmarshalJSON([]byte(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "p[x] \u003e 1",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 2
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": true,
+				"text": "p[x] \u003e 1",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 3
+			}
+		  }
+		]
+	  }`))
 	if util.Compare(result, expected) != 0 {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 }
 
@@ -1054,24 +1478,106 @@ func TestEvalBodyRewrittenRef(t *testing.T) {
 	repl.OneShot(ctx, `i = 1`)
 	repl.OneShot(ctx, `data.a[0].b.c[i]`)
 	result := util.MustUnmarshalJSON(buffer.Bytes())
-	expected := util.MustUnmarshalJSON([]byte(`2`))
+	expected := util.MustUnmarshalJSON([]byte(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": 2,
+				"text": "data.a[0].b.c[i]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			]
+		  }
+		]
+	  }`))
 	if util.Compare(result, expected) != 0 {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 	buffer.Reset()
 	repl.OneShot(ctx, "p = {1,2,3}")
 	repl.OneShot(ctx, "p")
 	result = util.MustUnmarshalJSON(buffer.Bytes())
-	expected = util.MustUnmarshalJSON([]byte(`[1,2,3]`))
+	expected = util.MustUnmarshalJSON([]byte(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": [
+				  1,
+				  2,
+				  3
+				],
+				"text": "p",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			]
+		  }
+		]
+	  }`))
 	if util.Compare(result, expected) != 0 {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 	buffer.Reset()
 	repl.OneShot(ctx, "p[x]")
 	result = util.MustUnmarshalJSON(buffer.Bytes())
-	expected = util.MustUnmarshalJSON([]byte(`[{"x": 1}, {"x": 2}, {"x": 3}]`))
+	expected = util.MustUnmarshalJSON([]byte(`{
+		"result": [
+		  {
+			"expressions": [
+			  {
+				"value": 1,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 1
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 2,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 2
+			}
+		  },
+		  {
+			"expressions": [
+			  {
+				"value": 3,
+				"text": "p[x]",
+				"location": {
+				  "row": 1,
+				  "col": 1
+				}
+			  }
+			],
+			"bindings": {
+			  "x": 3
+			}
+		  }
+		]
+	  }`))
 	if util.Compare(result, expected) != 0 {
-		t.Fatalf("Expected %v but got: %v", expected, result)
+		t.Fatalf("Expected %v but got: %v", expected, buffer.String())
 	}
 }
 

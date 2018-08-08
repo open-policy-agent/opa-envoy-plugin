@@ -183,6 +183,20 @@ type ValueResolver interface {
 	Resolve(ref Ref) (value Value, err error)
 }
 
+// UnknownValueErr indicates a ValueResolver was unable to resolve a reference
+// because the reference refers to an unknown value.
+type UnknownValueErr struct{}
+
+func (UnknownValueErr) Error() string {
+	return "unknown value"
+}
+
+// IsUnknownValueErr returns true if the err is an UnknownValueErr.
+func IsUnknownValueErr(err error) bool {
+	_, ok := err.(UnknownValueErr)
+	return ok
+}
+
 type illegalResolver struct{}
 
 func (illegalResolver) Resolve(ref Ref) (interface{}, error) {
@@ -829,6 +843,21 @@ func (ref Ref) Extend(other Ref) Ref {
 		dst[offset+i+1] = other[i+1]
 	}
 	return dst
+}
+
+// Concat returns a ref with the terms appended.
+func (ref Ref) Concat(terms []*Term) Ref {
+	if len(terms) == 0 {
+		return ref
+	}
+	cpy := make(Ref, len(ref)+len(terms))
+	for i := range ref {
+		cpy[i] = ref[i]
+	}
+	for i := range terms {
+		cpy[len(ref)+i] = terms[i]
+	}
+	return cpy
 }
 
 // Dynamic returns the offset of the first non-constant operand of ref.
@@ -1875,14 +1904,6 @@ func (c Call) String() string {
 		args[i-1] = c[i].String()
 	}
 	return fmt.Sprintf("%v(%v)", c[0], strings.Join(args, ", "))
-}
-
-func formatString(s String) string {
-	str := string(s)
-	if varRegexp.MatchString(str) {
-		return str
-	}
-	return s.String()
 }
 
 func termSliceCopy(a []*Term) []*Term {
