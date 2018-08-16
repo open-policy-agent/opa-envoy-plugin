@@ -11,65 +11,7 @@ By configuring OPA to download bundles from a remote HTTP server, you can
 ensure that OPA has an up-to-date copy of policies and data required for
 enforcement at all times.
 
-## Bundle Configuration
-
-You can configure OPA to periodically download policies by starting OPA with a
-configuration file (both YAML and JSON files are supported):
-
-```bash
-opa run --server --config-file config.yaml
-```
-
-**config.yaml**:
-
-```yaml
-services:
-  - name: acmecorp
-    url: https://example.com/
-    credentials:
-      bearer:
-        token: "bearer token secret value (e.g., a base64 encoded string)"
-bundle:
-  name: http/example/authz
-  service: acmecorp
-  polling:
-    min_delay_seconds: 60
-    max_delay_seconds: 120
-```
-
-With this configuration OPA will attempt to download a bundle named
-`http/example/authz` from `https://example.com/` every 1-2 minutes. The polling
-delay is randomized (between the min and max) to stagger download requests when
-there are a large number of OPAs requesting bundles.
-
-### Configuration Format
-
-```yaml
-services:
-  - name: string
-    url: string
-    headers: object
-    credentials:
-      bearer:
-        scheme: string
-        token: string
-bundle:
-  name: string
-  service: string
-  polling:
-    min_delay_seconds: number
-    max_delay_seconds: number
-```
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `services[_].name` | Yes | Unique name for the service. Referred to by plugins. |
-| `services[_].url` | Yes | Base URL to contact the service with. |
-| `services[_].headers` | No | HTTP headers to include in requests to the service. |
-| `services[_].credentials.bearer.token` | No | Enables token-based authentication and supplies the bearer token to authenticate with. |
-| `services[_].credentials.bearer.scheme` | No (default: `"Bearer"`) | Bearer token scheme to specify. |
-| `bundle.name` | Yes | Name of the bundle to download. |
-| `bundle.service` | Yes | Name of service to use to contact remote server. |
+See the [Configuration Reference](configuration.md) for configuration details.
 
 ## Bundle Service API
 
@@ -130,3 +72,17 @@ metadata. The file should contain a JSON serialized object.
 * If the bundle service is capable of serving different revisions of the same
   bundle, the service should include a top-level `revision` field containing a
   `string` value that identifies the bundle revision.
+
+OPA will only load data files named `data.json`, i.e., you MUST name files
+that contain data (which you want loaded into OPA) `data.json` -- otherwise
+they will be ignored.
+
+## Debugging Your Bundles
+
+When you run OPA, you can provide bundle files over the command line. This
+allows you to manually check that your bundles include all of the files that
+you intended and that they are structured correctly. For example:
+
+```bash
+opa run bundle.tar.gz
+```

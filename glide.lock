@@ -1,20 +1,20 @@
-hash: 3411daab7db6e798610606b38bfd6eb8941be2edc28d85b604c6343d7764aaf8
-updated: 2018-08-08T19:15:27.591160374Z
+hash: ed4e35db952f93ff344d8b425426c35b9b51ade0cc6ece0c8e2650bac3ca1c27
+updated: 2018-08-16T15:44:54.132796894Z
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
   - quantile
 - name: github.com/dchest/siphash
-  version: 4ebf1de738443ea7f45f02dc394c4df1942a126d
+  version: ca249f45189071f5d44dc6401334e3572037b9cb
 - name: github.com/ghodss/yaml
   version: e9ed3c6dfb39bb1a32197cb10d527906fe4da4b6
 - name: github.com/gogo/googleapis
-  version: b23578765ee54ff6bceff57f397d833bf4ca6869
+  version: 8558fb44d2f1fc223118afc694129d2c2d2924d1
   subpackages:
   - google/rpc
 - name: github.com/gogo/protobuf
-  version: 797fbbb9792bac7062cb5c675696d2ebfb589c54
+  version: 5e816401ac7168a24541712714d3d057341d7b46
   subpackages:
   - gogoproto
   - proto
@@ -24,7 +24,7 @@ imports:
 - name: github.com/golang/lint
   version: 06c8688daad7faa9da5a0c2f163a3d14aac986ca
 - name: github.com/golang/protobuf
-  version: 89a0c16f4dc2a70c0ed864d8ef64878f24fdaa51
+  version: aa810b61a9c79d51363740d207bb46cf8e620ed5
   subpackages:
   - proto
   - protoc-gen-go/descriptor
@@ -59,7 +59,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: d4647c9c7a84d847478d890b816b7d8b62b0b279
 - name: github.com/open-policy-agent/opa
-  version: 71d0e299b4563bacbea0cc39b404df1e1e51a876
+  version: d5ba22b70a13a5afce4d2ea7103f2ac2d300bc48
   subpackages:
   - ast
   - bundle
@@ -130,7 +130,7 @@ imports:
 - name: github.com/yashtewari/glob-intersection
   version: 7af743e8ec8480fee1932a737a406f7ec817f910
 - name: golang.org/x/crypto
-  version: f027049dab0ad238e394a753dba2d14753473a04
+  version: de0752318171da717af4ce24d0a2e8626afaeb11
   subpackages:
   - ssh/terminal
 - name: golang.org/x/lint
@@ -138,7 +138,7 @@ imports:
   subpackages:
   - golint
 - name: golang.org/x/net
-  version: f9ce57c11b242f0f1599cf25c89d8cb02c45295a
+  version: aaf60122140d3fcf75376d319f0554393160eb50
   subpackages:
   - context
   - http/httpguts
@@ -148,23 +148,23 @@ imports:
   - internal/timeseries
   - trace
 - name: golang.org/x/sys
-  version: 904bdc257025c7b3f43c19360ad3ab85783fad78
+  version: 1c9583448a9c3aa0f9a6a5241bf73c0bd8aafded
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 17ff2d5776d28fa6ba2280c1053f7adf8d32eea6
+  version: 6e3c4e7365ddcc329f090f96e4348398f6310088
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: golang.org/x/tools
-  version: 201986631be82bf14f1af080e231f3a6d31ae2c5
+  version: 1dfe8478fdec02e49c998048ab9f761d64949349
   subpackages:
   - cmd/goimports
 - name: google.golang.org/genproto
-  version: 383e8b2c3b9e36c4076b235b32537292176bae20
+  version: d0a8f471bba2dbb160885b0000d814ee5d559bad
   subpackages:
   - googleapis/rpc/status
 - name: google.golang.org/grpc
