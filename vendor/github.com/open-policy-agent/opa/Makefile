@@ -2,9 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := 0.9.0
-
-PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
+VERSION := 0.9.1
 
 GO := go
 GOVERSION := 1.10
@@ -37,7 +35,7 @@ export GO15VENDOREXPERIMENT
 ######################################################
 
 .PHONY: all
-all: deps build test check
+all: deps build test perf check
 
 .PHONY: version
 version:
@@ -88,24 +86,11 @@ install: generate
 
 .PHONY: test
 test: generate
-	$(GO) test $(PACKAGES)
-
-COVER_PACKAGES=$(PACKAGES)
-$(COVER_PACKAGES):
-	@mkdir -p coverage/$(shell dirname $@)
-	$(GO) test -covermode=count -coverprofile=coverage/$(shell dirname $@)/coverage.out $@
-	$(GO) tool cover -html=coverage/$(shell dirname $@)/coverage.out || true
+	$(GO) test ./...
 
 .PHONY: perf
 perf: generate
-	$(GO) test -v -run=donotruntests -bench=. $(PACKAGES) | grep "^Benchmark"
-
-.PHONY: perf-regression
-perf-regression:
-	./build/run-perf-regression.sh
-
-.PHONY: cover
-cover: $(COVER_PACKAGES)
+	$(GO) test -run=- -bench=. -benchmem ./...
 
 .PHONY: check
 check: check-fmt check-vet check-lint
@@ -124,7 +109,7 @@ check-lint:
 
 .PHONY: fmt
 fmt:
-	$(GO) fmt $(PACKAGES)
+	$(GO) fmt ./...
 
 .PHONY: clean
 clean:
