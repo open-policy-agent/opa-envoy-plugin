@@ -8,7 +8,7 @@
 //
 // The definitions in this package are based on the plural rule handling defined
 // in CLDR. See
-// https://unicode.org/reports/tr35/tr35-numbers.html#Language_Plural_Rules for
+// http://unicode.org/reports/tr35/tr35-numbers.html#Language_Plural_Rules for
 // details.
 package plural
 
@@ -151,7 +151,7 @@ func (p *Rules) matchComponents(t language.Tag, n, f, scale int) Form {
 
 // MatchPlural returns the plural form for the given language and plural
 // operands (as defined in
-// https://unicode.org/reports/tr35/tr35-numbers.html#Language_Plural_Rules):
+// http://unicode.org/reports/tr35/tr35-numbers.html#Language_Plural_Rules):
 //  where
 //  	n  absolute value of the source number (integer and decimals)
 //  input

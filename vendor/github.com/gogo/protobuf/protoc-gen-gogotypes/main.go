@@ -44,6 +44,7 @@ func main() {
 	vanity.ForEachFile(files, vanity.TurnOnSizerAll)
 	vanity.ForEachFile(files, vanity.TurnOnUnmarshalerAll)
 
+	vanity.ForEachFile(files, vanity.TurnOffGoEnumPrefixAll)
 	vanity.ForEachFile(files, vanity.TurnOffGoEnumStringerAll)
 	vanity.ForEachFile(files, vanity.TurnOnEnumStringerAll)
 

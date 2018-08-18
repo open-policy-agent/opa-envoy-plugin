@@ -1540,9 +1540,6 @@ func (m *NewNoGroup) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field3) == 0 {
-					m.Field3 = make([]float64, 0, packedLen/8)
-				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {

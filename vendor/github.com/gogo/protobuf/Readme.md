@@ -46,7 +46,6 @@ These projects use gogoprotobuf:
   - <a href="https://sendgrid.com/">sendgrid</a>
   - <a href="https://github.com/zero-os/0-stor">zero-os/0-stor</a>
   - <a href="https://github.com/spacemeshos/go-spacemesh">go-spacemesh</a>
-  - <a href="https://github.com/weaveworks/cortex">cortex</a> - <a href="https://github.com/weaveworks/cortex/blob/fee02a59729d3771ef888f7bf0fd050e1197c56e/pkg/ingester/client/cortex.proto">sample proto file</a>
 
 Please let us know if you are using gogoprotobuf by posting on our <a href="https://groups.google.com/forum/#!topic/gogoprotobuf/Brw76BxmFpQ">GoogleGroup</a>.
 
@@ -60,8 +59,7 @@ Please let us know if you are using gogoprotobuf by posting on our <a href="http
   - <a href="https://fosdem.org/2018/schedule/event/gopherjs/">Creating GopherJS Apps with gRPC-Web - Johan Brandhorst</a>
   - <a href="https://jbrandhorst.com/post/gogoproto/">So you want to use GoGo Protobuf - Johan Brandhorst</a>
   - <a href="https://jbrandhorst.com/post/grpc-errors/">Advanced gRPC Error Usage - Johan Brandhorst</a>
-  - <a href="https://www.udemy.com/grpc-golang/?couponCode=GITHUB10">gRPC Golang Course on Udemy - Stephane Maarek</a>
-  
+
 ## Getting Started
 
 There are several ways to use gogoprotobuf, but for all you need to install go and protoc.

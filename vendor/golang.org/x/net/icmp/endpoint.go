@@ -59,9 +59,8 @@ func (c *PacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 }
 
 // WriteTo writes the ICMP message b to dst.
-// The provided dst must be net.UDPAddr when c is a non-privileged
-// datagram-oriented ICMP endpoint.
-// Otherwise it must be net.IPAddr.
+// Dst must be net.UDPAddr when c is a non-privileged
+// datagram-oriented ICMP endpoint. Otherwise it must be net.IPAddr.
 func (c *PacketConn) WriteTo(b []byte, dst net.Addr) (int, error) {
 	if !c.ok() {
 		return 0, errInvalidConn
