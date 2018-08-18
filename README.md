@@ -43,49 +43,59 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
 
     * Kubernetes namespace (`opa-istio`) for OPA-Istio control plane components.
 
-    * Kubernetes admission controller into the `opa-istio` namespace that automatically injects the OPA-Istio sidecar into pods in namespaces labelled with `enable-opa-istio-injection`.
+    * Kubernetes admission controller in the `opa-istio` namespace that automatically injects the OPA-Istio sidecar into pods in namespaces labelled with `opa-istio-injection=enabled`.
 
     * OPA configuration file and an OPA policy into ConfigMaps in the namespace where the app will be deployed, e.g., `default`.
-1. Enable OPA injection on the namespace where the app will be deployed, e.g., `default`.
+
+1. Enable automatic injection of the Istio Proxy and OPA-Istio sidecars in the namespace where the app will be deployed, e.g., `default`.
 
     ```bash
-    kubectl label namespace default enable-opa-istio-injection="true"
+    kubectl label namespace default opa-istio-injection="enabled"
+    kubectl label namespace default istio-injection="enabled"
     ```
 
 1. Deploy the BookInfo application and make it accessible outside the cluster.
 
     ```bash
-    kubectl apply -f <(istioctl kube-inject --debug -f <(curl -s -L https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/platform/kube/bookinfo.yaml))
+    kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/platform/kube/bookinfo.yaml
     ```
-
-    > **NOTE:** This command assumes you have `istioctl` in your path. You can find `istioctl` under the `<ISTIO_INSTALL_DIR>/bin` directory.
 
     ```bash
     kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/networking/bookinfo-gateway.yaml
     ```
 
+1. Set the `GATEWAY_URL` environment variable in your shell to the public
+IP/port of the Istio Ingress gateway.
+
+    **minikube**:
+
+    ```bash
+    export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
+    export INGRESS_HOST=$(minikube ip)
+    export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+    echo $GATEWAY_URL
+    ```
+
+    **minikube (example)**:
+
+    ```bash
+    192.168.99.100:31380
+    ```
+
+    For other platforms see the [Istio documentation on determining ingress IP and ports.](https://istio.io/docs/tasks/traffic-management/ingress/#determining-the-ingress-ip-and-ports)
+
 1. Exercise the sample policy. Check that **alice** can access `/productpage` **BUT NOT** `/api/v1/products`.
 
     ```bash
-    curl --user alice:password  -o /dev/null -s -w "%{http_code}\n" http://<INGRESS_IP_PORT>/productpage
-    200
-    ```
-
-    ```bash
-    curl --user alice:password  -o /dev/null -s -w "%{http_code}\n" http://<INGRESS_IP_PORT>/api/v1/products
-    403
+    curl --user alice:password -i http://$GATEWAY_URL/productpage
+    curl --user alice:password -i http://$GATEWAY_URL/api/v1/products
     ```
 
 1. Exercise the sample policy. Check that **bob** can access `/productpage` **AND** `/api/v1/products`.
 
     ```bash
-    curl --user bob:password  -o /dev/null -s -w "%{http_code}\n" http://<INGRESS_IP_PORT>/productpage
-    200
-    ```
-
-    ```bash
-    curl --user bob:password  -o /dev/null -s -w "%{http_code}\n" http://<INGRESS_IP_PORT>/api/v1/products
-    200
+    curl --user bob:password -i http://$GATEWAY_URL/productpage
+    curl --user bob:password -i http://$GATEWAY_URL/api/v1/products
     ```
 
 ## Configuration
@@ -94,7 +104,7 @@ To deploy OPA-Istio include the following container in your Kubernetes Deploymen
 
 ```yaml
 containers:
-- image: openpolicyagent/opa:0.9.0-istio-3
+- image: openpolicyagent/opa:0.9.0-istio-4
   imagePullPolicy: IfNotPresent
   name: opa-istio
   volumeMounts:
@@ -120,7 +130,7 @@ The OPA-Istio plugin supports the following configuration fields:
 | Field | Required | Description |
 | --- | --- | --- |
 | `plugins["envoy.ext_authz.grpc"].addr` | No | Set listening address of Envoy External Authorization gRPC server. This must match the value configured in the Envoy Filter resource. Default: `:9191`. |
-| `plugins["envoy.ext_authz.grpc"].decision` | No | Specifies the name of the policy decision to query. The policy decision must be return a `boolean` value. `true` indicates the request should be allowed and `false` indicates the request should be denied. Default: `data.istio.authz.allow`. |
+| `plugins["envoy.ext_authz.grpc"].query` | No | Specifies the name of the policy decision to query. The policy decision must be return a `boolean` value. `true` indicates the request should be allowed and `false` indicates the request should be denied. Default: `data.istio.authz.allow`. |
 
 In the [Quick Start](#quick-start) section an OPA policy is loaded via a volume-mounted ConfigMap. For production deployments, we recommend serving policy [Bundles](http://www.openpolicyagent.org/docs/bundles.html) from a remote HTTP server. For example:
 
@@ -140,7 +150,7 @@ bundle:
 plugins:
     envoy.ext_authz.grpc:
         addr: :9191
-        decision: data.istio.authz.allow
+        query: data.istio.authz.allow
 ```
 
 ## Example Policy

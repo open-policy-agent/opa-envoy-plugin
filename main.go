@@ -8,21 +8,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open-policy-agent/opa-istio-plugin/server"
+	"github.com/open-policy-agent/opa-istio-plugin/internal"
 	"github.com/open-policy-agent/opa/cmd"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/runtime"
 )
 
 func init() {
-
 	runtime.RegisterPlugin("envoy.ext_authz.grpc", func(m *plugins.Manager, config []byte) (plugins.Plugin, error) {
-		// Create the plugin which implements Istio Mixer's Check api
-		params, err := server.NewParams(config)
-		if err != nil {
-			return nil, err
-		}
-		return server.NewPlugin(m, params)
+		return internal.New(m, config)
 	})
 }
 
