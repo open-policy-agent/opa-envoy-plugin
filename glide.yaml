@@ -1,14 +1,5 @@
 package: github.com/open-policy-agent/opa-istio-plugin
 import:
-- package: github.com/istio/api
-  version: c3900719e8f44a2180393b43c4fb8538fd141de1
-  subpackages:
-  - mixer/v1
-- package: github.com/istio/gogo-genproto
-  subpackages:
-  - googleapis/google/rpc
-- package: github.com/mwitkow/grpc-proxy
-  version: 67591eb23c48346a480470e462289835d96f70da
 - package: github.com/golang/lint
 - package: golang.org/x/tools
   subpackages:
@@ -16,12 +7,6 @@ import:
 - package: golang.org/x/net
   subpackages:
   - context
-- package: google.golang.org/grpc
-  version: 1.10.0
-  subpackages:
-  - codes
-  - metadata
-  - reflection
 - package: github.com/open-policy-agent/opa
   version: v0.9.0
 - package: github.com/spf13/cobra
@@ -33,3 +18,10 @@ import:
 - package: golang.org/x/lint
   subpackages:
   - golint
+- package: github.com/envoyproxy/data-plane-api
+- package: github.com/lyft/protoc-gen-validate
+  version: v0.0.6
+- package: github.com/gogo/googleapis
+- package: github.com/gogo/protobuf
+- package: google.golang.org/grpc
+  version: 1.10.0

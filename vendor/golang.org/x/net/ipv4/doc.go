@@ -55,7 +55,7 @@
 // Multicasting
 //
 // The options for multicasting are available for net.UDPConn and
-// net.IPConn which are created as network connections that use the
+// net.IPconn which are created as network connections that use the
 // IPv4 transport. A few network facilities must be prepared before
 // you begin multicasting, at a minimum joining network interfaces and
 // multicast groups.

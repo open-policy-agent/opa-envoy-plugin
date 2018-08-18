@@ -10,6 +10,7 @@ package siphash
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"testing"
 )
 
@@ -339,6 +340,23 @@ func TestHash128(t *testing.T) {
 		if sum0, sum1 := Hash128(k0, k1, in[:i]); sum0 != ref0 || sum1 != ref1 {
 			t.Errorf(`%d: expected "%x, %x", got "%x, %x"`, i, ref0, ref1, sum0, sum1)
 		}
+	}
+}
+
+func TestAlign(t *testing.T) {
+	data := "0076a9143219adce9b6f0a21fd53cb17e2fd9b2b4fac40b388ac"
+	k0 := uint64(316665572293978160)
+	k1 := uint64(8573005253291875333)
+	want := uint64(16770526497674945769)
+
+	d, err := hex.DecodeString(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := Hash(k0, k1, d[1:])
+	if res != want {
+		t.Fatalf("Expected %v got %v", want, res)
 	}
 }
 
