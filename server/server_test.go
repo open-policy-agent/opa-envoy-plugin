@@ -10,8 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	google_rpc "github.com/gogo/googleapis/google/rpc"
-	mixerpb "github.com/istio/api/mixer/v1"
+	"github.com/envoyproxy/data-plane-api/envoy/service/auth/v2alpha"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
@@ -22,35 +21,11 @@ func TestCheckAllow(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	// Positive integers index into the global deployment-wide dictionary. See attribute/list.gen.go
-	stringsMap := make(map[int32]int32)
-	stringsMap[19] = 90
-	stringsMap[17] = -3
-
-	stringMapsMap := make(map[int32]mixerpb.StringMap)
-	entries := make(map[int32]int32)
-	entries[50] = -11
-
-	stringMapsMap[15] = mixerpb.StringMap{
-		Entries: entries,
-	}
-
-	req := mixerpb.CheckRequest{}
-	req.Attributes = mixerpb.CompressedAttributes{}
-	req.Attributes.Words = []string{"192.168.99.100:32706", "curl/7.54.0", "/api/v1/products", "connection.mtls", "kubernetes://istio-ingress-5bb556fcbf-6xbff.istio-system", "productpage.default.svc.cluster.local", "kubernetes://productpage-v1-86f5569bc8-79clt.default", "172.17.0.1", "*/*", "7b523fe59f726d29", "Basic Ym9iOnBhc3N3b3Jk", "7b523fe59f726d29;7b523fe59f726d29;0000000000000000", "356f4318-43e9-956f-9e45-9f22eb80ff7b"}
-	req.Attributes.Strings = stringsMap
-	req.Attributes.StringMaps = stringMapsMap
-
+	req := &v2alpha.CheckRequest{}
 	server := testAuthzServer()
 	ctx := context.Background()
-
-	output, _ := server.Check(ctx, &req)
-
-	expected := &mixerpb.CheckResponse{
-		Precondition: mixerpb.CheckResponse_PreconditionResult{
-			Status: google_rpc.Status{Code: int32(google_rpc.OK)},
-		},
-	}
+	output, _ := server.Check(ctx, req)
+	expected := v2alpha.CheckResponse{}
 
 	if !reflect.DeepEqual(expected, output) {
 		t.Errorf("Expected Output: %+v, Actual Output: %+v", expected, output)
@@ -63,35 +38,11 @@ func TestCheckDeny(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	// Positive integers index into the global deployment-wide dictionary. See attribute/list.gen.go
-	stringsMap := make(map[int32]int32)
-	stringsMap[19] = 90
-	stringsMap[17] = -2
-
-	stringMapsMap := make(map[int32]mixerpb.StringMap)
-	entries := make(map[int32]int32)
-	entries[50] = -9
-
-	stringMapsMap[15] = mixerpb.StringMap{
-		Entries: entries,
-	}
-
-	req := mixerpb.CheckRequest{}
-	req.Attributes = mixerpb.CompressedAttributes{}
-	req.Attributes.Words = []string{"kubernetes://productpage-v1-86f5569bc8-79clt.default", "/api/v1/products", "06dc1f8fb01d45ff", "192.168.99.100:32706", "341f4341-2596-93e5-873b-0f597e6a735e", "172.17.0.1", "*/*", "curl/7.54.0", "Basic YWxpY2U6cGFzc3dvcmQ=", "06dc1f8fb01d45ff;06dc1f8fb01d45ff;0000000000000000", "connection.mtls", "kubernetes://istio-ingress-5bb556fcbf-6xbff.istio-system", "productpage.default.svc.cluster.local"}
-	req.Attributes.Strings = stringsMap
-	req.Attributes.StringMaps = stringMapsMap
-
+	req := &v2alpha.CheckRequest{}
 	server := testAuthzServer()
 	ctx := context.Background()
-
-	output, _ := server.Check(ctx, &req)
-
-	expected := &mixerpb.CheckResponse{
-		Precondition: mixerpb.CheckResponse_PreconditionResult{
-			Status: google_rpc.Status{Code: int32(google_rpc.PERMISSION_DENIED)},
-		},
-	}
+	output, _ := server.Check(ctx, req)
+	expected := v2alpha.CheckResponse{}
 
 	if !reflect.DeepEqual(expected, output) {
 		t.Errorf("Expected Output: %+v, Actual Output: %+v", expected, output)
