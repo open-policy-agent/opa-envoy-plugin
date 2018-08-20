@@ -95,6 +95,59 @@ func TestTopDownQueryIDsUnique(t *testing.T) {
 	}
 }
 
+func TestTopDownIndexExpr(t *testing.T) {
+	ctx := context.Background()
+	store := inmem.New()
+	txn := storage.NewTransactionOrDie(ctx, store)
+	defer store.Abort(ctx, txn)
+
+	compiler := compileModules([]string{
+		`package test
+
+		p = true {
+		     1 > 0
+		     q
+		}
+
+		q = true { true }`})
+
+	tr := []*Event{}
+
+	query := NewQuery(ast.MustParseBody("data.test.p")).
+		WithCompiler(compiler).
+		WithStore(store).
+		WithTransaction(txn).
+		WithTracer((*BufferTracer)(&tr))
+
+	_, err := query.Run(ctx)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	exp := []*ast.Expr{
+		ast.MustParseExpr("data.test.p"),
+		ast.MustParseExpr("data.test.q"),
+	}
+
+	i := 0
+	for _, evt := range tr {
+		if evt.Op != IndexOp {
+			continue
+		}
+
+		expr, ok := evt.Node.(*ast.Expr)
+		if !ok {
+			t.Fatal("Expected expr node but got:", evt.Node)
+		}
+
+		exp[i].Index = i
+		if ast.Compare(expr, exp[i]) != 0 {
+			t.Fatalf("Expected %v but got: %v", exp[i], expr)
+		}
+		i++
+	}
+}
+
 func TestTopDownPartialSetDoc(t *testing.T) {
 
 	tests := []struct {
@@ -1178,6 +1231,24 @@ func TestTopDownRegexMatch(t *testing.T) {
 	}
 }
 
+func TestTopDownRegexSplit(t *testing.T) {
+	tests := []struct {
+		note     string
+		rules    []string
+		expected interface{}
+	}{
+		{"regex.split: empty string", []string{`p = x { regex.split("^[a-z]+\\[[0-9]+\\]$", "", [x]) }`}, `""`},
+		{"regex.split: non-repeat pattern", []string{`p = [v,w,x,y] { regex.split("a", "banana", [v,w,x,y]) }`}, `["b","n","n",""]`},
+		{"regex.split: repeat pattern", []string{`p = [v,w] { regex.split("z+", "pizza", [v,w]) }`}, `["pi","a"]`},
+	}
+
+	data := loadSmallTestData()
+
+	for _, tc := range tests {
+		runTopDownTestCase(t, data, tc.note, tc.rules, tc.expected)
+	}
+}
+
 func TestTopDownGlobsMatch(t *testing.T) {
 	tests := []struct {
 		note     string
@@ -1509,13 +1580,16 @@ func TestTopDownJWTBuiltins(t *testing.T) {
 	}
 }
 
-func TestTopDownJWTVerifyRS256(t *testing.T) {
+func TestTopDownJWTVerifyRSA(t *testing.T) {
 	const certPem = `-----BEGIN CERTIFICATE-----\nMIIFiDCCA3ACCQCGV6XsfG/oRTANBgkqhkiG9w0BAQUFADCBhTELMAkGA1UEBhMC\nVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEO\nMAwGA1UECgwFU3R5cmExDDAKBgNVBAsMA0RldjESMBAGA1UEAwwJbG9jYWxob3N0\nMRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5cmEwHhcNMTgwMzA2MDAxNTU5WhcNMTkw\nMzA2MDAxNTU5WjCBhTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx\nFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEOMAwGA1UECgwFU3R5cmExDDAKBgNVBAsM\nA0RldjESMBAGA1UEAwwJbG9jYWxob3N0MRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5\ncmEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDucnAwTRA0zqDQ671L\nKWOVwhjhycFyzyhZUd7vhsnslOBiYM6TYIDXhETfAk2RQoRE/9xF16woMD8FOglc\nlSuhi+GNfFRif6LfArm84ZFj1ZS1MX2logikhXhRJQ7AOHe5+ED0re3KH5lWyqfz\nR6bQuPYwTQSBJy6Tq7T9RiOM29yadCX64OaCEbzEFmHtNlbb5px4zCVvgskg/fpV\nGGCMpAYjGDatbxE5eAloVs1EJuI5RSqWr1JRm6EejxM04BFdfGn1HgWrsKXtlvBa\n00/AC0zXL5n6LK7+L3WbRguVTZcE4Yu70gDwhmM+VsKeT9LKClX003BNj0NJDRB9\ndw9MaWxsXDNHNOWEfbnASXeP7ZRv3D81ftij6P8SL14ZnxyrRty8TAN4ij3wd41l\nastRQCtrJFi+HzO606XOp6HDzBoWT0DGl8Sn2hZ6RLPyBnD04vvvcSGeCVjHGOQ8\nc3OTroK58u5MR/q4T00sTkeeVAxuKoEWKsjIBYYrJTe/a2mEq9yiDGbPNYDnWnQZ\njSUZm+Us23Y2sm/agZ5zKXcEuoecGL6sYCixr/xeB9BPxEiTthH+0M8OY99qpIhz\nSmj41wdgQfzZi/6B8pIr77V/KywYKxJEmzw8Uy48aC/rZ8WsT8QdKwclo1aiNJhx\n79OvGbZFoeHD/w7igpx+ttpF/wIDAQABMA0GCSqGSIb3DQEBBQUAA4ICAQC3wWUs\nfXz+aSfFVz+O3mLFkr65NIgazbGAySgMgMNVuadheIkPL4k21atyflfpx4pg9FGv\n40vWCLMajpvynfz4oqah0BACnpqzQ8Dx6HYkmlXK8fLB+WtPrZBeUEsGPKuJYt4M\nd5TeY3VpNgWOPXmnE4lvxHZqh/8OwmOpjBfC9E3e2eqgwiwOkXnMaZEPgKP6JiWk\nEFaQ9jgMQqJZnNcv6NmiqqsZeI0/NNjBpkmEWQl+wLegVusHiQ0FMBMQ0taEo21r\nzUwHoNJR3h3wgGQiKxKOH1FUKHBV7hEqObLraD/hfG5xYucJfvvAAP1iH0ycPs+9\nhSccrn5/HY1c9AZnW8Kh7atp/wFP+sHjtECWK/lUmXfhASS293hprCpJk2n9pkmR\nziXKJhjwkxlC8NcHuiVfaxdfDa4+1Qta2gK7GEypbvLoEmIt/dsYUsxUg84lwJJ9\nnyC/pfZ5a8wFSf186JeVH4kHd3bnkzlQz460HndOMSJ/Xi1wSfuZlOVupFf8TVKl\np4j28MTLH2Wqx50NssKThdaX6hoCiMqreYa+EVaN1f/cIGQxZSCzdzMCKqdB8lKB\n3Eax+5zsIa/UyPwGxZcyXBRHAlz5ZnkjuRxInyiMkBWWz3IZXjTe6Fq8BNd2UWNc\nw35+2nO5n1LKXgR2+nzhZUOk8TPsi9WUywRluQ==\n-----END CERTIFICATE-----`
+	const certPemPs = `-----BEGIN CERTIFICATE-----\nMIIC/DCCAeSgAwIBAgIJAJRvYDU3ei3EMA0GCSqGSIb3DQEBCwUAMBMxETAPBgNV\nBAMMCHdoYXRldmVyMB4XDTE4MDgxMDEwMzgxNloXDTE4MDkwOTEwMzgxNlowEzER\nMA8GA1UEAwwId2hhdGV2ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB\nAQC4kCmzLMW/5jzkzkmN7Me8wPD+ymBUIjsGqliGfMrfFfDV2eTPVtZcYD3IXoB4\nAOUT7XJzWjOsBRFOcVKKEiCPjXiLcwLb/QWQ1x0Budft32r3+N0KQd1rgcRHTPNc\nJoeWCfOgDPp51RTzTT6HQuV4ud+CDhRJP7QMVMIgal9Nuzs49LLZaBPW8/rFsHjk\nJQ4kDujSrpcT6F2FZY3SmWsOJgP7RjVKk5BheYeFKav5ZV4p6iHn/TN4RVpvpNBh\n5z/XoHITJ6lpkHSDpbIaQUTpobU2um8N3biz+HsEAmD9Laa27WUpYSpiM6DDMSXl\ndBDJdumerVRJvXYCtfXqtl17AgMBAAGjUzBRMB0GA1UdDgQWBBRz74MkVzT2K52/\nFJC4mTa9coM/DTAfBgNVHSMEGDAWgBRz74MkVzT2K52/FJC4mTa9coM/DTAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAD1ZE4IaIAetqGG+vt9oz1\nIx0j4EPok0ONyhhmiSsF6rSv8zlNWweVf5y6Z+AoTNY1Fym0T7dbpbqIox0EdKV3\nFLzniWOjznupbnqfXwHX/g1UAZSyt3akSatVhvNpGlnd7efTIAiNinX/TkzIjhZ7\nihMIZCGykT1P0ys1OaeEf57wAzviatD4pEMTIW0OOqY8bdRGhuJR1kKUZ/2Nm8Ln\ny7E0y8uODVbH9cAwGyzWB/QFc+bffNgi9uJaPQQc5Zxwpu9utlqyzFvXgV7MBYUK\nEYSLyxp4g4e5aujtLugaC8H6n9vP1mEBr/+T8HGynBZHNTKlDhhL9qDbpkkNB6/w\n-----END CERTIFICATE-----`
+	const certPemEs256 = `-----BEGIN CERTIFICATE-----\nMIIBcDCCARagAwIBAgIJAMZmuGSIfvgzMAoGCCqGSM49BAMCMBMxETAPBgNVBAMM\nCHdoYXRldmVyMB4XDTE4MDgxMDE0Mjg1NFoXDTE4MDkwOTE0Mjg1NFowEzERMA8G\nA1UEAwwId2hhdGV2ZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATPwn3WCEXL\nmjp/bFniDwuwsfu7bASlPae2PyWhqGeWwe23Xlyx+tSqxlkXYe4pZ23BkAAscpGj\nyn5gXHExyDlKo1MwUTAdBgNVHQ4EFgQUElRjSoVgKjUqY5AXz2o74cLzzS8wHwYD\nVR0jBBgwFoAUElRjSoVgKjUqY5AXz2o74cLzzS8wDwYDVR0TAQH/BAUwAwEB/zAK\nBggqhkjOPQQDAgNIADBFAiEA4yQ/88ZrUX68c6kOe9G11u8NUaUzd8pLOtkKhniN\nOHoCIHmNX37JOqTcTzGn2u9+c8NlnvZ0uDvsd1BmKPaUmjmm\n-----END CERTIFICATE-----\n`
 
 	const certPemBad = `-----BEGIN CERT-----\nMIIFiDCCA3ACCQCGV6XsfG/oRTANBgkqhkiG9w0BAQUFADCBhTELMAkGA1UEBhMC\nVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEO\nMAwGA1UECgwFU3R5cmExDDAKBgNVBAsMA0RldjESMBAGA1UEAwwJbG9jYWxob3N0\nMRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5cmEwHhcNMTgwMzA2MDAxNTU5WhcNMTkw\nMzA2MDAxNTU5WjCBhTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx\nFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEOMAwGA1UECgwFU3R5cmExDDAKBgNVBAsM\nA0RldjESMBAGA1UEAwwJbG9jYWxob3N0MRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5\ncmEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDucnAwTRA0zqDQ671L\nKWOVwhjhycFyzyhZUd7vhsnslOBiYM6TYIDXhETfAk2RQoRE/9xF16woMD8FOglc\nlSuhi+GNfFRif6LfArm84ZFj1ZS1MX2logikhXhRJQ7AOHe5+ED0re3KH5lWyqfz\nR6bQuPYwTQSBJy6Tq7T9RiOM29yadCX64OaCEbzEFmHtNlbb5px4zCVvgskg/fpV\nGGCMpAYjGDatbxE5eAloVs1EJuI5RSqWr1JRm6EejxM04BFdfGn1HgWrsKXtlvBa\n00/AC0zXL5n6LK7+L3WbRguVTZcE4Yu70gDwhmM+VsKeT9LKClX003BNj0NJDRB9\ndw9MaWxsXDNHNOWEfbnASXeP7ZRv3D81ftij6P8SL14ZnxyrRty8TAN4ij3wd41l\nastRQCtrJFi+HzO606XOp6HDzBoWT0DGl8Sn2hZ6RLPyBnD04vvvcSGeCVjHGOQ8\nc3OTroK58u5MR/q4T00sTkeeVAxuKoEWKsjIBYYrJTe/a2mEq9yiDGbPNYDnWnQZ\njSUZm+Us23Y2sm/agZ5zKXcEuoecGL6sYCixr/xeB9BPxEiTthH+0M8OY99qpIhz\nSmj41wdgQfzZi/6B8pIr77V/KywYKxJEmzw8Uy48aC/rZ8WsT8QdKwclo1aiNJhx\n79OvGbZFoeHD/w7igpx+ttpF/wIDAQABMA0GCSqGSIb3DQEBBQUAA4ICAQC3wWUs\nfXz+aSfFVz+O3mLFkr65NIgazbGAySgMgMNVuadheIkPL4k21atyflfpx4pg9FGv\n40vWCLMajpvynfz4oqah0BACnpqzQ8Dx6HYkmlXK8fLB+WtPrZBeUEsGPKuJYt4M\nd5TeY3VpNgWOPXmnE4lvxHZqh/8OwmOpjBfC9E3e2eqgwiwOkXnMaZEPgKP6JiWk\nEFaQ9jgMQqJZnNcv6NmiqqsZeI0/NNjBpkmEWQl+wLegVusHiQ0FMBMQ0taEo21r\nzUwHoNJR3h3wgGQiKxKOH1FUKHBV7hEqObLraD/hfG5xYucJfvvAAP1iH0ycPs+9\nhSccrn5/HY1c9AZnW8Kh7atp/wFP+sHjtECWK/lUmXfhASS293hprCpJk2n9pkmR\nziXKJhjwkxlC8NcHuiVfaxdfDa4+1Qta2gK7GEypbvLoEmIt/dsYUsxUg84lwJJ9\nnyC/pfZ5a8wFSf186JeVH4kHd3bnkzlQz460HndOMSJ/Xi1wSfuZlOVupFf8TVKl\np4j28MTLH2Wqx50NssKThdaX6hoCiMqreYa+EVaN1f/cIGQxZSCzdzMCKqdB8lKB\n3Eax+5zsIa/UyPwGxZcyXBRHAlz5ZnkjuRxInyiMkBWWz3IZXjTe6Fq8BNd2UWNc\nw35+2nO5n1LKXgR2+nzhZUOk8TPsi9WUywRluQ==\n-----END CERT-----`
 
 	params := []struct {
 		note   string
+		alg    string
 		input1 string
 		input2 string
 		result bool
@@ -1523,20 +1597,55 @@ func TestTopDownJWTVerifyRS256(t *testing.T) {
 	}{
 		{
 			"success",
+			"rs256",
 			`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIiLCJuYmYiOjE0NDQ0Nzg0MDB9.N0-EVdv5pvUfZYFRzMGnsWpNLHgwMEgViPwpuLBEtt32682OgnOK-N4X-2gpQEjQIbUr0IFym8YsRQU9GZvqQP72Sd6yOQNGSNeE74DpUZCAjBa9SBIb1UlD2MxZB-e7YJiEyo7pZhimaqorXrgorlaXYGMvsCFWDYmBLzGaGYaGJyEpkZHzHb7ujsDrJJjdEtDV3kh13gTHzLPvqnoXuuxelXye_8LPIhvgDy52gT4shUEso71pJCMv_IqAR19ljVE17lJzoi6VhRn6ReNUE-yg4KfCO4Ypnuu-mcQr7XtmSYoWkX72L5UQ-EyWkoz-w0SYKoJTPzHkTL2thYStksVpeNkGuck25aUdtrQgmPbao0QOWBFlkg03e6mPCD2-aXOt1ofth9mZGjxWMHX-mUqHaNmaWM3WhRztJ73hWrmB1YOdYQtOEHejfvR_td5tqIw4W6ufRy2ScOypGQe7kNaUZxpgxZ1927ZGNiQgawIOAQwXOcFx1JNSEIeg55-cYJrHPxsXGOB9ZxW-qnswmFJp474iUVXjzGhLexJDXBwvKGs_O3JFjMsvyV9_hm7bnQU0vG_HgPYs5i9VOHRMujq1vFBcm52TFVOBGdWaGfb9RRdLLYvVkJLk0Poh19rsCWb7-Vc3mAaGGpvuk4Wv-PnGGNC-V-FQqIbijHDrn_g`,
 			certPem,
 			true,
 			"",
 		},
 		{
+			"success-ps256",
+			"ps256",
+			`eyJ0eXAiOiAiSldUIiwgImFsZyI6ICJQUzI1NiJ9.eyJuYmYiOiAxNDQ0NDc4NDAwLCAiZm9vIjogImJhciJ9.i0F3MHWzOsBNLqjQzK1UVeQid9xPMowCoUsoM-C2BDxUY-FMKmCeJ1NJ4TGnS9HzFK1ftEvRnPT7EOxOkHPoCk1rz3feTFgtHtNzQqLM1IBTnz6aHHOrda_bKPHH9ZIYCRQUPXhpC90ivW_IJR-f7Z1WLrMXaJ71i1XteruENHrJJJDn0HedHG6N0VHugBHrak5k57cbE31utAdx83TEd8v2Y8wAkCJXKrdmTa-8419LNxW_yjkvoDD53n3X5CHhYkSymU77p0v6yWO38qDWeKJ-Fm_PrMAo72_rizDBj_yPa5LA3bT_EnsgZtC-sp8_SCDIH41bjiCGpRHhqgZmyw`,
+			certPemPs,
+			true,
+			"",
+		},
+		{
+			"success-es256",
+			"es256",
+			`eyJ0eXAiOiAiSldUIiwgImFsZyI6ICJFUzI1NiJ9.eyJuYmYiOiAxNDQ0NDc4NDAwLCAiaXNzIjogInh4eCJ9.lArczfN-pIL8oUU-7PU83u-zfXougXBZj6drFeKFsPEoVhy9WAyiZlRshYqjTSXdaw8yw2L-ovt4zTUZb2PWMg`,
+			certPemEs256,
+			true,
+			"",
+		},
+		{
 			"failure-bad token",
+			"rs256",
 			`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIiLCJuYmYiOjE0NDQ0Nzg0MDB9.Yt89BjaPCNgol478rYyH66-XgkHos02TsVwxLH3ZlvOoIVjbhYW8q1_MHehct1-yBf1UOX3g-lUrIjpoDtX1TfAESuaWTjYPixRvjfJ-Nn75JF8QuAl5PD27C6aJ4PjUPNfj0kwYBnNQ_oX-ZFb781xRi7qRDB6swE4eBUxzHqKUJBLaMM2r8k1-9iE3ERNeqTJUhV__p0aSyRj-i62rdZ4TC5nhxtWodiGP4e4GrYlXkdaKduK63cfdJF-kfZfTsoDs_xy84pZOkzlflxuNv9bNqd-3ISAdWe4gsEvWWJ8v70-QWkydnH8rhj95DaqoXrjfzbOgDpKtdxJC4daVPKvntykzrxKhZ9UtWzm3OvJSKeyWujFZlldiTfBLqNDgdi-Boj_VxO5Pdh-67lC3L-pBMm4BgUqf6rakBQvoH7AV6zD5CbFixh7DuqJ4eJHHItWzJwDctMrV3asm-uOE1E2B7GErGo3iX6S9Iun_kvRUp6kyvOaDq5VvXzQOKyLQIQyHGGs0aIV5cFI2IuO5Rt0uUj5mzPQrQWHgI4r6Mc5bzmq2QLxBQE8OJ1RFhRpsuoWQyDM8aRiMQIJe1g3x4dnxbJK4dYheYblKHFepScYqT1hllDp3oUNn89sIjQIhJTe8KFATu4K8ppluys7vhpE2a_tq8i5O0MFxWmsxN4Q`,
 			certPem,
 			false,
 			"",
 		},
 		{
+			"failure-wrong key",
+			"ps256",
+			`eyJ0eXAiOiAiSldUIiwgImFsZyI6ICJQUzI1NiJ9.eyJuYmYiOiAxNDQ0NDc4NDAwLCAiZm9vIjogImJhciJ9.i0F3MHWzOsBNLqjQzK1UVeQid9xPMowCoUsoM-C2BDxUY-FMKmCeJ1NJ4TGnS9HzFK1ftEvRnPT7EOxOkHPoCk1rz3feTFgtHtNzQqLM1IBTnz6aHHOrda_bKPHH9ZIYCRQUPXhpC90ivW_IJR-f7Z1WLrMXaJ71i1XteruENHrJJJDn0HedHG6N0VHugBHrak5k57cbE31utAdx83TEd8v2Y8wAkCJXKrdmTa-8419LNxW_yjkvoDD53n3X5CHhYkSymU77p0v6yWO38qDWeKJ-Fm_PrMAo72_rizDBj_yPa5LA3bT_EnsgZtC-sp8_SCDIH41bjiCGpRHhqgZmyw`,
+			certPem,
+			false,
+			"",
+		},
+		{
+			"failure-wrong alg",
+			"ps256",
+			`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIiLCJuYmYiOjE0NDQ0Nzg0MDB9.N0-EVdv5pvUfZYFRzMGnsWpNLHgwMEgViPwpuLBEtt32682OgnOK-N4X-2gpQEjQIbUr0IFym8YsRQU9GZvqQP72Sd6yOQNGSNeE74DpUZCAjBa9SBIb1UlD2MxZB-e7YJiEyo7pZhimaqorXrgorlaXYGMvsCFWDYmBLzGaGYaGJyEpkZHzHb7ujsDrJJjdEtDV3kh13gTHzLPvqnoXuuxelXye_8LPIhvgDy52gT4shUEso71pJCMv_IqAR19ljVE17lJzoi6VhRn6ReNUE-yg4KfCO4Ypnuu-mcQr7XtmSYoWkX72L5UQ-EyWkoz-w0SYKoJTPzHkTL2thYStksVpeNkGuck25aUdtrQgmPbao0QOWBFlkg03e6mPCD2-aXOt1ofth9mZGjxWMHX-mUqHaNmaWM3WhRztJ73hWrmB1YOdYQtOEHejfvR_td5tqIw4W6ufRy2ScOypGQe7kNaUZxpgxZ1927ZGNiQgawIOAQwXOcFx1JNSEIeg55-cYJrHPxsXGOB9ZxW-qnswmFJp474iUVXjzGhLexJDXBwvKGs_O3JFjMsvyV9_hm7bnQU0vG_HgPYs5i9VOHRMujq1vFBcm52TFVOBGdWaGfb9RRdLLYvVkJLk0Poh19rsCWb7-Vc3mAaGGpvuk4Wv-PnGGNC-V-FQqIbijHDrn_g`,
+			certPem,
+			false,
+			"",
+		},
+		{
 			"failure-invalid token",
+			"rs256",
 			`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIiLCJuYmYiOjE0NDQ0Nzg0MDB9`,
 			certPem,
 			false,
@@ -1544,6 +1653,7 @@ func TestTopDownJWTVerifyRS256(t *testing.T) {
 		},
 		{
 			"failure-bad cert",
+			"rs256",
 			`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIiLCJuYmYiOjE0NDQ0Nzg0MDB9.N0-EVdv5pvUfZYFRzMGnsWpNLHgwMEgViPwpuLBEtt32682OgnOK-N4X-2gpQEjQIbUr0IFym8YsRQU9GZvqQP72Sd6yOQNGSNeE74DpUZCAjBa9SBIb1UlD2MxZB-e7YJiEyo7pZhimaqorXrgorlaXYGMvsCFWDYmBLzGaGYaGJyEpkZHzHb7ujsDrJJjdEtDV3kh13gTHzLPvqnoXuuxelXye_8LPIhvgDy52gT4shUEso71pJCMv_IqAR19ljVE17lJzoi6VhRn6ReNUE-yg4KfCO4Ypnuu-mcQr7XtmSYoWkX72L5UQ-EyWkoz-w0SYKoJTPzHkTL2thYStksVpeNkGuck25aUdtrQgmPbao0QOWBFlkg03e6mPCD2-aXOt1ofth9mZGjxWMHX-mUqHaNmaWM3WhRztJ73hWrmB1YOdYQtOEHejfvR_td5tqIw4W6ufRy2ScOypGQe7kNaUZxpgxZ1927ZGNiQgawIOAQwXOcFx1JNSEIeg55-cYJrHPxsXGOB9ZxW-qnswmFJp474iUVXjzGhLexJDXBwvKGs_O3JFjMsvyV9_hm7bnQU0vG_HgPYs5i9VOHRMujq1vFBcm52TFVOBGdWaGfb9RRdLLYvVkJLk0Poh19rsCWb7-Vc3mAaGGpvuk4Wv-PnGGNC-V-FQqIbijHDrn_g`,
 			certPemBad,
 			false,
@@ -1567,7 +1677,7 @@ func TestTopDownJWTVerifyRS256(t *testing.T) {
 
 		tests = append(tests, test{
 			p.note,
-			[]string{fmt.Sprintf(`p = x { io.jwt.verify_rs256("%s", "%s", x) }`, p.input1, p.input2)},
+			[]string{fmt.Sprintf(`p = x { io.jwt.verify_%s("%s", "%s", x) }`, p.alg, p.input1, p.input2)},
 			exp,
 		})
 	}
