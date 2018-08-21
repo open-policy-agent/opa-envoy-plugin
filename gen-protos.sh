@@ -30,6 +30,9 @@ PROTOC_IMPORTS=" \
     -I vendor/github.com/gogo/googleapis \
     -I vendor/github.com/lyft/protoc-gen-validate"
 
+echo "Installing gogofast protoc plugin"
+go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
+
 echo "Building envoy core protos"
 protoc \
     $PROTOC_IMPORTS \
