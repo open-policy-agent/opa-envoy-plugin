@@ -70,13 +70,8 @@ image-quick:
 push:
 	docker push $(IMAGE):$(VERSION)
 
-update-opa-cmd:
+update-opa:
 	@./build/update-opa-version.sh $(TAG)
-
-gen-protos:
-	./gen-protos.sh
-
-update-opa: | update-opa-cmd gen-protos  # Force ordering of update-opa-cmd and then gen-protos.
 
 test: generate
 	$(DISABLE_CGO) $(GO) test $(PACKAGES)
