@@ -34,6 +34,9 @@ if [ $? -eq 0 ]; then
   # run glide update
   glide up -v
 
+  # generate protos
+  ./build/gen-protos.sh
+
   # add changes
   git add .
 fi 
