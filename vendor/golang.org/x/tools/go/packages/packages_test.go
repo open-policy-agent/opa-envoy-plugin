@@ -337,7 +337,10 @@ func TestLoadImportsC(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("skipping on windows; packages on windows do not satisfy conditions for test.")
 	}
-
+	if runtime.GOOS == "plan9" {
+		// See https://github.com/golang/go/issues/27100.
+		t.Skip(`skipping on plan9; for some reason "net [syscall.test]" is not loaded`)
+	}
 	if usesOldGolist {
 		t.Skip("not yet supported in pre-Go 1.10.4 golist fallback implementation")
 	}
@@ -365,6 +368,7 @@ func TestLoadImportsC(t *testing.T) {
 		pkg := all[test.pattern]
 		if pkg == nil {
 			t.Errorf("package %q not loaded", test.pattern)
+			continue
 		}
 		if imports := strings.Join(imports(pkg), " "); !strings.Contains(imports, test.wantImport) {
 			t.Errorf("package %q: got \n%s, \nwant to have %s", test.pattern, imports, test.wantImport)
@@ -661,10 +665,6 @@ func TestLoadSyntaxOK(t *testing.T) {
 		t.Errorf("wrong import graph: got <<%s>>, want <<%s>>", graph, wantGraph)
 	}
 
-	// TODO(matloob): The legacy go list based support loads everything from source
-	// because it doesn't do a build and the .a files don't exist.
-	// Can we simulate its existence?
-
 	for _, test := range []struct {
 		id           string
 		wantSyntax   bool
@@ -677,8 +677,12 @@ func TestLoadSyntaxOK(t *testing.T) {
 		{"e", false, false}, // export data package
 		{"f", false, false}, // export data package
 	} {
-		if usesOldGolist && !test.wantSyntax {
-			// legacy go list always upgrades to LoadAllSyntax, syntax will be filled in.
+		// TODO(matloob): The legacy go list based support loads
+		// everything from source because it doesn't do a build
+		// and the .a files don't exist.
+		// Can we simulate its existence?
+		if usesOldGolist {
+			test.wantComplete = true
 			test.wantSyntax = true
 		}
 		p := all[test.id]
