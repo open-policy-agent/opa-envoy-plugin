@@ -337,7 +337,10 @@ func TestLoadImportsC(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("skipping on windows; packages on windows do not satisfy conditions for test.")
 	}
-
+	if runtime.GOOS == "plan9" {
+		// See https://github.com/golang/go/issues/27100.
+		t.Skip(`skipping on plan9; for some reason "net [syscall.test]" is not loaded`)
+	}
 	if usesOldGolist {
 		t.Skip("not yet supported in pre-Go 1.10.4 golist fallback implementation")
 	}
@@ -365,6 +368,7 @@ func TestLoadImportsC(t *testing.T) {
 		pkg := all[test.pattern]
 		if pkg == nil {
 			t.Errorf("package %q not loaded", test.pattern)
+			continue
 		}
 		if imports := strings.Join(imports(pkg), " "); !strings.Contains(imports, test.wantImport) {
 			t.Errorf("package %q: got \n%s, \nwant to have %s", test.pattern, imports, test.wantImport)
@@ -515,9 +519,9 @@ package b`,
 		{`a`, []string{`-tags=tag tag2`}, "a.go b.go c.go d.go", "a.go b.go"},
 	} {
 		cfg := &packages.Config{
-			Mode:  packages.LoadImports,
-			Flags: test.tags,
-			Env:   append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
+			Mode:       packages.LoadImports,
+			BuildFlags: test.tags,
+			Env:        append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
 		}
 
 		initial, err := packages.Load(cfg, test.pattern)
@@ -661,10 +665,6 @@ func TestLoadSyntaxOK(t *testing.T) {
 		t.Errorf("wrong import graph: got <<%s>>, want <<%s>>", graph, wantGraph)
 	}
 
-	// TODO(matloob): The legacy go list based support loads everything from source
-	// because it doesn't do a build and the .a files don't exist.
-	// Can we simulate its existence?
-
 	for _, test := range []struct {
 		id           string
 		wantSyntax   bool
@@ -677,8 +677,12 @@ func TestLoadSyntaxOK(t *testing.T) {
 		{"e", false, false}, // export data package
 		{"f", false, false}, // export data package
 	} {
-		if usesOldGolist && !test.wantSyntax {
-			// legacy go list always upgrades to LoadAllSyntax, syntax will be filled in.
+		// TODO(matloob): The legacy go list based support loads
+		// everything from source because it doesn't do a build
+		// and the .a files don't exist.
+		// Can we simulate its existence?
+		if usesOldGolist {
+			test.wantComplete = true
 			test.wantSyntax = true
 		}
 		p := all[test.id]
@@ -1175,13 +1179,22 @@ func TestJSON(t *testing.T) {
 			return
 		}
 		seen[pkg.ID] = true
-		// trim the source lists for stable results
+
+		// Trim the source lists for stable results.
 		pkg.GoFiles = cleanPaths(pkg.GoFiles)
 		pkg.CompiledGoFiles = cleanPaths(pkg.CompiledGoFiles)
 		pkg.OtherFiles = cleanPaths(pkg.OtherFiles)
-		for _, ipkg := range pkg.Imports {
-			visit(ipkg)
+
+		// Visit imports.
+		var importPaths []string
+		for path := range pkg.Imports {
+			importPaths = append(importPaths, path)
 		}
+		sort.Strings(importPaths) // for determinism
+		for _, path := range importPaths {
+			visit(pkg.Imports[path])
+		}
+
 		if err := enc.Encode(pkg); err != nil {
 			t.Fatal(err)
 		}
@@ -1306,6 +1319,88 @@ func TestJSON(t *testing.T) {
 	}
 }
 
+func TestConfigDefaultEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// TODO(jayconrod): write an equivalent batch script for windows.
+		// Hint: "type" can be used to read a file to stdout.
+		t.Skip("test requires sh")
+	}
+	tmp, cleanup := makeTree(t, map[string]string{
+		"bin/gopackagesdriver": `#!/bin/sh
+
+cat - <<'EOF'
+{
+  "Roots": ["gopackagesdriver"],
+  "Packages": [{"ID": "gopackagesdriver", "Name": "gopackagesdriver"}]
+}
+EOF
+`,
+		"src/golist/golist.go": "package golist",
+	})
+	defer cleanup()
+	if err := os.Chmod(filepath.Join(tmp, "bin", "gopackagesdriver"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	path, ok := os.LookupEnv("PATH")
+	var pathWithDriver string
+	if ok {
+		pathWithDriver = filepath.Join(tmp, "bin") + string(os.PathListSeparator) + path
+	} else {
+		pathWithDriver = filepath.Join(tmp, "bin")
+	}
+
+	for _, test := range []struct {
+		desc    string
+		env     []string
+		wantIDs string
+	}{
+		{
+			desc:    "driver_off",
+			env:     []string{"PATH", pathWithDriver, "GOPATH", tmp, "GOPACKAGESDRIVER", "off"},
+			wantIDs: "[golist]",
+		}, {
+			desc:    "driver_unset",
+			env:     []string{"PATH", pathWithDriver, "GOPATH", "", "GOPACKAGESDRIVER", ""},
+			wantIDs: "[gopackagesdriver]",
+		}, {
+			desc:    "driver_set",
+			env:     []string{"GOPACKAGESDRIVER", filepath.Join(tmp, "bin", "gopackagesdriver")},
+			wantIDs: "[gopackagesdriver]",
+		},
+	} {
+		t.Run(test.desc, func(t *testing.T) {
+			for i := 0; i < len(test.env); i += 2 {
+				key, value := test.env[i], test.env[i+1]
+				old, ok := os.LookupEnv(key)
+				if value == "" {
+					os.Unsetenv(key)
+				} else {
+					os.Setenv(key, value)
+				}
+				if ok {
+					defer os.Setenv(key, old)
+				} else {
+					defer os.Unsetenv(key)
+				}
+			}
+
+			pkgs, err := packages.Load(nil, "golist")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			gotIds := make([]string, len(pkgs))
+			for i, pkg := range pkgs {
+				gotIds[i] = pkg.ID
+			}
+			if fmt.Sprint(pkgs) != test.wantIDs {
+				t.Errorf("got %v; want %v", gotIds, test.wantIDs)
+			}
+		})
+	}
+}
+
 func errorMessages(errors []error) []string {
 	var msgs []string
 	for _, err := range errors {
@@ -1349,8 +1444,6 @@ func importGraph(initial []*packages.Package) (string, map[string]*packages.Pack
 		initialSet[p] = true
 	}
 
-	// We can't use packages.All because
-	// we need to prune the traversal.
 	var nodes, edges []string
 	res := make(map[string]*packages.Package)
 	seen := make(map[*packages.Package]bool)

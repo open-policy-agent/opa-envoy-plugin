@@ -82,9 +82,9 @@ type Config struct {
 	//
 	Env []string
 
-	// Flags is a list of command-line flags to be passed through to
+	// BuildFlags is a list of command-line flags to be passed through to
 	// the build system's query tool.
-	Flags []string
+	BuildFlags []string
 
 	// Error is called for each error encountered during parsing and type-checking.
 	// It must be safe to call Error simultaneously from multiple goroutines.
@@ -364,6 +364,9 @@ func newLoader(cfg *Config) *loader {
 	ld := &loader{}
 	if cfg != nil {
 		ld.Config = *cfg
+	}
+	if ld.Config.Env == nil {
+		ld.Config.Env = os.Environ()
 	}
 	if ld.Context == nil {
 		ld.Context = context.Background()

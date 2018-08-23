@@ -6,6 +6,7 @@ package topdown
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -13,6 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -100,6 +102,58 @@ func builtinJWTDecode(a ast.Value) (ast.Value, error) {
 
 // Implements RS256 JWT signature verification
 func builtinJWTVerifyRS256(a ast.Value, b ast.Value) (ast.Value, error) {
+	return builtinJWTVerifyRSA(a, b, func(publicKey *rsa.PublicKey, digest []byte, signature []byte) error {
+		return rsa.VerifyPKCS1v15(
+			publicKey,
+			crypto.SHA256,
+			digest,
+			signature)
+	})
+}
+
+// Implements PS256 JWT signature verification
+func builtinJWTVerifyPS256(a ast.Value, b ast.Value) (ast.Value, error) {
+	return builtinJWTVerifyRSA(a, b, func(publicKey *rsa.PublicKey, digest []byte, signature []byte) error {
+		return rsa.VerifyPSS(
+			publicKey,
+			crypto.SHA256,
+			digest,
+			signature,
+			nil)
+	})
+}
+
+// Implements RSA JWT signature verification.
+func builtinJWTVerifyRSA(a ast.Value, b ast.Value, verify func(publicKey *rsa.PublicKey, digest []byte, signature []byte) error) (ast.Value, error) {
+	return builtinJWTVerify(a, b, func(publicKey interface{}, digest []byte, signature []byte) error {
+		publicKeyRsa, ok := publicKey.(*rsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("incorrect public key type")
+		}
+		return verify(publicKeyRsa, digest, signature)
+	})
+}
+
+// Implements ES256 JWT signature verification.
+func builtinJWTVerifyES256(a ast.Value, b ast.Value) (ast.Value, error) {
+	return builtinJWTVerify(a, b, func(publicKey interface{}, digest []byte, signature []byte) error {
+		publicKeyEcdsa, ok := publicKey.(*ecdsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("incorrect public key type")
+		}
+		r, s := &big.Int{}, &big.Int{}
+		n := len(signature) / 2
+		r.SetBytes(signature[:n])
+		s.SetBytes(signature[n:])
+		if ecdsa.Verify(publicKeyEcdsa, digest, r, s) {
+			return nil
+		}
+		return fmt.Errorf("ECDSA signature verification error")
+	})
+}
+
+// Implements JWT signature verification.
+func builtinJWTVerify(a ast.Value, b ast.Value, verify func(publicKey interface{}, digest []byte, signature []byte) error) (ast.Value, error) {
 	// Decode the JSON Web Token
 	token, err := decodeJWT(a)
 	if err != nil {
@@ -124,18 +178,13 @@ func builtinJWTVerifyRS256(a ast.Value, b ast.Value) (ast.Value, error) {
 		return nil, errors.Wrap(err, "PEM parse error")
 	}
 
-	// Get public key
-	publicKey := cert.PublicKey.(*rsa.PublicKey)
-
 	signature, err := token.decodeSignature()
 	if err != nil {
 		return nil, err
 	}
 
 	// Validate the JWT signature
-	err = rsa.VerifyPKCS1v15(
-		publicKey,
-		crypto.SHA256,
+	err = verify(cert.PublicKey,
 		getInputSHA([]byte(token.header+"."+token.payload)),
 		[]byte(signature))
 
@@ -257,5 +306,7 @@ func getInputSHA(input []byte) (hash []byte) {
 func init() {
 	RegisterFunctionalBuiltin1(ast.JWTDecode.Name, builtinJWTDecode)
 	RegisterFunctionalBuiltin2(ast.JWTVerifyRS256.Name, builtinJWTVerifyRS256)
+	RegisterFunctionalBuiltin2(ast.JWTVerifyPS256.Name, builtinJWTVerifyPS256)
+	RegisterFunctionalBuiltin2(ast.JWTVerifyES256.Name, builtinJWTVerifyES256)
 	RegisterFunctionalBuiltin2(ast.JWTVerifyHS256.Name, builtinJWTVerifyHS256)
 }
