@@ -64,6 +64,9 @@ var DefaultBuiltins = [...]*Builtin{
 	Any,
 	All,
 
+	// Arrays
+	ArrayConcat,
+
 	// Casting
 	ToNumber,
 	CastObject,
@@ -75,6 +78,7 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// Regular Expressions
 	RegexMatch,
+	RegexSplit,
 	GlobsMatch,
 
 	// Sets
@@ -113,6 +117,8 @@ var DefaultBuiltins = [...]*Builtin{
 	// Tokens
 	JWTDecode,
 	JWTVerifyRS256,
+	JWTVerifyPS256,
+	JWTVerifyES256,
 	JWTVerifyHS256,
 
 	// Time
@@ -472,6 +478,22 @@ var Any = &Builtin{
 }
 
 /**
+ * Arrays
+ */
+
+// ArrayConcat returns the result of concatenating two arrays together.
+var ArrayConcat = &Builtin{
+	Name: "array.concat",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewArray(nil, types.A),
+			types.NewArray(nil, types.A),
+		),
+		types.NewArray(nil, types.A),
+	),
+}
+
+/**
  * Casting
  */
 
@@ -566,6 +588,18 @@ var RegexMatch = &Builtin{
 			types.S,
 		),
 		types.B,
+	),
+}
+
+// RegexSplit splits the input string by the occurences of the given pattern.
+var RegexSplit = &Builtin{
+	Name: "regex.split",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.NewArray(nil, types.S),
 	),
 }
 
@@ -878,6 +912,30 @@ var JWTDecode = &Builtin{
 // JWTVerifyRS256 verifies if a RS256 JWT signature is valid or not.
 var JWTVerifyRS256 = &Builtin{
 	Name: "io.jwt.verify_rs256",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyPS256 verifies if a PS256 JWT signature is valid or not.
+var JWTVerifyPS256 = &Builtin{
+	Name: "io.jwt.verify_ps256",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyES256 verifies if a ES256 JWT signature is valid or not.
+var JWTVerifyES256 = &Builtin{
+	Name: "io.jwt.verify_es256",
 	Decl: types.NewFunction(
 		types.Args(
 			types.S,

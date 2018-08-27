@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package envoy.config.filter.network.thrift_proxy.v2alpha1;
+option go_package = "v2";
+
+import "envoy/api/v2/route/route.proto";
+import "validate/validate.proto";
+import "gogoproto/gogo.proto";
+
+// [#protodoc-title: Thrift Proxy Route Configuration]
+// Thrift Proxy :ref:`configuration overview <config_network_filters_thrift_proxy>`.
+
+// [#comment:next free field: 3]
+message RouteConfiguration {
+  // The name of the route configuration. Reserved for future use in asynchronous route discovery.
+  string name = 1;
+
+  // The list of routes that will be matched, in order, against incoming requests. The first route
+  // that matches will be used.
+  repeated Route routes = 2 [(gogoproto.nullable) = false];
+}
+
+// [#comment:next free field: 3]
+message Route {
+  // Route matching prarameters.
+  RouteMatch match = 1 [(validate.rules).message.required = true, (gogoproto.nullable) = false];
+
+  // Route request to some upstream cluster.
+  RouteAction route = 2 [(validate.rules).message.required = true, (gogoproto.nullable) = false];
+}
+
+// [#comment:next free field: 5]
+message RouteMatch {
+  oneof match_specifier {
+    option (validate.required) = true;
+
+    // If specified, the route must exactly match the request method name. As a special case, an
+    // empty string matches any request method name.
+    string method_name = 1;
+
+    // If specified, the route must have the service name as the request method name prefix. As a
+    // special case, an empty string matches any service name. Only relevant when service
+    // multiplexing.
+    string service_name = 2;
+  }
+
+  // Inverts whatever matching is done in the :ref:`method_name
+  // <envoy_api_field_config.filter.network.thrift_proxy.v2alpha1.RouteMatch.method_name>` or
+  // :ref:`service_name
+  // <envoy_api_field_config.filter.network.thrift_proxy.v2alpha1.RouteMatch.service_name>` fields.
+  // Cannot be combined with wildcard matching as that would result in routes never being matched.
+  //
+  // .. note::
+  //
+  //   This does not invert matching done as part of the :ref:`headers field
+  //   <envoy_api_field_config.filter.network.thrift_proxy.v2alpha1.RouteMatch.headers>` field. To
+  //   invert header matching, see :ref:`invert_match
+  //   <envoy_api_field_route.HeaderMatcher.invert_match>`.
+  bool invert = 3;
+
+  // Specifies a set of headers that the route should match on. The router will check the request’s
+  // headers against all the specified headers in the route config. A match will happen if all the
+  // headers in the route are present in the request with the same values (or based on presence if
+  // the value field is not in the config). Note that this only applies for Thrift transports and/or
+  // protocols that support headers.
+  repeated envoy.api.v2.route.HeaderMatcher headers = 4;
+}
+
+// [#comment:next free field: 2]
+message RouteAction {
+  // Indicates the upstream cluster to which the request should be routed.
+  string cluster = 1 [(validate.rules).string.min_bytes = 1];
+}
