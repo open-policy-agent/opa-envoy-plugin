@@ -16,12 +16,11 @@ option go_package = "v2alpha";
 //
 // Here is an example of RBAC configuration. It has two policies:
 //
-// * Service account "cluster.local/ns/default/sa/admin" has full access (empty permission entry
-//   means full access) to the service.
+// * Service account "cluster.local/ns/default/sa/admin" has full access to the service, and so
+//   does "cluster.local/ns/default/sa/superuser".
 //
-// * Any user (empty principal entry means any user) can read ("GET") the service at paths with
-//   prefix "/products" or suffix "/reviews" when request header "version" set to either "v1" or
-//   "v2".
+// * Any user can read ("GET") the service at paths with prefix "/products", so long as the
+//   destination port is either 80 or 443.
 //
 //  .. code-block:: yaml
 //
@@ -104,7 +103,8 @@ message Permission {
     // When any is set, it matches any action.
     bool any = 3 [(validate.rules).bool.const = true];
 
-    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request.
+    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request. Only
+    // available for HTTP request.
     envoy.api.v2.route.HeaderMatcher header = 4;
 
     // A CIDR block that describes the destination IP.
@@ -113,7 +113,8 @@ message Permission {
     // A port number that describes the destination port connecting to.
     uint32 destination_port = 6 [(validate.rules).uint32.lte = 65535];
 
-    // Metadata that describes additional information about the action.
+    // Metadata that describes additional information about the action. Only available for HTTP
+    // request.
     envoy.type.matcher.MetadataMatcher metadata = 7;
 
     // Negates matching the provided permission. For instance, if the value of `not_rule` would
@@ -157,10 +158,12 @@ message Principal {
     // A CIDR block that describes the downstream IP.
     envoy.api.v2.core.CidrRange source_ip = 5;
 
-    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request.
+    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request. Only
+    // available for HTTP request.
     envoy.api.v2.route.HeaderMatcher header = 6;
 
-    // Metadata that describes additional information about the principal.
+    // Metadata that describes additional information about the principal. Only available for HTTP
+    // request.
     envoy.type.matcher.MetadataMatcher metadata = 7;
 
     // Negates matching the provided principal. For instance, if the value of `not_id` would match,
