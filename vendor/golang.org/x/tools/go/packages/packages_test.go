@@ -19,7 +19,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	"golang.org/x/tools/go/packages"
@@ -153,32 +152,8 @@ func TestLoadImportsGraph(t *testing.T) {
   subdir/d_test [subdir/d.test] -> subdir/d [subdir/d.test]
 `[1:]
 
-	// Legacy go list support does not create test main package.
-	wantOldGraph := `
-  a
-  b
-* c
-* e
-  errors
-  math/bits
-* subdir/d
-* subdir/d [subdir/d.test]
-* subdir/d_test [subdir/d.test]
-  unsafe
-  b -> a
-  b -> errors
-  c -> b
-  c -> unsafe
-  e -> b
-  e -> c
-  subdir/d [subdir/d.test] -> math/bits
-  subdir/d_test [subdir/d.test] -> subdir/d [subdir/d.test]
-`[1:]
-
-	if graph != wantGraph && !usesOldGolist {
+	if graph != wantGraph {
 		t.Errorf("wrong import graph: got <<%s>>, want <<%s>>", graph, wantGraph)
-	} else if graph != wantOldGraph && usesOldGolist {
-		t.Errorf("wrong import graph: got <<%s>>, want <<%s>>", graph, wantOldGraph)
 	}
 
 	// Check node information: kind, name, srcs.
@@ -197,10 +172,6 @@ func TestLoadImportsGraph(t *testing.T) {
 		{"subdir/d.test", "main", "command", "0.go"},
 		{"unsafe", "unsafe", "package", ""},
 	} {
-		if usesOldGolist && test.id == "subdir/d.test" {
-			// Legacy go list support does not create test main package.
-			continue
-		}
 		p, ok := all[test.id]
 		if !ok {
 			t.Errorf("no package %s", test.id)
@@ -262,20 +233,8 @@ func TestLoadImportsGraph(t *testing.T) {
   subdir/d_test [subdir/d.test] -> subdir/d [subdir/d.test]
 `[1:]
 
-		// Legacy go list support does not create test main package.
-		wantOldGraph = `
-  math/bits
-* subdir/d
-* subdir/d [subdir/d.test]
-* subdir/d_test [subdir/d.test]
-* subdir/e
-  subdir/d [subdir/d.test] -> math/bits
-  subdir/d_test [subdir/d.test] -> subdir/d [subdir/d.test]
-`[1:]
-		if graph != wantGraph && !usesOldGolist {
+		if graph != wantGraph {
 			t.Errorf("wrong import graph: got <<%s>>, want <<%s>>", graph, wantGraph)
-		} else if graph != wantOldGraph && usesOldGolist {
-			t.Errorf("wrong import graph: got <<%s>>, want <<%s>>", graph, wantOldGraph)
 		}
 	}
 }
@@ -546,17 +505,6 @@ package b`,
 	}
 }
 
-type errCollector struct {
-	mu     sync.Mutex
-	errors []error
-}
-
-func (ec *errCollector) add(err error) {
-	ec.mu.Lock()
-	ec.errors = append(ec.errors, err)
-	ec.mu.Unlock()
-}
-
 func TestLoadTypes(t *testing.T) {
 	// In LoadTypes and LoadSyntax modes, the compiler will
 	// fail to generate an export data file for c, because it has
@@ -571,9 +519,8 @@ func TestLoadTypes(t *testing.T) {
 	defer cleanup()
 
 	cfg := &packages.Config{
-		Mode:  packages.LoadTypes,
-		Env:   append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
-		Error: func(error) {},
+		Mode: packages.LoadTypes,
+		Env:  append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
 	}
 	initial, err := packages.Load(cfg, "a")
 	if err != nil {
@@ -638,9 +585,8 @@ func TestLoadSyntaxOK(t *testing.T) {
 	defer cleanup()
 
 	cfg := &packages.Config{
-		Mode:  packages.LoadSyntax,
-		Env:   append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
-		Error: func(error) {},
+		Mode: packages.LoadSyntax,
+		Env:  append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
 	}
 	initial, err := packages.Load(cfg, "a", "c")
 	if err != nil {
@@ -732,32 +678,16 @@ func TestLoadDiamondTypes(t *testing.T) {
 	cfg := &packages.Config{
 		Mode: packages.LoadSyntax,
 		Env:  append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
-		Error: func(err error) {
-			t.Errorf("Error during load: %v", err)
-		},
 	}
 	initial, err := packages.Load(cfg, "a")
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	var visit func(pkg *packages.Package)
-	seen := make(map[string]bool)
-	visit = func(pkg *packages.Package) {
-		if seen[pkg.ID] {
-			return
-		}
-		seen[pkg.ID] = true
+	packages.Visit(initial, nil, func(pkg *packages.Package) {
 		for _, err := range pkg.Errors {
-			t.Errorf("Error on package %v: %v", pkg.ID, err)
+			t.Errorf("package %s: %v", pkg.ID, err)
 		}
-		for _, imp := range pkg.Imports {
-			visit(imp)
-		}
-	}
-	for _, pkg := range initial {
-		visit(pkg)
-	}
+	})
 
 	graph, _ := importGraph(initial)
 	wantGraph := `
@@ -791,9 +721,8 @@ func TestLoadSyntaxError(t *testing.T) {
 	defer cleanup()
 
 	cfg := &packages.Config{
-		Mode:  packages.LoadSyntax,
-		Env:   append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
-		Error: func(error) {},
+		Mode: packages.LoadSyntax,
+		Env:  append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
 	}
 	initial, err := packages.Load(cfg, "a", "c")
 	if err != nil {
@@ -801,18 +730,9 @@ func TestLoadSyntaxError(t *testing.T) {
 	}
 
 	all := make(map[string]*packages.Package)
-	var visit func(p *packages.Package)
-	visit = func(p *packages.Package) {
-		if all[p.ID] == nil {
-			all[p.ID] = p
-			for _, imp := range p.Imports {
-				visit(imp)
-			}
-		}
-	}
-	for _, p := range initial {
-		visit(p)
-	}
+	packages.Visit(initial, nil, func(p *packages.Package) {
+		all[p.ID] = p
+	})
 
 	for _, test := range []struct {
 		id           string
@@ -896,11 +816,9 @@ func TestLoadAllSyntaxOverlay(t *testing.T) {
 				return parser.ParseFile(fset, filename, src, mode)
 			}
 		}
-		var errs errCollector
 		cfg := &packages.Config{
 			Mode:      packages.LoadAllSyntax,
 			Env:       append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
-			Error:     errs.add,
 			ParseFile: parseFile,
 		}
 		initial, err := packages.Load(cfg, "a")
@@ -916,7 +834,12 @@ func TestLoadAllSyntaxOverlay(t *testing.T) {
 			t.Errorf("%d. a.A: got %s, want %s", i, got, test.want)
 		}
 
-		if errs := errorMessages(errs.errors); !reflect.DeepEqual(errs, test.wantErrs) {
+		// Check errors.
+		var errors []packages.Error
+		packages.Visit(initial, nil, func(pkg *packages.Package) {
+			errors = append(errors, pkg.Errors...)
+		})
+		if errs := errorMessages(errors); !reflect.DeepEqual(errs, test.wantErrs) {
 			t.Errorf("%d. got errors %s, want %s", i, errs, test.wantErrs)
 		}
 	}
@@ -948,11 +871,9 @@ import (
 
 	os.Mkdir(filepath.Join(tmp, "src/empty"), 0777) // create an existing but empty package
 
-	var errs2 errCollector
 	cfg := &packages.Config{
-		Mode:  packages.LoadAllSyntax,
-		Env:   append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
-		Error: errs2.add,
+		Mode: packages.LoadAllSyntax,
+		Env:  append(os.Environ(), "GOPATH="+tmp, "GO111MODULE=off"),
 	}
 	initial, err := packages.Load(cfg, "root")
 	if err != nil {
@@ -1169,39 +1090,21 @@ func TestJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Visit and print all packages.
 	buf := &bytes.Buffer{}
 	enc := json.NewEncoder(buf)
 	enc.SetIndent("", "\t")
-	seen := make(map[string]bool)
-	var visit func(*packages.Package)
-	visit = func(pkg *packages.Package) {
-		if seen[pkg.ID] {
-			return
-		}
-		seen[pkg.ID] = true
-
-		// Trim the source lists for stable results.
+	packages.Visit(initial, nil, func(pkg *packages.Package) {
+		// trim the source lists for stable results
 		pkg.GoFiles = cleanPaths(pkg.GoFiles)
 		pkg.CompiledGoFiles = cleanPaths(pkg.CompiledGoFiles)
 		pkg.OtherFiles = cleanPaths(pkg.OtherFiles)
-
-		// Visit imports.
-		var importPaths []string
-		for path := range pkg.Imports {
-			importPaths = append(importPaths, path)
-		}
-		sort.Strings(importPaths) // for determinism
-		for _, path := range importPaths {
-			visit(pkg.Imports[path])
-		}
-
 		if err := enc.Encode(pkg); err != nil {
 			t.Fatal(err)
 		}
-	}
-	for _, pkg := range initial {
-		visit(pkg)
-	}
+	})
+
 	wantJSON := `
 {
 	"ID": "a",
@@ -1401,17 +1304,11 @@ EOF
 	}
 }
 
-func errorMessages(errors []error) []string {
+func errorMessages(errors []packages.Error) []string {
 	var msgs []string
 	for _, err := range errors {
-		msg := err.Error()
-		// Strip off /tmp filename.
-		if i := strings.Index(msg, ": "); i >= 0 {
-			msg = msg[i+len(": "):]
-		}
-		msgs = append(msgs, msg)
+		msgs = append(msgs, err.Msg)
 	}
-	sort.Strings(msgs)
 	return msgs
 }
 
@@ -1444,6 +1341,8 @@ func importGraph(initial []*packages.Package) (string, map[string]*packages.Pack
 		initialSet[p] = true
 	}
 
+	// We can't use Visit because we need to prune
+	// the traversal of specific edges, not just nodes.
 	var nodes, edges []string
 	res := make(map[string]*packages.Package)
 	seen := make(map[*packages.Package]bool)

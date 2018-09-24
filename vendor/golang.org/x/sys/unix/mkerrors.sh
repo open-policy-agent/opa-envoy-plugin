@@ -25,7 +25,11 @@ if [[ "$GOOS" = "linux" ]] && [[ "$GOARCH" != "sparc64" ]]; then
 	fi
 fi
 
-CC=${CC:-cc}
+if [[ "$GOOS" = "aix" ]]; then
+	CC=${CC:-gcc}
+else
+	CC=${CC:-cc}
+fi
 
 if [[ "$GOOS" = "solaris" ]]; then
 	# Assumes GNU versions of utilities in PATH.
@@ -33,6 +37,21 @@ if [[ "$GOOS" = "solaris" ]]; then
 fi
 
 uname=$(uname)
+
+includes_AIX='
+#include <net/if.h>
+#include <net/netopt.h>
+#include <netinet/ip_mroute.h>
+#include <sys/protosw.h>
+#include <sys/stropts.h>
+#include <sys/mman.h>
+#include <sys/poll.h>
+#include <sys/termio.h>
+#include <termios.h>
+#include <fcntl.h>
+
+#define AF_LOCAL AF_UNIX
+'
 
 includes_Darwin='
 #define _DARWIN_C_SOURCE
@@ -175,6 +194,7 @@ struct ltchars {
 #include <linux/fs.h>
 #include <linux/keyctl.h>
 #include <linux/magic.h>
+#include <linux/memfd.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netlink.h>
 #include <linux/net_namespace.h>
@@ -196,6 +216,7 @@ struct ltchars {
 #include <linux/watchdog.h>
 #include <linux/hdreg.h>
 #include <linux/rtc.h>
+#include <linux/if_xdp.h>
 #include <mtd/ubi-user.h>
 #include <net/route.h>
 #include <asm/termbits.h>
@@ -226,6 +247,16 @@ struct ltchars {
 #define FS_KEY_DESC_PREFIX              "fscrypt:"
 #define FS_KEY_DESC_PREFIX_SIZE         8
 #define FS_MAX_KEY_SIZE                 64
+
+// XDP socket constants do not appear to be picked up otherwise.
+// Copied from samples/bpf/xdpsock_user.c.
+#ifndef SOL_XDP
+#define SOL_XDP 283
+#endif
+
+#ifndef AF_XDP
+#define AF_XDP 44
+#endif
 '
 
 includes_NetBSD='
@@ -234,6 +265,7 @@ includes_NetBSD='
 #include <sys/event.h>
 #include <sys/extattr.h>
 #include <sys/mman.h>
+#include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
 #include <sys/sysctl.h>
@@ -360,6 +392,7 @@ ccflags="$@"
 		$2 ~ /^EXTATTR_NAMESPACE_NAMES/ ||
 		$2 ~ /^EXTATTR_NAMESPACE_[A-Z]+_STRING/ {next}
 
+		$2 !~ /^ECCAPBITS/ &&
 		$2 !~ /^ETH_/ &&
 		$2 !~ /^EPROC_/ &&
 		$2 !~ /^EQUIV_/ &&
@@ -395,7 +428,7 @@ ccflags="$@"
 		$2 ~ /^TC[IO](ON|OFF)$/ ||
 		$2 ~ /^IN_/ ||
 		$2 ~ /^LOCK_(SH|EX|NB|UN)$/ ||
-		$2 ~ /^(AF|SOCK|SO|SOL|IPPROTO|IP|IPV6|ICMP6|TCP|EVFILT|NOTE|EV|SHUT|PROT|MAP|T?PACKET|MSG|SCM|MCL|DT|MADV|PR)_/ ||
+		$2 ~ /^(AF|SOCK|SO|SOL|IPPROTO|IP|IPV6|ICMP6|TCP|EVFILT|NOTE|EV|SHUT|PROT|MAP|MFD|T?PACKET|MSG|SCM|MCL|DT|MADV|PR)_/ ||
 		$2 ~ /^TP_STATUS_/ ||
 		$2 ~ /^FALLOC_/ ||
 		$2 == "ICMPV6_FILTER" ||
@@ -438,6 +471,7 @@ ccflags="$@"
 		$2 ~ /^PERF_EVENT_IOC_/ ||
 		$2 ~ /^SECCOMP_MODE_/ ||
 		$2 ~ /^SPLICE_/ ||
+		$2 ~ /^SYNC_FILE_RANGE_/ ||
 		$2 !~ /^AUDIT_RECORD_MAGIC/ &&
 		$2 !~ /IOC_MAGIC/ &&
 		$2 ~ /^[A-Z][A-Z0-9_]+_MAGIC2?$/ ||
@@ -455,6 +489,7 @@ ccflags="$@"
 		$2 ~ /^FSOPT_/ ||
 		$2 ~ /^WDIOC_/ ||
 		$2 ~ /^NFN/ ||
+		$2 ~ /^XDP_/ ||
 		$2 ~ /^(HDIO|WIN|SMART)_/ ||
 		$2 !~ "WMESGLEN" &&
 		$2 ~ /^W[A-Z0-9]+$/ ||
@@ -479,7 +514,7 @@ errors=$(
 signals=$(
 	echo '#include <signal.h>' | $CC -x c - -E -dM $ccflags |
 	awk '$1=="#define" && $2 ~ /^SIG[A-Z0-9]+$/ { print $2 }' |
-	egrep -v '(SIGSTKSIZE|SIGSTKSZ|SIGRT)' |
+	egrep -v '(SIGSTKSIZE|SIGSTKSZ|SIGRT|SIGMAX64)' |
 	sort
 )
 
@@ -489,7 +524,7 @@ echo '#include <errno.h>' | $CC -x c - -E -dM $ccflags |
 	sort >_error.grep
 echo '#include <signal.h>' | $CC -x c - -E -dM $ccflags |
 	awk '$1=="#define" && $2 ~ /^SIG[A-Z0-9]+$/ { print "^\t" $2 "[ \t]*=" }' |
-	egrep -v '(SIGSTKSIZE|SIGSTKSZ|SIGRT)' |
+	egrep -v '(SIGSTKSIZE|SIGSTKSZ|SIGRT|SIGMAX64)' |
 	sort >_signal.grep
 
 echo '// mkerrors.sh' "$@"

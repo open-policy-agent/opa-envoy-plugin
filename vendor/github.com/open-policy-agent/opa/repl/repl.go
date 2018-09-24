@@ -556,24 +556,9 @@ func (r *REPL) recompile(ctx context.Context, cpy *ast.Module) error {
 	return nil
 }
 
-func (r *REPL) compileBody(ctx context.Context, body ast.Body, input ast.Value) (ast.Body, *ast.TypeEnv, error) {
+func (r *REPL) compileBody(ctx context.Context, compiler *ast.Compiler, body ast.Body, input ast.Value) (ast.Body, *ast.TypeEnv, error) {
 	r.timerStart(metrics.RegoQueryCompile)
 	defer r.timerStop(metrics.RegoQueryCompile)
-
-	policies, err := r.loadModules(ctx, r.txn)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	for id, mod := range r.modules {
-		policies[id] = mod
-	}
-
-	compiler := ast.NewCompiler().SetErrorLimit(r.errLimit)
-
-	if compiler.Compile(policies); compiler.Failed() {
-		return nil, nil, compiler.Errors
-	}
 
 	qctx := ast.NewQueryContext().
 		WithPackage(r.modules[r.currentModuleID].Package).
@@ -581,13 +566,13 @@ func (r *REPL) compileBody(ctx context.Context, body ast.Body, input ast.Value) 
 		WithInput(input)
 
 	qc := compiler.QueryCompiler()
-	body, err = qc.WithContext(qctx).Compile(body)
+	body, err := qc.WithContext(qctx).Compile(body)
 	return body, qc.TypeEnv(), err
 }
 
-func (r *REPL) compileRule(ctx context.Context, rule *ast.Rule) error {
-	r.timerStart(metrics.RegoQueryCompile)
-	defer r.timerStop(metrics.RegoQueryCompile)
+func (r *REPL) compileRule(ctx context.Context, rule *ast.Rule, unset bool) error {
+	r.timerStart(metrics.RegoModuleCompile)
+	defer r.timerStop(metrics.RegoModuleCompile)
 
 	mod := r.modules[r.currentModuleID]
 	prev := mod.Rules
@@ -611,6 +596,18 @@ func (r *REPL) compileRule(ctx context.Context, rule *ast.Rule) error {
 	if compiler.Compile(policies); compiler.Failed() {
 		mod.Rules = prev
 		return compiler.Errors
+	}
+
+	switch r.outputFormat {
+	case "json":
+	default:
+		var msg string
+		if unset {
+			msg = "re-defined"
+		} else {
+			msg = "defined"
+		}
+		fmt.Fprintf(r.output, "Rule '%v' %v in %v. Type 'show' to see rules.\n", rule.Head.Name, msg, mod.Package)
 	}
 
 	return nil
@@ -678,6 +675,9 @@ func (r *REPL) evalBufferMulti(ctx context.Context) error {
 
 func (r *REPL) loadCompiler(ctx context.Context) (*ast.Compiler, error) {
 
+	r.timerStart(metrics.RegoModuleCompile)
+	defer r.timerStop(metrics.RegoModuleCompile)
+
 	policies, err := r.loadModules(ctx, r.txn)
 	if err != nil {
 		return nil, err
@@ -698,12 +698,7 @@ func (r *REPL) loadCompiler(ctx context.Context) (*ast.Compiler, error) {
 
 // loadInput returns the input defined in the REPL. The REPL loads the
 // input from the data.repl.input document.
-func (r *REPL) loadInput(ctx context.Context) (ast.Value, error) {
-
-	compiler, err := r.loadCompiler(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (r *REPL) loadInput(ctx context.Context, compiler *ast.Compiler) (ast.Value, error) {
 
 	q := topdown.NewQuery(ast.MustParseBody("data.repl.input = x")).
 		WithCompiler(compiler).
@@ -725,7 +720,12 @@ func (r *REPL) loadInput(ctx context.Context) (ast.Value, error) {
 func (r *REPL) evalStatement(ctx context.Context, stmt interface{}) error {
 	switch s := stmt.(type) {
 	case ast.Body:
-		input, err := r.loadInput(ctx)
+		compiler, err := r.loadCompiler(ctx)
+		if err != nil {
+			return err
+		}
+
+		input, err := r.loadInput(ctx, compiler)
 		if err != nil {
 			return err
 		}
@@ -736,14 +736,15 @@ func (r *REPL) evalStatement(ctx context.Context, stmt interface{}) error {
 			expr := parsedBody[0]
 			rule, err := ast.ParseCompleteDocRuleFromEqExpr(r.modules[r.currentModuleID], expr.Operand(0), expr.Operand(1))
 			if err == nil {
-				if _, err := r.unsetRule(ctx, rule.Head.Name); err != nil {
+				ok, err := r.unsetRule(ctx, rule.Head.Name)
+				if err != nil {
 					return err
 				}
-				return r.compileRule(ctx, rule)
+				return r.compileRule(ctx, rule, ok)
 			}
 		}
 
-		compiledBody, typeEnv, err := r.compileBody(ctx, parsedBody, input)
+		compiledBody, typeEnv, err := r.compileBody(ctx, compiler, parsedBody, input)
 		if err != nil {
 			return err
 		}
@@ -752,13 +753,8 @@ func (r *REPL) evalStatement(ctx context.Context, stmt interface{}) error {
 			expr := compiledBody[0]
 			rule, err := ast.ParseCompleteDocRuleFromEqExpr(r.modules[r.currentModuleID], expr.Operand(0), expr.Operand(1))
 			if err == nil {
-				return r.compileRule(ctx, rule)
+				return r.compileRule(ctx, rule, false)
 			}
-		}
-
-		compiler, err := r.loadCompiler(ctx)
-		if err != nil {
-			return err
 		}
 
 		if len(r.unknowns) > 0 {
@@ -772,7 +768,7 @@ func (r *REPL) evalStatement(ctx context.Context, stmt interface{}) error {
 
 		return err
 	case *ast.Rule:
-		return r.compileRule(ctx, s)
+		return r.compileRule(ctx, s, false)
 	case *ast.Import:
 		return r.evalImport(s)
 	case *ast.Package:
@@ -850,21 +846,23 @@ func (r *REPL) evalPartial(ctx context.Context, compiler *ast.Compiler, input as
 	)
 
 	pq, err := eval.Partial(ctx)
-	if err != nil {
-		return err
+
+	output := pr.Output{
+		Metrics: r.metrics,
+		Partial: pq,
+		Error:   err,
 	}
 
 	if buf != nil {
-		r.printTrace(ctx, compiler, *buf)
+		output.Explanation = *buf
 	}
 
-	if r.metrics != nil {
-		r.printMetricsJSON(r.metrics)
+	switch r.outputFormat {
+	case "json":
+		return pr.JSON(r.output, output)
+	default:
+		return pr.Pretty(r.output, output)
 	}
-
-	r.printPartialResults(pq)
-
-	return nil
 }
 
 func (r *REPL) evalImport(i *ast.Import) error {
@@ -936,42 +934,6 @@ func (r *REPL) loadModules(ctx context.Context, txn storage.Transaction) (map[st
 	}
 
 	return modules, nil
-}
-
-func (r *REPL) printPartialResults(pq *rego.PartialQueries) {
-	switch r.outputFormat {
-	case "json":
-		pr.JSON(r.output, pq)
-	default:
-		r.printPartialPretty(pq)
-	}
-}
-
-func (r *REPL) printPartialPretty(pq *rego.PartialQueries) {
-
-	for i := range pq.Queries {
-		fmt.Fprintln(r.output, pq.Queries[i])
-	}
-
-	for i := range pq.Support {
-		fmt.Fprintln(r.output)
-		fmt.Fprintf(r.output, "# support module %d\n", i+1)
-		fmt.Fprintln(r.output, pq.Support[i])
-	}
-}
-
-func (r *REPL) printTrace(ctx context.Context, compiler *ast.Compiler, trace []*topdown.Event) {
-	topdown.PrettyTrace(r.output, trace)
-}
-
-func (r *REPL) printMetricsJSON(metrics metrics.Metrics) {
-	buf, err := json.MarshalIndent(metrics.All(), "", "  ")
-	if err != nil {
-		panic("not reached")
-	}
-
-	r.output.Write(buf)
-	fmt.Fprintln(r.output)
 }
 
 func (r *REPL) printTypes(ctx context.Context, typeEnv *ast.TypeEnv, body ast.Body) {

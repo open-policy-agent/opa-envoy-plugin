@@ -339,6 +339,25 @@ func TestCompileV1Observability(t *testing.T) {
 	}
 }
 
+func TestCompileV1UnsafeBuiltin(t *testing.T) {
+	f := newFixture(t)
+	get := newReqV1(http.MethodPost, `/compile`, `{"query": "http.send({\"method\": \"get\", \"url\": \"foo.com\"}, x)"}`)
+	f.server.Handler.ServeHTTP(f.recorder, get)
+
+	if f.recorder.Code != 400 {
+		t.Fatalf("Expected bad request but got %v", f.recorder)
+	}
+
+	expected := `{
+  "code": "invalid_parameter",
+  "message": "unsafe built-in function calls in query: http.send"
+}`
+
+	if f.recorder.Body.String() != expected {
+		t.Fatalf(`Expected %v but got: %v`, expected, f.recorder.Body.String())
+	}
+}
+
 func TestDataV1(t *testing.T) {
 	testMod1 := `package testmod
 
@@ -1130,6 +1149,25 @@ func TestV1Pretty(t *testing.T) {
 	if len(lines) != 16 {
 		t.Errorf("Expected 16 lines of output but got %d:\n%v", len(lines), lines)
 	}
+}
+
+func TestIndexGetEscaped(t *testing.T) {
+	f := newFixture(t)
+	get, err := http.NewRequest(http.MethodGet, `/?q=</textarea><script>alert(1)</script>`, strings.NewReader(""))
+	if err != nil {
+		panic(err)
+	}
+	f.server.Handler.ServeHTTP(f.recorder, get)
+	if f.recorder.Code != 200 {
+		t.Errorf("Expected success but got: %v", f.recorder)
+		return
+	}
+	page := f.recorder.Body.String()
+	exp := "&lt;/textarea&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+	if !strings.Contains(page, exp) {
+		t.Fatalf("Expected page to contain escaped URL parameter but got: %v", page)
+	}
+
 }
 
 func TestIndexGet(t *testing.T) {
@@ -2162,6 +2200,25 @@ func TestQueryV1(t *testing.T) {
 
 	if !reflect.DeepEqual(result, expected) {
 		t.Fatalf("Expected %v but got: %v", expected, result)
+	}
+}
+
+func TestQueryV1UnsafeBuiltin(t *testing.T) {
+	f := newFixture(t)
+	get := newReqV1(http.MethodGet, `/query?q=http.send({"method": "get", "url": "foo.com"}, x)`, "")
+	f.server.Handler.ServeHTTP(f.recorder, get)
+
+	if f.recorder.Code != 400 {
+		t.Fatalf("Expected bad request but got %v", f.recorder)
+	}
+
+	expected := `{
+  "code": "invalid_parameter",
+  "message": "unsafe built-in function calls in query: http.send"
+}`
+
+	if f.recorder.Body.String() != expected {
+		t.Fatalf(`Expected %v but got: %v`, expected, f.recorder.Body.String())
 	}
 }
 

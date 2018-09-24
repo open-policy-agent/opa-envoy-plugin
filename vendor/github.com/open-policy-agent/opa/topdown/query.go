@@ -183,7 +183,10 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		partials = append(partials, body)
 		return nil
 	})
-	return partials, e.saveSupport.List(), err
+
+	support = e.saveSupport.List()
+
+	return partials, support, err
 }
 
 // Run is a wrapper around Iter that accumulates query results and returns them

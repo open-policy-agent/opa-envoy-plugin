@@ -169,7 +169,7 @@ $ opa test --format=json pass_fail_error_test.rego
     },
     "package": "data.example",
     "name": "test_ok",
-    "duration": 610111
+    "duration": 618515
   },
   {
     "location": {
@@ -179,8 +179,8 @@ $ opa test --format=json pass_fail_error_test.rego
     },
     "package": "data.example",
     "name": "test_failure",
-    "fail": false,
-    "duration": 325989
+    "fail": true,
+    "duration": 322177
   },
   {
     "location": {
@@ -199,7 +199,7 @@ $ opa test --format=json pass_fail_error_test.rego
         "col": 5
       }
     },
-    "duration": 325903
+    "duration": 345148
   }
 ]
 ```
@@ -221,7 +221,7 @@ If we run the coverage report on the original **example.rego** file without
 that line 8 is not covered.
 
 ```bash
-opa test --cover --format=json example.rego example_test.rego
+opa test --coverage --format=json example.rego example_test.rego
 ```
 
 ```json

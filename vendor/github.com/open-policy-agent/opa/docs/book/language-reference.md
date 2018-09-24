@@ -45,6 +45,12 @@ complex types.
 | <span class="opa-keep-it-together">``all(array_or_set, output)``</span> | 1 | ``output`` is ``true`` if all of the values in ``array_or_set`` are ``true``. A collection of length 0 returns ``true``.|
 | <span class="opa-keep-it-together">``any(array_or_set, output)``</span> | 1 | ``output`` is ``true`` if any of the values in ``array_or_set`` is ``true``. A collection of length 0 returns ``false``.|
 
+### Arrays
+
+| Built-in | Inputs | Description |
+| ------- |--------|-------------|
+| <span class="opa-keep-it-together">``array.concat(array, array, output)``</span> | 2 | ``output`` is the result of concatenating the two input arrays together. |
+
 ### Sets
 
 | Built-in | Inputs | Description |
@@ -79,6 +85,7 @@ complex types.
 | <span class="opa-keep-it-together">``re_match(pattern, value)``</span> | 2 | true if the ``value`` matches the regex ``pattern`` |
 | <span class="opa-keep-it-together">``regex.split(pattern, string, output)``</span> | 2 | ``output`` is ``array[string]`` representing elements of ``string`` separated by ``pattern`` |
 | <span class="opa-keep-it-together">``regex.globs_match(glob1, glob2)``</span> | 2 | true if the intersection of regex-style globs ``glob1`` and ``glob2`` matches a non-empty set of non-empty strings. The set of regex symbols is limited for this builtin: only ``.``, ``*``, ``+``, ``[``, ``-``, ``]`` and ``\`` are treated as special symbols. |
+| <span class="opa-keep-it-together">``regex.template_match(patter, string, delimiter_start, delimiter_end, output)``</span> | 4 | ``output`` is true if ``string`` matches ``pattern``. ``pattern`` is a string containing ``0..n`` regular expressions delimited by ``delimiter_start`` and ``delimiter_end``. Example ``regex.template_match("urn:foo:{.*}", "urn:foo:bar:baz", "{", "}", x)`` returns ``true`` for ``x``. |
 
 ### Types
 
@@ -158,7 +165,12 @@ evaluation query will always return the same value.
 ### HTTP
 | Built-in | Inputs | Description |
 | ------- |--------|-------------|
-| <span class="opa-keep-it-together">``http.send(request, output)``</span> | 1 | ``http.send`` executes a HTTP request and returns the response.``request`` is an object containing keys ``method``, ``url`` and  optionally ``body``. For example, ``http.send({"method": "get", "url": "http://www.openpolicyagent.org/"}, output)``. ``output`` is an object containing keys ``status``, ``status_code`` and ``body`` which represent the HTTP status, status code and response body respectively. Sample output, ``{"status": "200 OK", "status_code": 200, "body": null``}|
+| <span class="opa-keep-it-together">``http.send(request, output)``</span> | 1 | ``http.send`` executes a HTTP request and returns the response.``request`` is an object containing keys ``method``, ``url`` and  optionally ``body`` and ``enable_redirect``. For example, ``http.send({"method": "get", "url": "http://www.openpolicyagent.org/"}, output)``. ``output`` is an object containing keys ``status``, ``status_code`` and ``body`` which represent the HTTP status, status code and response body respectively. Sample output, ``{"status": "200 OK", "status_code": 200, "body": null``}. By default, http redirects are not enabled. To enable, set ``enable_redirect`` to ``true``.|
+
+### Net
+| Built-in | Inputs | Description |
+| ------- |--------|-------------|
+| <span class="opa-keep-it-together">``net.cidr_overlap(cidr, ip, output)``</span> | 2 | `output` is `true` if `ip` (e.g. `127.0.0.1`) overlaps with `cidr` (e.g. `127.0.0.1/24`) and false otherwise. Supports both IPv4 and IPv6 notations.|
 
 ### Rego
 | Built-in | Inputs | Description |
