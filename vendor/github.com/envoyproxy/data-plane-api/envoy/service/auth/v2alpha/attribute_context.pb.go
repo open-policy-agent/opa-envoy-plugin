@@ -679,6 +679,9 @@ func encodeVarintAttributeContext(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *AttributeContext) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Source != nil {
@@ -708,6 +711,9 @@ func (m *AttributeContext) Size() (n int) {
 }
 
 func (m *AttributeContext_Peer) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Address != nil {
@@ -737,6 +743,9 @@ func (m *AttributeContext_Peer) Size() (n int) {
 }
 
 func (m *AttributeContext_Request) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Time != nil {
@@ -754,6 +763,9 @@ func (m *AttributeContext_Request) Size() (n int) {
 }
 
 func (m *AttributeContext_HttpRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Id)

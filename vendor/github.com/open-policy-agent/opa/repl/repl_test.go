@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/internal/presentation"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
@@ -345,7 +345,9 @@ import input.xyz` + "\n\n"
 	buffer.Reset()
 
 	repl.OneShot(ctx, `p[1] { true }`)
+	buffer.Reset()
 	repl.OneShot(ctx, `p[2] { true }`)
+	buffer.Reset()
 	repl.OneShot(ctx, "show")
 
 	expected = `package repl_test
@@ -403,6 +405,7 @@ func TestUnknown(t *testing.T) {
 	repl := newRepl(store, &buffer)
 
 	repl.OneShot(ctx, "xs = [1,2,3]")
+	buffer.Reset()
 
 	err := repl.OneShot(ctx, "unknown input")
 	if err != nil {
@@ -413,9 +416,19 @@ func TestUnknown(t *testing.T) {
 
 	output := strings.TrimSpace(buffer.String())
 	expected := strings.TrimSpace(`
-input.x = 1; i = 0; x = 1
-input.x = 2; i = 1; x = 2
-input.x = 3; i = 2; x = 3
++---------+-------------+
+| Query 1 | input.x = 1 |
+|         | i = 0       |
+|         | x = 1       |
++---------+-------------+
+| Query 2 | input.x = 2 |
+|         | i = 1       |
+|         | x = 2       |
++---------+-------------+
+| Query 3 | input.x = 3 |
+|         | i = 2       |
+|         | x = 3       |
++---------+-------------+
 `)
 
 	if output != expected {
@@ -429,6 +442,7 @@ func TestUnknownMetrics(t *testing.T) {
 	repl := newRepl(store, &buffer)
 
 	repl.OneShot(ctx, "xs = [1,2,3]")
+	buffer.Reset()
 
 	err := repl.OneShot(ctx, "unknown input")
 	if err != nil {
@@ -441,12 +455,22 @@ func TestUnknownMetrics(t *testing.T) {
 
 	output := strings.TrimSpace(buffer.String())
 	expected := strings.TrimSpace(`
-input.x = 1; i = 0; x = 1
-input.x = 2; i = 1; x = 2
-input.x = 3; i = 2; x = 3
++---------+-------------+
+| Query 1 | input.x = 1 |
+|         | i = 0       |
+|         | x = 1       |
++---------+-------------+
+| Query 2 | input.x = 2 |
+|         | i = 1       |
+|         | x = 2       |
++---------+-------------+
+| Query 3 | input.x = 3 |
+|         | i = 2       |
+|         | x = 3       |
++---------+-------------+
 `)
 
-	if !strings.HasSuffix(output, expected) {
+	if !strings.HasPrefix(output, expected) {
 		t.Fatalf("Unexpected partial eval results. Expected:\n\n%v\n\nGot:\n\n%v", expected, output)
 	}
 
@@ -462,6 +486,7 @@ func TestUnknownJSON(t *testing.T) {
 	repl := newRepl(store, &buffer)
 
 	repl.OneShot(ctx, "xs = [1,2,3]")
+	buffer.Reset()
 
 	err := repl.OneShot(ctx, "unknown input")
 	if err != nil {
@@ -471,13 +496,13 @@ func TestUnknownJSON(t *testing.T) {
 	repl.OneShot(ctx, "json")
 	repl.OneShot(ctx, "data.repl.xs[i] = x; input.x = x")
 
-	var result rego.PartialQueries
+	var result presentation.Output
 
 	if err := json.NewDecoder(&buffer).Decode(&result); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(result.Queries) != 3 {
+	if len(result.Partial.Queries) != 3 {
 		t.Fatalf("Expected exactly 3 queries in partial evaluation output but got: %v", result)
 	}
 }
@@ -599,7 +624,7 @@ func TestOneShotEmptyBufferOneRule(t *testing.T) {
 	var buffer bytes.Buffer
 	repl := newRepl(store, &buffer)
 	repl.OneShot(ctx, `p[x] { data.a[i] = x }`)
-	expectOutput(t, buffer.String(), "")
+	expectOutput(t, buffer.String(), "Rule 'p' defined in package repl. Type 'show' to see rules.\n")
 }
 
 func TestOneShotBufferedExpr(t *testing.T) {
@@ -631,7 +656,8 @@ func TestOneShotBufferedRule(t *testing.T) {
 	repl.OneShot(ctx, "}")
 	expectOutput(t, buffer.String(), "")
 	repl.OneShot(ctx, "")
-	expectOutput(t, buffer.String(), "")
+	expectOutput(t, buffer.String(), "Rule 'p' defined in package repl. Type 'show' to see rules.\n")
+	buffer.Reset()
 	repl.OneShot(ctx, "p[2]")
 	expectOutput(t, buffer.String(), "2\n")
 }
@@ -792,7 +818,7 @@ func TestEvalConstantRule(t *testing.T) {
 	repl := newRepl(store, &buffer)
 	repl.OneShot(ctx, "pi = 3.14")
 	result := buffer.String()
-	if result != "" {
+	if result != "Rule 'pi' defined in package repl. Type 'show' to see rules.\n" {
 		t.Errorf("Expected rule to be defined but got: %v", result)
 		return
 	}
@@ -824,10 +850,21 @@ func TestEvalConstantRuleAssignment(t *testing.T) {
 	store := newTestStore()
 	var buffer bytes.Buffer
 
+	defined := "Rule 'x' defined in package repl. Type 'show' to see rules.\n"
+	redefined := "Rule 'x' re-defined in package repl. Type 'show' to see rules.\n"
+	definedInput := "Rule 'input' defined in package repl. Type 'show' to see rules.\n"
+	redefinedInput := "Rule 'input' re-defined in package repl. Type 'show' to see rules.\n"
+
 	repl := newRepl(store, &buffer)
 	repl.OneShot(ctx, "x = 1")
+	assertREPLText(t, buffer, defined)
+	buffer.Reset()
 	repl.OneShot(ctx, "x := 2")
+	assertREPLText(t, buffer, redefined)
+	buffer.Reset()
 	repl.OneShot(ctx, "x := 3")
+	assertREPLText(t, buffer, redefined)
+	buffer.Reset()
 	repl.OneShot(ctx, "x")
 	result := buffer.String()
 	if result != "3\n" {
@@ -843,7 +880,11 @@ func TestEvalConstantRuleAssignment(t *testing.T) {
 
 	buffer.Reset()
 	repl.OneShot(ctx, "input = 0")
+	assertREPLText(t, buffer, definedInput)
+	buffer.Reset()
 	repl.OneShot(ctx, "input := 1")
+	assertREPLText(t, buffer, redefinedInput)
+	buffer.Reset()
 	repl.OneShot(ctx, "input")
 	result = buffer.String()
 	if result != "1\n" {
@@ -1219,7 +1260,7 @@ func TestEvalRuleCompileError(t *testing.T) {
 	buffer.Reset()
 	err = repl.OneShot(ctx, `p = true { true }`)
 	result := buffer.String()
-	if err != nil || result != "" {
+	if err != nil || result != "Rule 'p' defined in package repl. Type 'show' to see rules.\n" {
 		t.Errorf("Expected valid rule to compile (because state should be unaffected) but got: %v (err: %v)", result, err)
 	}
 }
@@ -1315,6 +1356,7 @@ func TestEvalBodyInput(t *testing.T) {
 	repl.OneShot(ctx, `package test`)
 	repl.OneShot(ctx, "import input.baz")
 	repl.OneShot(ctx, `p = true { input["foo.bar"] = "hello"; baz = false }`)
+	buffer.Reset()
 	repl.OneShot(ctx, "p")
 
 	result := buffer.String()
@@ -1333,6 +1375,7 @@ func TestEvalBodyInputComplete(t *testing.T) {
 	// https://github.com/open-policy-agent/opa/issues/231
 	repl.OneShot(ctx, `package repl`)
 	repl.OneShot(ctx, `input = 1`)
+	buffer.Reset()
 	repl.OneShot(ctx, `input`)
 
 	result := buffer.String()
@@ -1345,6 +1388,7 @@ func TestEvalBodyInputComplete(t *testing.T) {
 	// Test that input is as expected
 	repl.OneShot(ctx, `package ex1`)
 	repl.OneShot(ctx, `x = input`)
+	buffer.Reset()
 	repl.OneShot(ctx, `x`)
 
 	result = buffer.String()
@@ -1352,11 +1396,10 @@ func TestEvalBodyInputComplete(t *testing.T) {
 		t.Fatalf("Expected 1 but got: %v", result)
 	}
 
-	buffer.Reset()
-
 	// Test that local input replaces other inputs
 	repl.OneShot(ctx, `package ex2`)
 	repl.OneShot(ctx, `input = 2`)
+	buffer.Reset()
 	repl.OneShot(ctx, `input`)
 
 	result = buffer.String()
@@ -1403,6 +1446,7 @@ func TestEvalBodyWith(t *testing.T) {
 	repl := newRepl(store, &buffer)
 
 	repl.OneShot(ctx, `p = true { input.foo = "bar" }`)
+	buffer.Reset()
 	repl.OneShot(ctx, "p")
 
 	if buffer.String() != "undefined\n" {
@@ -1798,6 +1842,7 @@ func TestTruncatePrettyOutput(t *testing.T) {
 }
 
 func assertREPLText(t *testing.T, buf bytes.Buffer, expected string) {
+	t.Helper()
 	result := buf.String()
 	if result != expected {
 		t.Fatalf("Expected:\n%v\n\nString:\n\n%v\nGot:\n%v\n\nString:\n\n%v", []byte(expected), expected, []byte(result), result)
@@ -1805,6 +1850,7 @@ func assertREPLText(t *testing.T, buf bytes.Buffer, expected string) {
 }
 
 func expectOutput(t *testing.T, output string, expected string) {
+	t.Helper()
 	if output != expected {
 		t.Errorf("Repl output: expected %#v but got %#v", expected, output)
 	}

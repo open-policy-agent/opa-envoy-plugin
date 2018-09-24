@@ -11,23 +11,18 @@ This tutorial shows how to enforce custom policies on Kubernetes objects using O
 
 ## Prerequisites
 
-This tutorial requires Kubernetes 1.9 or later. To run the tutorial locally, we recommend using [minikube](https://kubernetes.io/docs/getting-started-guides/minikube).
+This tutorial requires Kubernetes 1.9 or later. To run the tutorial locally, we recommend using [minikube](https://kubernetes.io/docs/getting-started-guides/minikube) in version `v0.28+` with Kubernetes 1.10 (which is the default).
 
 ## Steps
 
 ### 1. Start Kubernetes recommended Admisson Controllers enabled
 
-To implement admission control rules that validate Kubernetes resources during create, update, and delete operations, you must enable the `ValidatingAdmissionWebhook` when the Kubernetes API server is started. The [recommended set of admission controllers to enable](https://kubernetes.io/docs/admin/admission-controllers/#is-there-a-recommended-set-of-admission-controllers-to-use) is defined below.
+To implement admission control rules that validate Kubernetes resources during create, update, and delete operations, you must enable the [ValidatingAdmissionWebhook](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#validatingadmissionwebhook) when the Kubernetes API server is started. the admission controller is included in the [recommended set of admission controllers to enable](https://kubernetes.io/docs/admin/admission-controllers/#is-there-a-recommended-set-of-admission-controllers-to-use)
+
+Start minikube:
 
 ```bash
-ADMISSION_CONTROLLERS=NamespaceLifecycle,LimitRanger,ServiceAccount,PersistentVolumeLabel,DefaultStorageClass,DefaultTolerationSeconds,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota
-```
-
-Start minikube with these admission controllers enabled:
-
-```bash
-minikube start --kubernetes-version v1.9.0 \
-  --extra-config=apiserver.Admission.PluginNames=$ADMISSION_CONTROLLERS
+minikube start
 ```
 
 Make sure that the minikube ingress addon is enabled:
@@ -91,7 +86,7 @@ kubectl create secret tls opa-server --cert=server.crt --key=server.key
 
 Next, use the file below to deploy OPA as an admission controller.
 
-**[admission-controller.yaml](https://github.com/open-policy-agent/opa/docs/book/tutorials/kubernetes-admission-control-validation/admission-controller.yaml)**:
+**[admission-controller.yaml](https://github.com/open-policy-agent/opa/blob/master/docs/book/tutorials/kubernetes-admission-control-validation/admission-controller.yaml)**:
 <pre><code class="lang-yaml">{% include "./tutorials/kubernetes-admission-control-validation/admission-controller.yaml" %}</code></pre>
 
 ```bash
@@ -139,11 +134,11 @@ kubectl logs -l app=opa -c opa
 
 ### 4. Define a policy and load it into OPA via Kubernetes
 
-To test admission control, create a policy that restricts the hostnames that an ingress can use ([ingress-whitelist.rego](https://github.com/open-policy-agent/opa/docs/book/tutorials/kubernetes-admission-control-validation/ingress-whitelist.rego)):
+To test admission control, create a policy that restricts the hostnames that an ingress can use ([ingress-whitelist.rego](https://github.com/open-policy-agent/opa/blob/master/docs/book/tutorials/kubernetes-admission-control-validation/ingress-whitelist.rego)):
 
 <pre><code class="lang-ruby">{% include "./tutorials/kubernetes-admission-control-validation/ingress-whitelist.rego" %}</code></pre>
 
-Store the policy in Kubernetes as a ConfigMap.
+Store the policy in Kubernetes as a ConfigMap. By default kube-mgmt will try to load policies out of configmaps in the opa namespace OR configmaps in other namespaces labelled openpolicyagent.org/policy=rego.
 
 ```bash
 kubectl create configmap ingress-whitelist --from-file=ingress-whitelist.rego
@@ -234,7 +229,7 @@ OPA allows you to modify policies on-the-fly without recompiling any of the serv
 
 To enforce the second half of the policy from the start of this tutorial you can load another policy into OPA that rejects Ingress objects in different namespaces from sharing the same hostname.
 
-[ingress-conflicts.rego](https://github.com/open-policy-agent/opa/docs/book/tutorials/kubernetes-admission-control-validation/ingress-conflicts.rego):
+[ingress-conflicts.rego](https://github.com/open-policy-agent/opa/blob/master/docs/book/tutorials/kubernetes-admission-control-validation/ingress-conflicts.rego):
 
 <pre><code class="lang-ruby">{% include "./tutorials/kubernetes-admission-control-validation/ingress-conflicts.rego" %}</code></pre>
 

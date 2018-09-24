@@ -39,47 +39,33 @@ func Source(filename string, src []byte) ([]byte, error) {
 	return formatted, nil
 }
 
-// Ast formats a Rego AST element. If the passed value is not a valid AST element,
-// Ast returns nil and an error. Ast relies on all AST elements having non-nil
-// Location values, and will return an error if this is not the case.
+// MustAst is a helper function to format a Rego AST element. If any errors
+// occurs this function will panic. This is mostly used for test
+func MustAst(x interface{}) []byte {
+	bs, err := Ast(x)
+	if err != nil {
+		panic(err)
+	}
+	return bs
+}
+
+// Ast formats a Rego AST element. If the passed value is not a valid AST
+// element, Ast returns nil and an error. Ast relies on all AST elements having
+// non-nil Location values. If an AST element with a nil Location value is
+// encountered, a default location will be set on the AST node.
 func Ast(x interface{}) (formatted []byte, err error) {
-	defer func() {
-		// Ast relies on all terms in the ast element having non-nil Location
-		// values. If a location is nil, Ast will panic, so we need to recover
-		// gracefully.
-		if r := recover(); r != nil {
-			formatted = nil
-			switch r := r.(type) {
-			case nilLocationErr:
-				err = r
-			default:
-				panic(r)
+
+	ast.WalkNodes(x, func(x ast.Node) bool {
+		if b, ok := x.(ast.Body); ok {
+			if len(b) == 0 {
+				return false
 			}
 		}
-	}()
-
-	// Check all elements in the Ast interface have a location.
-	ast.Walk(ast.NewGenericVisitor(func(x interface{}) bool {
-		switch x := x.(type) {
-		case *ast.Module, ast.Value: // Pass, they don't have locations.
-		case *ast.Term:
-			switch v := x.Value.(type) {
-			case ast.Ref:
-				if h := v[0]; !ast.RootDocumentNames.Contains(h) {
-					assertHasLocation(x)
-				}
-			case ast.Var:
-				if vt := ast.VarTerm(string(v)); !ast.RootDocumentNames.Contains(vt) {
-					assertHasLocation(x)
-				}
-			default:
-				assertHasLocation(x)
-			}
-		case *ast.Package, *ast.Import, *ast.Rule, *ast.Head, ast.Body, *ast.Expr, *ast.With, *ast.Comment:
-			assertHasLocation(x)
+		if x.Loc() == nil {
+			x.SetLoc(defaultLocation(x))
 		}
 		return false
-	}), x)
+	})
 
 	w := &writer{indent: "\t"}
 	switch x := x.(type) {
@@ -109,6 +95,10 @@ func Ast(x interface{}) (formatted []byte, err error) {
 		return nil, fmt.Errorf("not an ast element: %v", x)
 	}
 	return w.buf.Bytes(), nil
+}
+
+func defaultLocation(x ast.Node) *ast.Location {
+	return ast.NewLocation([]byte(x.String()), "", 1, 1)
 }
 
 type writer struct {
@@ -928,20 +918,4 @@ func (w *writer) down() {
 		panic("negative indentation level")
 	}
 	w.level--
-}
-
-func assertHasLocation(xs ...interface{}) {
-	for _, x := range xs {
-		if getLoc(x) == nil {
-			panic(nilLocationErr{fmt.Errorf("nil location: %v", x)})
-		}
-	}
-}
-
-type nilLocationErr struct {
-	err error
-}
-
-func (err nilLocationErr) Error() string {
-	return err.err.Error()
 }

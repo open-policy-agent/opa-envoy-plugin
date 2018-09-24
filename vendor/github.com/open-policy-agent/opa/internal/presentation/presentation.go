@@ -13,19 +13,98 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/format"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/profiler"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/topdown"
 )
 
+// DepAnalysisOutput contains the result of dependency analysis to be presented.
+type DepAnalysisOutput struct {
+	Base    []ast.Ref `json:"base,omitempty"`
+	Virtual []ast.Ref `json:"virtual,omitempty"`
+}
+
+// JSON outputs o to w as JSON.
+func (o DepAnalysisOutput) JSON(w io.Writer) error {
+	o.sort()
+	return JSON(w, o)
+}
+
+// Pretty outputs o to w in a human-readable format.
+func (o DepAnalysisOutput) Pretty(w io.Writer) error {
+
+	var headers []string
+	var rows [][]string
+
+	// Fill two columns if results have base and virtual docs. Else fill one column.
+	if len(o.Base) > 0 && len(o.Virtual) > 0 {
+		maxLen := len(o.Base)
+		if len(o.Virtual) > maxLen {
+			maxLen = len(o.Virtual)
+		}
+		headers = []string{"Base Documents", "Virtual Documents"}
+		rows = make([][]string, maxLen)
+		for i := range rows {
+			rows[i] = make([]string, 2)
+			if i < len(o.Base) {
+				rows[i][0] = o.Base[i].String()
+			}
+			if i < len(o.Virtual) {
+				rows[i][1] = o.Virtual[i].String()
+			}
+		}
+	} else if len(o.Base) > 0 {
+		headers = []string{"Base Documents"}
+		rows = make([][]string, len(o.Base))
+		for i := range rows {
+			rows[i] = []string{o.Base[i].String()}
+		}
+	} else if len(o.Virtual) > 0 {
+		headers = []string{"Virtual Documents"}
+		rows = make([][]string, len(o.Base))
+		for i := range rows {
+			rows[i] = []string{o.Virtual[i].String()}
+		}
+	}
+
+	if len(rows) == 0 {
+		return nil
+	}
+
+	table := tablewriter.NewWriter(w)
+	table.SetHeader(headers)
+	table.SetAutoWrapText(false)
+	for i := range rows {
+		table.Append(rows[i])
+	}
+
+	table.Render()
+
+	return nil
+}
+
+func (o DepAnalysisOutput) sort() {
+	sort.Slice(o.Base, func(i, j int) bool {
+		return o.Base[i].Compare(o.Base[j]) < 0
+	})
+
+	sort.Slice(o.Virtual, func(i, j int) bool {
+		return o.Virtual[i].Compare(o.Virtual[j]) < 0
+	})
+}
+
 // Output contains the result of evaluation to be presented.
 type Output struct {
 	Error       error                `json:"error,omitempty"`
 	Result      rego.ResultSet       `json:"result,omitempty"`
+	Partial     *rego.PartialQueries `json:"partial,omitempty"`
 	Metrics     metrics.Metrics      `json:"metrics,omitempty"`
 	Explanation []*topdown.Event     `json:"explanation,omitempty"`
 	Profile     []profiler.ExprStats `json:"profile,omitempty"`
@@ -36,6 +115,10 @@ type Output struct {
 func (e Output) WithLimit(n int) Output {
 	e.limit = n
 	return e
+}
+
+func (e Output) undefined() bool {
+	return len(e.Result) == 0 && (e.Partial == nil || len(e.Partial.Queries) == 0)
 }
 
 // JSON writes x to w with indentation.
@@ -86,8 +169,14 @@ func Pretty(w io.Writer, r Output) error {
 		if err := prettyError(w, r.Error); err != nil {
 			return err
 		}
-	} else {
+	} else if r.undefined() {
+		fmt.Fprintln(w, "undefined")
+	} else if r.Result != nil {
 		if err := prettyResult(w, r.Result, r.limit); err != nil {
+			return err
+		}
+	} else if r.Partial != nil {
+		if err := prettyPartial(w, r.Partial); err != nil {
 			return err
 		}
 	}
@@ -111,11 +200,6 @@ func prettyError(w io.Writer, err error) error {
 
 func prettyResult(w io.Writer, rs rego.ResultSet, limit int) error {
 
-	if len(rs) == 0 {
-		fmt.Fprintln(w, "undefined")
-		return nil
-	}
-
 	if len(rs) == 1 && len(rs[0].Bindings) == 0 {
 		if len(rs[0].Expressions) == 1 || allBoolean(rs[0].Expressions) {
 			return JSON(w, rs[0].Expressions[0].Value)
@@ -129,6 +213,57 @@ func prettyResult(w io.Writer, rs rego.ResultSet, limit int) error {
 	}
 
 	return nil
+}
+
+func prettyPartial(w io.Writer, pq *rego.PartialQueries) error {
+
+	table := tablewriter.NewWriter(w)
+	table.SetRowLine(true)
+	table.SetAutoWrapText(false)
+	var maxWidth int
+
+	for i := range pq.Queries {
+		s, width, err := prettyASTNode(pq.Queries[i])
+		if err != nil {
+			return err
+		}
+		if width > maxWidth {
+			maxWidth = width
+		}
+		table.Append([]string{fmt.Sprintf("Query %d", i+1), s})
+	}
+
+	for i := range pq.Support {
+		s, width, err := prettyASTNode(pq.Support[i])
+		if err != nil {
+			return err
+		}
+		if width > maxWidth {
+			maxWidth = width
+		}
+		table.Append([]string{fmt.Sprintf("Support %d", i+1), s})
+	}
+
+	table.SetColMinWidth(1, maxWidth)
+	table.Render()
+
+	return nil
+}
+
+func prettyASTNode(x interface{}) (string, int, error) {
+	bs, err := format.Ast(x)
+	if err != nil {
+		return "", 0, fmt.Errorf("format error: %v", err)
+	}
+	var maxLineWidth int
+	s := strings.Trim(strings.Replace(string(bs), "\t", "  ", -1), "\n")
+	for _, line := range strings.Split(s, "\n") {
+		width := tablewriter.DisplayWidth(line)
+		if width > maxLineWidth {
+			maxLineWidth = width
+		}
+	}
+	return s, maxLineWidth, nil
 }
 
 func prettyMetrics(w io.Writer, m metrics.Metrics, limit int) error {

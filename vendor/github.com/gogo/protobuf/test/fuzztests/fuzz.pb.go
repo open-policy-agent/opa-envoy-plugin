@@ -1093,6 +1093,9 @@ func encodeVarintFuzz(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *Nil) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.XXX_unrecognized != nil {
@@ -1102,6 +1105,9 @@ func (m *Nil) Size() (n int) {
 }
 
 func (m *NinRepPackedNative) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Field1) > 0 {
@@ -1174,6 +1180,9 @@ func (m *NinRepPackedNative) Size() (n int) {
 }
 
 func (m *NinOptNative) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Field1 != nil {
@@ -1230,6 +1239,9 @@ func (m *NinOptNative) Size() (n int) {
 }
 
 func (m *NinOptStruct) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Field1 != nil {
@@ -1399,8 +1411,10 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field1) == 0 {
-					m.Field1 = make([]float64, 0, packedLen/8)
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Field1) == 0 {
+					m.Field1 = make([]float64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint64
@@ -1448,8 +1462,10 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field2) == 0 {
-					m.Field2 = make([]float32, 0, packedLen/4)
+				var elementCount int
+				elementCount = packedLen / 4
+				if elementCount != 0 && len(m.Field2) == 0 {
+					m.Field2 = make([]float32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -1504,6 +1520,17 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Field3) == 0 {
+					m.Field3 = make([]int32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int32
@@ -1567,6 +1594,17 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Field4) == 0 {
+					m.Field4 = make([]int64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v int64
 					for shift := uint(0); ; shift += 7 {
@@ -1628,6 +1666,17 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Field5) == 0 {
+					m.Field5 = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -1691,6 +1740,17 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Field6) == 0 {
+					m.Field6 = make([]uint64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					for shift := uint(0); ; shift += 7 {
@@ -1753,6 +1813,17 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Field7) == 0 {
+					m.Field7 = make([]int32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int32
@@ -1818,6 +1889,17 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Field8) == 0 {
+					m.Field8 = make([]int64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					for shift := uint(0); ; shift += 7 {
@@ -1872,8 +1954,10 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field9) == 0 {
-					m.Field9 = make([]uint32, 0, packedLen/4)
+				var elementCount int
+				elementCount = packedLen / 4
+				if elementCount != 0 && len(m.Field9) == 0 {
+					m.Field9 = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -1919,8 +2003,10 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field10) == 0 {
-					m.Field10 = make([]int32, 0, packedLen/4)
+				var elementCount int
+				elementCount = packedLen / 4
+				if elementCount != 0 && len(m.Field10) == 0 {
+					m.Field10 = make([]int32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int32
@@ -1966,8 +2052,10 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field11) == 0 {
-					m.Field11 = make([]uint64, 0, packedLen/8)
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Field11) == 0 {
+					m.Field11 = make([]uint64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint64
@@ -2013,8 +2101,10 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				if len(m.Field12) == 0 {
-					m.Field12 = make([]int64, 0, packedLen/8)
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Field12) == 0 {
+					m.Field12 = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int64
@@ -2068,6 +2158,11 @@ func (m *NinRepPackedNative) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				elementCount = packedLen
+				if elementCount != 0 && len(m.Field13) == 0 {
+					m.Field13 = make([]bool, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int

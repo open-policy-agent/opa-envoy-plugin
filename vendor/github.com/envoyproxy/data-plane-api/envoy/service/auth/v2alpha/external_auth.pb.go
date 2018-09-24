@@ -641,6 +641,9 @@ func encodeVarintExternalAuth(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *CheckRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Attributes != nil {
@@ -654,6 +657,9 @@ func (m *CheckRequest) Size() (n int) {
 }
 
 func (m *DeniedHttpResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Status != nil {
@@ -677,6 +683,9 @@ func (m *DeniedHttpResponse) Size() (n int) {
 }
 
 func (m *OkHttpResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Headers) > 0 {
@@ -692,6 +701,9 @@ func (m *OkHttpResponse) Size() (n int) {
 }
 
 func (m *CheckResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Status != nil {
@@ -708,6 +720,9 @@ func (m *CheckResponse) Size() (n int) {
 }
 
 func (m *CheckResponse_DeniedResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.DeniedResponse != nil {
@@ -717,6 +732,9 @@ func (m *CheckResponse_DeniedResponse) Size() (n int) {
 	return n
 }
 func (m *CheckResponse_OkResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.OkResponse != nil {

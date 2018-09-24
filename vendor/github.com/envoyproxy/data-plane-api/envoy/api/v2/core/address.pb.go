@@ -46,7 +46,7 @@ func (x SocketAddress_Protocol) String() string {
 	return proto.EnumName(SocketAddress_Protocol_name, int32(x))
 }
 func (SocketAddress_Protocol) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{1, 0}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{1, 0}
 }
 
 type Pipe struct {
@@ -64,7 +64,7 @@ func (m *Pipe) Reset()         { *m = Pipe{} }
 func (m *Pipe) String() string { return proto.CompactTextString(m) }
 func (*Pipe) ProtoMessage()    {}
 func (*Pipe) Descriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{0}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{0}
 }
 func (m *Pipe) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -109,7 +109,7 @@ type SocketAddress struct {
 	// in :ref:`FilterChainMatch <envoy_api_msg_listener.FilterChainMatch>`.] When used
 	// within an upstream :ref:`BindConfig <envoy_api_msg_core.BindConfig>`, the address
 	// controls the source address of outbound connections. For :ref:`clusters
-	// <config_cluster_manager_cluster>`, the cluster type determines whether the
+	// <envoy_api_msg_Cluster>`, the cluster type determines whether the
 	// address must be an IP (*STATIC* or *EDS* clusters) or a hostname resolved by DNS
 	// (*STRICT_DNS* or *LOGICAL_DNS* clusters). Address resolution can be customized
 	// via :ref:`resolver_name <envoy_api_field_core.SocketAddress.resolver_name>`.
@@ -137,7 +137,7 @@ func (m *SocketAddress) Reset()         { *m = SocketAddress{} }
 func (m *SocketAddress) String() string { return proto.CompactTextString(m) }
 func (*SocketAddress) ProtoMessage()    {}
 func (*SocketAddress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{1}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{1}
 }
 func (m *SocketAddress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -318,7 +318,7 @@ func (m *TcpKeepalive) Reset()         { *m = TcpKeepalive{} }
 func (m *TcpKeepalive) String() string { return proto.CompactTextString(m) }
 func (*TcpKeepalive) ProtoMessage()    {}
 func (*TcpKeepalive) Descriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{2}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{2}
 }
 func (m *TcpKeepalive) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -391,7 +391,7 @@ func (m *BindConfig) Reset()         { *m = BindConfig{} }
 func (m *BindConfig) String() string { return proto.CompactTextString(m) }
 func (*BindConfig) ProtoMessage()    {}
 func (*BindConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{3}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{3}
 }
 func (m *BindConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -458,7 +458,7 @@ func (m *Address) Reset()         { *m = Address{} }
 func (m *Address) String() string { return proto.CompactTextString(m) }
 func (*Address) ProtoMessage()    {}
 func (*Address) Descriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{4}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{4}
 }
 func (m *Address) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -615,7 +615,7 @@ func (m *CidrRange) Reset()         { *m = CidrRange{} }
 func (m *CidrRange) String() string { return proto.CompactTextString(m) }
 func (*CidrRange) ProtoMessage()    {}
 func (*CidrRange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_address_fe46815faabcb098, []int{5}
+	return fileDescriptor_address_8e7258e7524b04e8, []int{5}
 }
 func (m *CidrRange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1271,6 +1271,9 @@ func encodeVarintAddress(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *Pipe) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Path)
@@ -1284,6 +1287,9 @@ func (m *Pipe) Size() (n int) {
 }
 
 func (m *SocketAddress) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Protocol != 0 {
@@ -1310,12 +1316,18 @@ func (m *SocketAddress) Size() (n int) {
 }
 
 func (m *SocketAddress_PortValue) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovAddress(uint64(m.PortValue))
 	return n
 }
 func (m *SocketAddress_NamedPort) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NamedPort)
@@ -1323,6 +1335,9 @@ func (m *SocketAddress_NamedPort) Size() (n int) {
 	return n
 }
 func (m *TcpKeepalive) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.KeepaliveProbes != nil {
@@ -1344,6 +1359,9 @@ func (m *TcpKeepalive) Size() (n int) {
 }
 
 func (m *BindConfig) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.SourceAddress.Size()
@@ -1365,6 +1383,9 @@ func (m *BindConfig) Size() (n int) {
 }
 
 func (m *Address) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Address != nil {
@@ -1377,6 +1398,9 @@ func (m *Address) Size() (n int) {
 }
 
 func (m *Address_SocketAddress) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.SocketAddress != nil {
@@ -1386,6 +1410,9 @@ func (m *Address_SocketAddress) Size() (n int) {
 	return n
 }
 func (m *Address_Pipe) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Pipe != nil {
@@ -1395,6 +1422,9 @@ func (m *Address_Pipe) Size() (n int) {
 	return n
 }
 func (m *CidrRange) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.AddressPrefix)
@@ -2330,10 +2360,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("envoy/api/v2/core/address.proto", fileDescriptor_address_fe46815faabcb098)
+	proto.RegisterFile("envoy/api/v2/core/address.proto", fileDescriptor_address_8e7258e7524b04e8)
 }
 
-var fileDescriptor_address_fe46815faabcb098 = []byte{
+var fileDescriptor_address_8e7258e7524b04e8 = []byte{
 	// 691 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x53, 0xc1, 0x6e, 0x13, 0x3b,
 	0x14, 0x8d, 0x33, 0x69, 0x9b, 0xdc, 0x34, 0x79, 0xa9, 0xf5, 0xa4, 0x8e, 0xa2, 0xbe, 0x24, 0x4a,
