@@ -5,11 +5,12 @@ package datastore
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/type/latlng"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1167,6 +1168,11 @@ func (m *QueryResultBatch) GetSnapshotVersion() int64 {
 }
 
 func init() {
+	proto.RegisterEnum("google.datastore.v1beta3.EntityResult_ResultType", EntityResult_ResultType_name, EntityResult_ResultType_value)
+	proto.RegisterEnum("google.datastore.v1beta3.PropertyOrder_Direction", PropertyOrder_Direction_name, PropertyOrder_Direction_value)
+	proto.RegisterEnum("google.datastore.v1beta3.CompositeFilter_Operator", CompositeFilter_Operator_name, CompositeFilter_Operator_value)
+	proto.RegisterEnum("google.datastore.v1beta3.PropertyFilter_Operator", PropertyFilter_Operator_name, PropertyFilter_Operator_value)
+	proto.RegisterEnum("google.datastore.v1beta3.QueryResultBatch_MoreResultsType", QueryResultBatch_MoreResultsType_name, QueryResultBatch_MoreResultsType_value)
 	proto.RegisterType((*EntityResult)(nil), "google.datastore.v1beta3.EntityResult")
 	proto.RegisterType((*Query)(nil), "google.datastore.v1beta3.Query")
 	proto.RegisterType((*KindExpression)(nil), "google.datastore.v1beta3.KindExpression")
@@ -1180,11 +1186,6 @@ func init() {
 	proto.RegisterMapType((map[string]*GqlQueryParameter)(nil), "google.datastore.v1beta3.GqlQuery.NamedBindingsEntry")
 	proto.RegisterType((*GqlQueryParameter)(nil), "google.datastore.v1beta3.GqlQueryParameter")
 	proto.RegisterType((*QueryResultBatch)(nil), "google.datastore.v1beta3.QueryResultBatch")
-	proto.RegisterEnum("google.datastore.v1beta3.EntityResult_ResultType", EntityResult_ResultType_name, EntityResult_ResultType_value)
-	proto.RegisterEnum("google.datastore.v1beta3.PropertyOrder_Direction", PropertyOrder_Direction_name, PropertyOrder_Direction_value)
-	proto.RegisterEnum("google.datastore.v1beta3.CompositeFilter_Operator", CompositeFilter_Operator_name, CompositeFilter_Operator_value)
-	proto.RegisterEnum("google.datastore.v1beta3.PropertyFilter_Operator", PropertyFilter_Operator_name, PropertyFilter_Operator_value)
-	proto.RegisterEnum("google.datastore.v1beta3.QueryResultBatch_MoreResultsType", QueryResultBatch_MoreResultsType_name, QueryResultBatch_MoreResultsType_value)
 }
 
 func init() {

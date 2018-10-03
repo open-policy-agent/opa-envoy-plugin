@@ -5,10 +5,11 @@ package ml
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -154,8 +155,8 @@ func (m *OperationMetadata) GetVersion() *Version {
 }
 
 func init() {
-	proto.RegisterType((*OperationMetadata)(nil), "google.cloud.ml.v1.OperationMetadata")
 	proto.RegisterEnum("google.cloud.ml.v1.OperationMetadata_OperationType", OperationMetadata_OperationType_name, OperationMetadata_OperationType_value)
+	proto.RegisterType((*OperationMetadata)(nil), "google.cloud.ml.v1.OperationMetadata")
 }
 
 func init() {

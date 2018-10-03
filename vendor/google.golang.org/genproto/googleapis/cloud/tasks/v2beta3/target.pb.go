@@ -5,9 +5,10 @@ package tasks
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -435,11 +436,11 @@ func (m *AppEngineRouting) GetHost() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.tasks.v2beta3.HttpMethod", HttpMethod_name, HttpMethod_value)
 	proto.RegisterType((*AppEngineHttpQueue)(nil), "google.cloud.tasks.v2beta3.AppEngineHttpQueue")
 	proto.RegisterType((*AppEngineHttpRequest)(nil), "google.cloud.tasks.v2beta3.AppEngineHttpRequest")
 	proto.RegisterMapType((map[string]string)(nil), "google.cloud.tasks.v2beta3.AppEngineHttpRequest.HeadersEntry")
 	proto.RegisterType((*AppEngineRouting)(nil), "google.cloud.tasks.v2beta3.AppEngineRouting")
-	proto.RegisterEnum("google.cloud.tasks.v2beta3.HttpMethod", HttpMethod_name, HttpMethod_value)
 }
 
 func init() {

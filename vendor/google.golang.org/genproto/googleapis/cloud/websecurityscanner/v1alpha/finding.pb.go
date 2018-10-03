@@ -5,9 +5,10 @@ package websecurityscanner
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -274,8 +275,8 @@ func (m *Finding) GetXss() *Xss {
 }
 
 func init() {
-	proto.RegisterType((*Finding)(nil), "google.cloud.websecurityscanner.v1alpha.Finding")
 	proto.RegisterEnum("google.cloud.websecurityscanner.v1alpha.Finding_FindingType", Finding_FindingType_name, Finding_FindingType_value)
+	proto.RegisterType((*Finding)(nil), "google.cloud.websecurityscanner.v1alpha.Finding")
 }
 
 func init() {

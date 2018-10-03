@@ -5,8 +5,9 @@ package attestation
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
 	math "math"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -463,12 +464,12 @@ func _Attestation_OneofSizer(msg proto.Message) (n int) {
 }
 
 func init() {
+	proto.RegisterEnum("grafeas.v1beta1.attestation.PgpSignedAttestation_ContentType", PgpSignedAttestation_ContentType_name, PgpSignedAttestation_ContentType_value)
 	proto.RegisterType((*PgpSignedAttestation)(nil), "grafeas.v1beta1.attestation.PgpSignedAttestation")
 	proto.RegisterType((*Authority)(nil), "grafeas.v1beta1.attestation.Authority")
 	proto.RegisterType((*Authority_Hint)(nil), "grafeas.v1beta1.attestation.Authority.Hint")
 	proto.RegisterType((*Details)(nil), "grafeas.v1beta1.attestation.Details")
 	proto.RegisterType((*Attestation)(nil), "grafeas.v1beta1.attestation.Attestation")
-	proto.RegisterEnum("grafeas.v1beta1.attestation.PgpSignedAttestation_ContentType", PgpSignedAttestation_ContentType_name, PgpSignedAttestation_ContentType_value)
 }
 
 func init() {

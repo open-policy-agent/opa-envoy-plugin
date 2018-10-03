@@ -5,9 +5,10 @@ package dialogflow
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -309,11 +310,11 @@ func (m *OutputAudioConfig) GetSynthesizeSpeechConfig() *SynthesizeSpeechConfig 
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.dialogflow.v2beta1.SsmlVoiceGender", SsmlVoiceGender_name, SsmlVoiceGender_value)
+	proto.RegisterEnum("google.cloud.dialogflow.v2beta1.OutputAudioEncoding", OutputAudioEncoding_name, OutputAudioEncoding_value)
 	proto.RegisterType((*VoiceSelectionParams)(nil), "google.cloud.dialogflow.v2beta1.VoiceSelectionParams")
 	proto.RegisterType((*SynthesizeSpeechConfig)(nil), "google.cloud.dialogflow.v2beta1.SynthesizeSpeechConfig")
 	proto.RegisterType((*OutputAudioConfig)(nil), "google.cloud.dialogflow.v2beta1.OutputAudioConfig")
-	proto.RegisterEnum("google.cloud.dialogflow.v2beta1.SsmlVoiceGender", SsmlVoiceGender_name, SsmlVoiceGender_value)
-	proto.RegisterEnum("google.cloud.dialogflow.v2beta1.OutputAudioEncoding", OutputAudioEncoding_name, OutputAudioEncoding_value)
 }
 
 func init() {

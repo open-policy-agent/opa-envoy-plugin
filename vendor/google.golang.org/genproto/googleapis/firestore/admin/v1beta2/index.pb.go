@@ -5,9 +5,10 @@ package admin
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -406,12 +407,12 @@ func _Index_IndexField_OneofSizer(msg proto.Message) (n int) {
 }
 
 func init() {
-	proto.RegisterType((*Index)(nil), "google.firestore.admin.v1beta2.Index")
-	proto.RegisterType((*Index_IndexField)(nil), "google.firestore.admin.v1beta2.Index.IndexField")
 	proto.RegisterEnum("google.firestore.admin.v1beta2.Index_QueryScope", Index_QueryScope_name, Index_QueryScope_value)
 	proto.RegisterEnum("google.firestore.admin.v1beta2.Index_State", Index_State_name, Index_State_value)
 	proto.RegisterEnum("google.firestore.admin.v1beta2.Index_IndexField_Order", Index_IndexField_Order_name, Index_IndexField_Order_value)
 	proto.RegisterEnum("google.firestore.admin.v1beta2.Index_IndexField_ArrayConfig", Index_IndexField_ArrayConfig_name, Index_IndexField_ArrayConfig_value)
+	proto.RegisterType((*Index)(nil), "google.firestore.admin.v1beta2.Index")
+	proto.RegisterType((*Index_IndexField)(nil), "google.firestore.admin.v1beta2.Index.IndexField")
 }
 
 func init() {

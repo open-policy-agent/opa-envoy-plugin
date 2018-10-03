@@ -5,12 +5,13 @@ package runtimeconfig
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	duration "github.com/golang/protobuf/ptypes/duration"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -628,12 +629,12 @@ func (m *Waiter) GetError() *status.Status {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.runtimeconfig.v1beta1.VariableState", VariableState_name, VariableState_value)
 	proto.RegisterType((*RuntimeConfig)(nil), "google.cloud.runtimeconfig.v1beta1.RuntimeConfig")
 	proto.RegisterType((*Variable)(nil), "google.cloud.runtimeconfig.v1beta1.Variable")
 	proto.RegisterType((*EndCondition)(nil), "google.cloud.runtimeconfig.v1beta1.EndCondition")
 	proto.RegisterType((*EndCondition_Cardinality)(nil), "google.cloud.runtimeconfig.v1beta1.EndCondition.Cardinality")
 	proto.RegisterType((*Waiter)(nil), "google.cloud.runtimeconfig.v1beta1.Waiter")
-	proto.RegisterEnum("google.cloud.runtimeconfig.v1beta1.VariableState", VariableState_name, VariableState_value)
 }
 
 func init() {

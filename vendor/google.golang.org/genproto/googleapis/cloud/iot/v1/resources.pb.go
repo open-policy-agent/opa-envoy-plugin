@@ -5,11 +5,12 @@ package iot
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1255,6 +1256,10 @@ func (m *DeviceState) GetBinaryData() []byte {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.iot.v1.MqttState", MqttState_name, MqttState_value)
+	proto.RegisterEnum("google.cloud.iot.v1.HttpState", HttpState_name, HttpState_value)
+	proto.RegisterEnum("google.cloud.iot.v1.PublicKeyCertificateFormat", PublicKeyCertificateFormat_name, PublicKeyCertificateFormat_value)
+	proto.RegisterEnum("google.cloud.iot.v1.PublicKeyFormat", PublicKeyFormat_name, PublicKeyFormat_value)
 	proto.RegisterType((*Device)(nil), "google.cloud.iot.v1.Device")
 	proto.RegisterMapType((map[string]string)(nil), "google.cloud.iot.v1.Device.MetadataEntry")
 	proto.RegisterType((*DeviceRegistry)(nil), "google.cloud.iot.v1.DeviceRegistry")
@@ -1269,10 +1274,6 @@ func init() {
 	proto.RegisterType((*PublicKeyCredential)(nil), "google.cloud.iot.v1.PublicKeyCredential")
 	proto.RegisterType((*DeviceConfig)(nil), "google.cloud.iot.v1.DeviceConfig")
 	proto.RegisterType((*DeviceState)(nil), "google.cloud.iot.v1.DeviceState")
-	proto.RegisterEnum("google.cloud.iot.v1.MqttState", MqttState_name, MqttState_value)
-	proto.RegisterEnum("google.cloud.iot.v1.HttpState", HttpState_name, HttpState_value)
-	proto.RegisterEnum("google.cloud.iot.v1.PublicKeyCertificateFormat", PublicKeyCertificateFormat_name, PublicKeyCertificateFormat_value)
-	proto.RegisterEnum("google.cloud.iot.v1.PublicKeyFormat", PublicKeyFormat_name, PublicKeyFormat_value)
 }
 
 func init() {

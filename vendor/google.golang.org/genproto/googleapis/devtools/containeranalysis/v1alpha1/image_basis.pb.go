@@ -5,9 +5,10 @@ package containeranalysis
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -391,12 +392,12 @@ func (m *DockerImage_Derived) GetBaseResourceUrl() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.containeranalysis.v1alpha1.DockerImage_Layer_Directive", DockerImage_Layer_Directive_name, DockerImage_Layer_Directive_value)
 	proto.RegisterType((*DockerImage)(nil), "google.devtools.containeranalysis.v1alpha1.DockerImage")
 	proto.RegisterType((*DockerImage_Layer)(nil), "google.devtools.containeranalysis.v1alpha1.DockerImage.Layer")
 	proto.RegisterType((*DockerImage_Fingerprint)(nil), "google.devtools.containeranalysis.v1alpha1.DockerImage.Fingerprint")
 	proto.RegisterType((*DockerImage_Basis)(nil), "google.devtools.containeranalysis.v1alpha1.DockerImage.Basis")
 	proto.RegisterType((*DockerImage_Derived)(nil), "google.devtools.containeranalysis.v1alpha1.DockerImage.Derived")
-	proto.RegisterEnum("google.devtools.containeranalysis.v1alpha1.DockerImage_Layer_Directive", DockerImage_Layer_Directive_name, DockerImage_Layer_Directive_value)
 }
 
 func init() {

@@ -5,10 +5,11 @@ package firestore
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -811,6 +812,7 @@ func (m *ExistenceFilter) GetCount() int32 {
 }
 
 func init() {
+	proto.RegisterEnum("google.firestore.v1beta1.DocumentTransform_FieldTransform_ServerValue", DocumentTransform_FieldTransform_ServerValue_name, DocumentTransform_FieldTransform_ServerValue_value)
 	proto.RegisterType((*Write)(nil), "google.firestore.v1beta1.Write")
 	proto.RegisterType((*DocumentTransform)(nil), "google.firestore.v1beta1.DocumentTransform")
 	proto.RegisterType((*DocumentTransform_FieldTransform)(nil), "google.firestore.v1beta1.DocumentTransform.FieldTransform")
@@ -819,7 +821,6 @@ func init() {
 	proto.RegisterType((*DocumentDelete)(nil), "google.firestore.v1beta1.DocumentDelete")
 	proto.RegisterType((*DocumentRemove)(nil), "google.firestore.v1beta1.DocumentRemove")
 	proto.RegisterType((*ExistenceFilter)(nil), "google.firestore.v1beta1.ExistenceFilter")
-	proto.RegisterEnum("google.firestore.v1beta1.DocumentTransform_FieldTransform_ServerValue", DocumentTransform_FieldTransform_ServerValue_name, DocumentTransform_FieldTransform_ServerValue_value)
 }
 
 func init() {

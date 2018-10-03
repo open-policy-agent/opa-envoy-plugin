@@ -5,9 +5,10 @@ package vision
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -741,6 +742,8 @@ func (m *Symbol) GetConfidence() float32 {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.vision.v1p2beta1.TextAnnotation_DetectedBreak_BreakType", TextAnnotation_DetectedBreak_BreakType_name, TextAnnotation_DetectedBreak_BreakType_value)
+	proto.RegisterEnum("google.cloud.vision.v1p2beta1.Block_BlockType", Block_BlockType_name, Block_BlockType_value)
 	proto.RegisterType((*TextAnnotation)(nil), "google.cloud.vision.v1p2beta1.TextAnnotation")
 	proto.RegisterType((*TextAnnotation_DetectedLanguage)(nil), "google.cloud.vision.v1p2beta1.TextAnnotation.DetectedLanguage")
 	proto.RegisterType((*TextAnnotation_DetectedBreak)(nil), "google.cloud.vision.v1p2beta1.TextAnnotation.DetectedBreak")
@@ -750,8 +753,6 @@ func init() {
 	proto.RegisterType((*Paragraph)(nil), "google.cloud.vision.v1p2beta1.Paragraph")
 	proto.RegisterType((*Word)(nil), "google.cloud.vision.v1p2beta1.Word")
 	proto.RegisterType((*Symbol)(nil), "google.cloud.vision.v1p2beta1.Symbol")
-	proto.RegisterEnum("google.cloud.vision.v1p2beta1.TextAnnotation_DetectedBreak_BreakType", TextAnnotation_DetectedBreak_BreakType_name, TextAnnotation_DetectedBreak_BreakType_value)
-	proto.RegisterEnum("google.cloud.vision.v1p2beta1.Block_BlockType", Block_BlockType_name, Block_BlockType_value)
 }
 
 func init() {

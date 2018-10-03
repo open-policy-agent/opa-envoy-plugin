@@ -5,10 +5,11 @@ package functions
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -119,8 +120,8 @@ func (m *OperationMetadataV1Beta2) GetRequest() *any.Any {
 }
 
 func init() {
-	proto.RegisterType((*OperationMetadataV1Beta2)(nil), "google.cloud.functions.v1beta2.OperationMetadataV1Beta2")
 	proto.RegisterEnum("google.cloud.functions.v1beta2.OperationType", OperationType_name, OperationType_value)
+	proto.RegisterType((*OperationMetadataV1Beta2)(nil), "google.cloud.functions.v1beta2.OperationMetadataV1Beta2")
 }
 
 func init() {

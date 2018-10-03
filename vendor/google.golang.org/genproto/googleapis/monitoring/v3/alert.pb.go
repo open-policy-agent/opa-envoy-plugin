@@ -5,11 +5,12 @@ package monitoring
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	duration "github.com/golang/protobuf/ptypes/duration"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -890,6 +891,7 @@ func (m *AlertPolicy_Condition_MetricAbsence) GetTrigger() *AlertPolicy_Conditio
 }
 
 func init() {
+	proto.RegisterEnum("google.monitoring.v3.AlertPolicy_ConditionCombinerType", AlertPolicy_ConditionCombinerType_name, AlertPolicy_ConditionCombinerType_value)
 	proto.RegisterType((*AlertPolicy)(nil), "google.monitoring.v3.AlertPolicy")
 	proto.RegisterMapType((map[string]string)(nil), "google.monitoring.v3.AlertPolicy.UserLabelsEntry")
 	proto.RegisterType((*AlertPolicy_Documentation)(nil), "google.monitoring.v3.AlertPolicy.Documentation")
@@ -897,7 +899,6 @@ func init() {
 	proto.RegisterType((*AlertPolicy_Condition_Trigger)(nil), "google.monitoring.v3.AlertPolicy.Condition.Trigger")
 	proto.RegisterType((*AlertPolicy_Condition_MetricThreshold)(nil), "google.monitoring.v3.AlertPolicy.Condition.MetricThreshold")
 	proto.RegisterType((*AlertPolicy_Condition_MetricAbsence)(nil), "google.monitoring.v3.AlertPolicy.Condition.MetricAbsence")
-	proto.RegisterEnum("google.monitoring.v3.AlertPolicy_ConditionCombinerType", AlertPolicy_ConditionCombinerType_name, AlertPolicy_ConditionCombinerType_value)
 }
 
 func init() { proto.RegisterFile("google/monitoring/v3/alert.proto", fileDescriptor_014ef0e1a0f00a00) }

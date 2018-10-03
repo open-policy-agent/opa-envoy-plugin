@@ -5,18 +5,16 @@ package vision
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
+	context "golang.org/x/net/context"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	longrunning "google.golang.org/genproto/googleapis/longrunning"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	color "google.golang.org/genproto/googleapis/type/color"
 	latlng "google.golang.org/genproto/googleapis/type/latlng"
-	math "math"
-)
-
-import (
-	context "golang.org/x/net/context"
 	grpc "google.golang.org/grpc"
 )
 
@@ -2510,6 +2508,10 @@ func (m *OperationMetadata) GetUpdateTime() *timestamp.Timestamp {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.vision.v1p3beta1.Likelihood", Likelihood_name, Likelihood_value)
+	proto.RegisterEnum("google.cloud.vision.v1p3beta1.Feature_Type", Feature_Type_name, Feature_Type_value)
+	proto.RegisterEnum("google.cloud.vision.v1p3beta1.FaceAnnotation_Landmark_Type", FaceAnnotation_Landmark_Type_name, FaceAnnotation_Landmark_Type_value)
+	proto.RegisterEnum("google.cloud.vision.v1p3beta1.OperationMetadata_State", OperationMetadata_State_name, OperationMetadata_State_value)
 	proto.RegisterType((*Feature)(nil), "google.cloud.vision.v1p3beta1.Feature")
 	proto.RegisterType((*ImageSource)(nil), "google.cloud.vision.v1p3beta1.ImageSource")
 	proto.RegisterType((*Image)(nil), "google.cloud.vision.v1p3beta1.Image")
@@ -2544,129 +2546,6 @@ func init() {
 	proto.RegisterType((*GcsSource)(nil), "google.cloud.vision.v1p3beta1.GcsSource")
 	proto.RegisterType((*GcsDestination)(nil), "google.cloud.vision.v1p3beta1.GcsDestination")
 	proto.RegisterType((*OperationMetadata)(nil), "google.cloud.vision.v1p3beta1.OperationMetadata")
-	proto.RegisterEnum("google.cloud.vision.v1p3beta1.Likelihood", Likelihood_name, Likelihood_value)
-	proto.RegisterEnum("google.cloud.vision.v1p3beta1.Feature_Type", Feature_Type_name, Feature_Type_value)
-	proto.RegisterEnum("google.cloud.vision.v1p3beta1.FaceAnnotation_Landmark_Type", FaceAnnotation_Landmark_Type_name, FaceAnnotation_Landmark_Type_value)
-	proto.RegisterEnum("google.cloud.vision.v1p3beta1.OperationMetadata_State", OperationMetadata_State_name, OperationMetadata_State_value)
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
-
-// ImageAnnotatorClient is the client API for ImageAnnotator service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type ImageAnnotatorClient interface {
-	// Run image detection and annotation for a batch of images.
-	BatchAnnotateImages(ctx context.Context, in *BatchAnnotateImagesRequest, opts ...grpc.CallOption) (*BatchAnnotateImagesResponse, error)
-	// Run asynchronous image detection and annotation for a list of generic
-	// files, such as PDF files, which may contain multiple pages and multiple
-	// images per page. Progress and results can be retrieved through the
-	// `google.longrunning.Operations` interface.
-	// `Operation.metadata` contains `OperationMetadata` (metadata).
-	// `Operation.response` contains `AsyncBatchAnnotateFilesResponse` (results).
-	AsyncBatchAnnotateFiles(ctx context.Context, in *AsyncBatchAnnotateFilesRequest, opts ...grpc.CallOption) (*longrunning.Operation, error)
-}
-
-type imageAnnotatorClient struct {
-	cc *grpc.ClientConn
-}
-
-func NewImageAnnotatorClient(cc *grpc.ClientConn) ImageAnnotatorClient {
-	return &imageAnnotatorClient{cc}
-}
-
-func (c *imageAnnotatorClient) BatchAnnotateImages(ctx context.Context, in *BatchAnnotateImagesRequest, opts ...grpc.CallOption) (*BatchAnnotateImagesResponse, error) {
-	out := new(BatchAnnotateImagesResponse)
-	err := c.cc.Invoke(ctx, "/google.cloud.vision.v1p3beta1.ImageAnnotator/BatchAnnotateImages", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *imageAnnotatorClient) AsyncBatchAnnotateFiles(ctx context.Context, in *AsyncBatchAnnotateFilesRequest, opts ...grpc.CallOption) (*longrunning.Operation, error) {
-	out := new(longrunning.Operation)
-	err := c.cc.Invoke(ctx, "/google.cloud.vision.v1p3beta1.ImageAnnotator/AsyncBatchAnnotateFiles", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// ImageAnnotatorServer is the server API for ImageAnnotator service.
-type ImageAnnotatorServer interface {
-	// Run image detection and annotation for a batch of images.
-	BatchAnnotateImages(context.Context, *BatchAnnotateImagesRequest) (*BatchAnnotateImagesResponse, error)
-	// Run asynchronous image detection and annotation for a list of generic
-	// files, such as PDF files, which may contain multiple pages and multiple
-	// images per page. Progress and results can be retrieved through the
-	// `google.longrunning.Operations` interface.
-	// `Operation.metadata` contains `OperationMetadata` (metadata).
-	// `Operation.response` contains `AsyncBatchAnnotateFilesResponse` (results).
-	AsyncBatchAnnotateFiles(context.Context, *AsyncBatchAnnotateFilesRequest) (*longrunning.Operation, error)
-}
-
-func RegisterImageAnnotatorServer(s *grpc.Server, srv ImageAnnotatorServer) {
-	s.RegisterService(&_ImageAnnotator_serviceDesc, srv)
-}
-
-func _ImageAnnotator_BatchAnnotateImages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BatchAnnotateImagesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageAnnotatorServer).BatchAnnotateImages(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/google.cloud.vision.v1p3beta1.ImageAnnotator/BatchAnnotateImages",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageAnnotatorServer).BatchAnnotateImages(ctx, req.(*BatchAnnotateImagesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ImageAnnotator_AsyncBatchAnnotateFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AsyncBatchAnnotateFilesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageAnnotatorServer).AsyncBatchAnnotateFiles(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/google.cloud.vision.v1p3beta1.ImageAnnotator/AsyncBatchAnnotateFiles",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageAnnotatorServer).AsyncBatchAnnotateFiles(ctx, req.(*AsyncBatchAnnotateFilesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _ImageAnnotator_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "google.cloud.vision.v1p3beta1.ImageAnnotator",
-	HandlerType: (*ImageAnnotatorServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "BatchAnnotateImages",
-			Handler:    _ImageAnnotator_BatchAnnotateImages_Handler,
-		},
-		{
-			MethodName: "AsyncBatchAnnotateFiles",
-			Handler:    _ImageAnnotator_AsyncBatchAnnotateFiles_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "google/cloud/vision/v1p3beta1/image_annotator.proto",
 }
 
 func init() {
@@ -2867,4 +2746,123 @@ var fileDescriptor_2b863578148790db = []byte{
 	0xba, 0x3b, 0x5d, 0xe2, 0xf1, 0xe5, 0xb9, 0x13, 0xab, 0x2c, 0xdf, 0x09, 0xaf, 0xf8, 0xbb, 0xd0,
 	0x47, 0xb1, 0xe0, 0x5f, 0xb9, 0xdc, 0xd9, 0x2c, 0x87, 0xdc, 0xff, 0x77, 0x00, 0x00, 0x00, 0xff,
 	0xff, 0xeb, 0x48, 0xba, 0xeb, 0x69, 0x25, 0x00, 0x00,
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion4
+
+// ImageAnnotatorClient is the client API for ImageAnnotator service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type ImageAnnotatorClient interface {
+	// Run image detection and annotation for a batch of images.
+	BatchAnnotateImages(ctx context.Context, in *BatchAnnotateImagesRequest, opts ...grpc.CallOption) (*BatchAnnotateImagesResponse, error)
+	// Run asynchronous image detection and annotation for a list of generic
+	// files, such as PDF files, which may contain multiple pages and multiple
+	// images per page. Progress and results can be retrieved through the
+	// `google.longrunning.Operations` interface.
+	// `Operation.metadata` contains `OperationMetadata` (metadata).
+	// `Operation.response` contains `AsyncBatchAnnotateFilesResponse` (results).
+	AsyncBatchAnnotateFiles(ctx context.Context, in *AsyncBatchAnnotateFilesRequest, opts ...grpc.CallOption) (*longrunning.Operation, error)
+}
+
+type imageAnnotatorClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewImageAnnotatorClient(cc *grpc.ClientConn) ImageAnnotatorClient {
+	return &imageAnnotatorClient{cc}
+}
+
+func (c *imageAnnotatorClient) BatchAnnotateImages(ctx context.Context, in *BatchAnnotateImagesRequest, opts ...grpc.CallOption) (*BatchAnnotateImagesResponse, error) {
+	out := new(BatchAnnotateImagesResponse)
+	err := c.cc.Invoke(ctx, "/google.cloud.vision.v1p3beta1.ImageAnnotator/BatchAnnotateImages", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *imageAnnotatorClient) AsyncBatchAnnotateFiles(ctx context.Context, in *AsyncBatchAnnotateFilesRequest, opts ...grpc.CallOption) (*longrunning.Operation, error) {
+	out := new(longrunning.Operation)
+	err := c.cc.Invoke(ctx, "/google.cloud.vision.v1p3beta1.ImageAnnotator/AsyncBatchAnnotateFiles", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ImageAnnotatorServer is the server API for ImageAnnotator service.
+type ImageAnnotatorServer interface {
+	// Run image detection and annotation for a batch of images.
+	BatchAnnotateImages(context.Context, *BatchAnnotateImagesRequest) (*BatchAnnotateImagesResponse, error)
+	// Run asynchronous image detection and annotation for a list of generic
+	// files, such as PDF files, which may contain multiple pages and multiple
+	// images per page. Progress and results can be retrieved through the
+	// `google.longrunning.Operations` interface.
+	// `Operation.metadata` contains `OperationMetadata` (metadata).
+	// `Operation.response` contains `AsyncBatchAnnotateFilesResponse` (results).
+	AsyncBatchAnnotateFiles(context.Context, *AsyncBatchAnnotateFilesRequest) (*longrunning.Operation, error)
+}
+
+func RegisterImageAnnotatorServer(s *grpc.Server, srv ImageAnnotatorServer) {
+	s.RegisterService(&_ImageAnnotator_serviceDesc, srv)
+}
+
+func _ImageAnnotator_BatchAnnotateImages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchAnnotateImagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ImageAnnotatorServer).BatchAnnotateImages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/google.cloud.vision.v1p3beta1.ImageAnnotator/BatchAnnotateImages",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ImageAnnotatorServer).BatchAnnotateImages(ctx, req.(*BatchAnnotateImagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ImageAnnotator_AsyncBatchAnnotateFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AsyncBatchAnnotateFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ImageAnnotatorServer).AsyncBatchAnnotateFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/google.cloud.vision.v1p3beta1.ImageAnnotator/AsyncBatchAnnotateFiles",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ImageAnnotatorServer).AsyncBatchAnnotateFiles(ctx, req.(*AsyncBatchAnnotateFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _ImageAnnotator_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "google.cloud.vision.v1p3beta1.ImageAnnotator",
+	HandlerType: (*ImageAnnotatorServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "BatchAnnotateImages",
+			Handler:    _ImageAnnotator_BatchAnnotateImages_Handler,
+		},
+		{
+			MethodName: "AsyncBatchAnnotateFiles",
+			Handler:    _ImageAnnotator_AsyncBatchAnnotateFiles_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "google/cloud/vision/v1p3beta1/image_annotator.proto",
 }

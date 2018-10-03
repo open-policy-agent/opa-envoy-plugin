@@ -5,10 +5,11 @@ package build
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -129,8 +130,8 @@ func (m *BuildStatus) GetDetails() *any.Any {
 }
 
 func init() {
-	proto.RegisterType((*BuildStatus)(nil), "google.devtools.build.v1.BuildStatus")
 	proto.RegisterEnum("google.devtools.build.v1.BuildStatus_Result", BuildStatus_Result_name, BuildStatus_Result_value)
+	proto.RegisterType((*BuildStatus)(nil), "google.devtools.build.v1.BuildStatus")
 }
 
 func init() {

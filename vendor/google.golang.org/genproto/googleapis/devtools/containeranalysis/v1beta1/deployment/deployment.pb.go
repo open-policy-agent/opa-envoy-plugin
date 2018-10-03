@@ -5,9 +5,10 @@ package deployment
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -236,10 +237,10 @@ func (m *Deployment) GetPlatform() Deployment_Platform {
 }
 
 func init() {
+	proto.RegisterEnum("grafeas.v1beta1.deployment.Deployment_Platform", Deployment_Platform_name, Deployment_Platform_value)
 	proto.RegisterType((*Deployable)(nil), "grafeas.v1beta1.deployment.Deployable")
 	proto.RegisterType((*Details)(nil), "grafeas.v1beta1.deployment.Details")
 	proto.RegisterType((*Deployment)(nil), "grafeas.v1beta1.deployment.Deployment")
-	proto.RegisterEnum("grafeas.v1beta1.deployment.Deployment_Platform", Deployment_Platform_name, Deployment_Platform_value)
 }
 
 func init() {

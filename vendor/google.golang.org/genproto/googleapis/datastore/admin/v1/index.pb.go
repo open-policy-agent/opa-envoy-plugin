@@ -5,9 +5,10 @@ package admin
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -287,11 +288,11 @@ func (m *Index_IndexedProperty) GetDirection() Index_Direction {
 }
 
 func init() {
-	proto.RegisterType((*Index)(nil), "google.datastore.admin.v1.Index")
-	proto.RegisterType((*Index_IndexedProperty)(nil), "google.datastore.admin.v1.Index.IndexedProperty")
 	proto.RegisterEnum("google.datastore.admin.v1.Index_AncestorMode", Index_AncestorMode_name, Index_AncestorMode_value)
 	proto.RegisterEnum("google.datastore.admin.v1.Index_Direction", Index_Direction_name, Index_Direction_value)
 	proto.RegisterEnum("google.datastore.admin.v1.Index_State", Index_State_name, Index_State_value)
+	proto.RegisterType((*Index)(nil), "google.datastore.admin.v1.Index")
+	proto.RegisterType((*Index_IndexedProperty)(nil), "google.datastore.admin.v1.Index.IndexedProperty")
 }
 
 func init() {

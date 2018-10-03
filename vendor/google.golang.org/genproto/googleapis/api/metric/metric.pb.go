@@ -5,9 +5,10 @@ package metric
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	label "google.golang.org/genproto/googleapis/api/label"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -351,11 +352,11 @@ func (m *Metric) GetLabels() map[string]string {
 }
 
 func init() {
+	proto.RegisterEnum("google.api.MetricDescriptor_MetricKind", MetricDescriptor_MetricKind_name, MetricDescriptor_MetricKind_value)
+	proto.RegisterEnum("google.api.MetricDescriptor_ValueType", MetricDescriptor_ValueType_name, MetricDescriptor_ValueType_value)
 	proto.RegisterType((*MetricDescriptor)(nil), "google.api.MetricDescriptor")
 	proto.RegisterType((*Metric)(nil), "google.api.Metric")
 	proto.RegisterMapType((map[string]string)(nil), "google.api.Metric.LabelsEntry")
-	proto.RegisterEnum("google.api.MetricDescriptor_MetricKind", MetricDescriptor_MetricKind_name, MetricDescriptor_MetricKind_value)
-	proto.RegisterEnum("google.api.MetricDescriptor_ValueType", MetricDescriptor_ValueType_name, MetricDescriptor_ValueType_value)
 }
 
 func init() { proto.RegisterFile("google/api/metric.proto", fileDescriptor_927eaac1a24f8abb) }

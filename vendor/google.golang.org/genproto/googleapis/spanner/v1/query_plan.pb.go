@@ -5,10 +5,11 @@ package spanner
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -338,12 +339,12 @@ func (m *QueryPlan) GetPlanNodes() []*PlanNode {
 }
 
 func init() {
+	proto.RegisterEnum("google.spanner.v1.PlanNode_Kind", PlanNode_Kind_name, PlanNode_Kind_value)
 	proto.RegisterType((*PlanNode)(nil), "google.spanner.v1.PlanNode")
 	proto.RegisterType((*PlanNode_ChildLink)(nil), "google.spanner.v1.PlanNode.ChildLink")
 	proto.RegisterType((*PlanNode_ShortRepresentation)(nil), "google.spanner.v1.PlanNode.ShortRepresentation")
 	proto.RegisterMapType((map[string]int32)(nil), "google.spanner.v1.PlanNode.ShortRepresentation.SubqueriesEntry")
 	proto.RegisterType((*QueryPlan)(nil), "google.spanner.v1.QueryPlan")
-	proto.RegisterEnum("google.spanner.v1.PlanNode_Kind", PlanNode_Kind_name, PlanNode_Kind_value)
 }
 
 func init() { proto.RegisterFile("google/spanner/v1/query_plan.proto", fileDescriptor_14e5ab0c0507d181) }

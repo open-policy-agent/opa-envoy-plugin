@@ -5,8 +5,9 @@ package serviceconfig
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
 	math "math"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -185,9 +186,9 @@ func (m *Property) GetDescription() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.api.Property_PropertyType", Property_PropertyType_name, Property_PropertyType_value)
 	proto.RegisterType((*ProjectProperties)(nil), "google.api.ProjectProperties")
 	proto.RegisterType((*Property)(nil), "google.api.Property")
-	proto.RegisterEnum("google.api.Property_PropertyType", Property_PropertyType_name, Property_PropertyType_value)
 }
 
 func init() { proto.RegisterFile("google/api/consumer.proto", fileDescriptor_bec5e69370b3104e) }

@@ -5,12 +5,13 @@ package monitoring
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	duration "github.com/golang/protobuf/ptypes/duration"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	distribution "google.golang.org/genproto/googleapis/api/distribution"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -822,13 +823,13 @@ func (m *Aggregation) GetGroupByFields() []string {
 }
 
 func init() {
-	proto.RegisterType((*TypedValue)(nil), "google.monitoring.v3.TypedValue")
-	proto.RegisterType((*TimeInterval)(nil), "google.monitoring.v3.TimeInterval")
-	proto.RegisterType((*Aggregation)(nil), "google.monitoring.v3.Aggregation")
 	proto.RegisterEnum("google.monitoring.v3.ComparisonType", ComparisonType_name, ComparisonType_value)
 	proto.RegisterEnum("google.monitoring.v3.ServiceTier", ServiceTier_name, ServiceTier_value)
 	proto.RegisterEnum("google.monitoring.v3.Aggregation_Aligner", Aggregation_Aligner_name, Aggregation_Aligner_value)
 	proto.RegisterEnum("google.monitoring.v3.Aggregation_Reducer", Aggregation_Reducer_name, Aggregation_Reducer_value)
+	proto.RegisterType((*TypedValue)(nil), "google.monitoring.v3.TypedValue")
+	proto.RegisterType((*TimeInterval)(nil), "google.monitoring.v3.TimeInterval")
+	proto.RegisterType((*Aggregation)(nil), "google.monitoring.v3.Aggregation")
 }
 
 func init() { proto.RegisterFile("google/monitoring/v3/common.proto", fileDescriptor_013c57c1dcbb8d65) }

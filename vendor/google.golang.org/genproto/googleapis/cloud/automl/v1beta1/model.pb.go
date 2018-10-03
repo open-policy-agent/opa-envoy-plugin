@@ -5,10 +5,11 @@ package automl
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -303,8 +304,8 @@ func _Model_OneofSizer(msg proto.Message) (n int) {
 }
 
 func init() {
-	proto.RegisterType((*Model)(nil), "google.cloud.automl.v1beta1.Model")
 	proto.RegisterEnum("google.cloud.automl.v1beta1.Model_DeploymentState", Model_DeploymentState_name, Model_DeploymentState_value)
+	proto.RegisterType((*Model)(nil), "google.cloud.automl.v1beta1.Model")
 }
 
 func init() {

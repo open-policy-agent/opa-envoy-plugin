@@ -5,9 +5,10 @@ package resultstore
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	duration "github.com/golang/protobuf/ptypes/duration"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1340,6 +1341,9 @@ func (m *FileProcessingError) GetMessage() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.resultstore.v2.ExecutionStrategy", ExecutionStrategy_name, ExecutionStrategy_value)
+	proto.RegisterEnum("google.devtools.resultstore.v2.TestCaching", TestCaching_name, TestCaching_value)
+	proto.RegisterEnum("google.devtools.resultstore.v2.FileProcessingErrorType", FileProcessingErrorType_name, FileProcessingErrorType_value)
 	proto.RegisterType((*Action)(nil), "google.devtools.resultstore.v2.Action")
 	proto.RegisterType((*Action_Id)(nil), "google.devtools.resultstore.v2.Action.Id")
 	proto.RegisterType((*BuildAction)(nil), "google.devtools.resultstore.v2.BuildAction")
@@ -1353,9 +1357,6 @@ func init() {
 	proto.RegisterType((*TestWarning)(nil), "google.devtools.resultstore.v2.TestWarning")
 	proto.RegisterType((*FileProcessingErrors)(nil), "google.devtools.resultstore.v2.FileProcessingErrors")
 	proto.RegisterType((*FileProcessingError)(nil), "google.devtools.resultstore.v2.FileProcessingError")
-	proto.RegisterEnum("google.devtools.resultstore.v2.ExecutionStrategy", ExecutionStrategy_name, ExecutionStrategy_value)
-	proto.RegisterEnum("google.devtools.resultstore.v2.TestCaching", TestCaching_name, TestCaching_value)
-	proto.RegisterEnum("google.devtools.resultstore.v2.FileProcessingErrorType", FileProcessingErrorType_name, FileProcessingErrorType_value)
 }
 
 func init() {

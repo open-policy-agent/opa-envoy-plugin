@@ -5,10 +5,11 @@ package appengine
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -257,8 +258,8 @@ func (m *Instance) GetVmDebugEnabled() bool {
 }
 
 func init() {
-	proto.RegisterType((*Instance)(nil), "google.appengine.v1.Instance")
 	proto.RegisterEnum("google.appengine.v1.Instance_Availability", Instance_Availability_name, Instance_Availability_value)
+	proto.RegisterType((*Instance)(nil), "google.appengine.v1.Instance")
 }
 
 func init() { proto.RegisterFile("google/appengine/v1/instance.proto", fileDescriptor_3b3f5aa565fc77c9) }

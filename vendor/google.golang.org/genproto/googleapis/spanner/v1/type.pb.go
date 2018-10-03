@@ -5,9 +5,10 @@ package spanner
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -263,10 +264,10 @@ func (m *StructType_Field) GetType() *Type {
 }
 
 func init() {
+	proto.RegisterEnum("google.spanner.v1.TypeCode", TypeCode_name, TypeCode_value)
 	proto.RegisterType((*Type)(nil), "google.spanner.v1.Type")
 	proto.RegisterType((*StructType)(nil), "google.spanner.v1.StructType")
 	proto.RegisterType((*StructType_Field)(nil), "google.spanner.v1.StructType.Field")
-	proto.RegisterEnum("google.spanner.v1.TypeCode", TypeCode_name, TypeCode_value)
 }
 
 func init() { proto.RegisterFile("google/spanner/v1/type.proto", fileDescriptor_dc1f2442a7aeba2a) }

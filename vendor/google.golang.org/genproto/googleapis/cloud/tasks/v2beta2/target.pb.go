@@ -5,10 +5,11 @@ package tasks
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "github.com/golang/protobuf/ptypes/duration"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -582,13 +583,13 @@ func (m *AppEngineRouting) GetHost() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.tasks.v2beta2.HttpMethod", HttpMethod_name, HttpMethod_value)
 	proto.RegisterType((*PullTarget)(nil), "google.cloud.tasks.v2beta2.PullTarget")
 	proto.RegisterType((*PullMessage)(nil), "google.cloud.tasks.v2beta2.PullMessage")
 	proto.RegisterType((*AppEngineHttpTarget)(nil), "google.cloud.tasks.v2beta2.AppEngineHttpTarget")
 	proto.RegisterType((*AppEngineHttpRequest)(nil), "google.cloud.tasks.v2beta2.AppEngineHttpRequest")
 	proto.RegisterMapType((map[string]string)(nil), "google.cloud.tasks.v2beta2.AppEngineHttpRequest.HeadersEntry")
 	proto.RegisterType((*AppEngineRouting)(nil), "google.cloud.tasks.v2beta2.AppEngineRouting")
-	proto.RegisterEnum("google.cloud.tasks.v2beta2.HttpMethod", HttpMethod_name, HttpMethod_value)
 }
 
 func init() {

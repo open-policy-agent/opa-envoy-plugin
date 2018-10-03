@@ -5,10 +5,11 @@ package vision
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -430,12 +431,12 @@ func (m *ProductSearchResults_Result) GetImage() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.vision.v1p3beta1.ProductSearchCategory", ProductSearchCategory_name, ProductSearchCategory_value)
+	proto.RegisterEnum("google.cloud.vision.v1p3beta1.ProductSearchResultsView", ProductSearchResultsView_name, ProductSearchResultsView_value)
 	proto.RegisterType((*ProductSearchParams)(nil), "google.cloud.vision.v1p3beta1.ProductSearchParams")
 	proto.RegisterType((*ProductSearchResults)(nil), "google.cloud.vision.v1p3beta1.ProductSearchResults")
 	proto.RegisterType((*ProductSearchResults_ProductInfo)(nil), "google.cloud.vision.v1p3beta1.ProductSearchResults.ProductInfo")
 	proto.RegisterType((*ProductSearchResults_Result)(nil), "google.cloud.vision.v1p3beta1.ProductSearchResults.Result")
-	proto.RegisterEnum("google.cloud.vision.v1p3beta1.ProductSearchCategory", ProductSearchCategory_name, ProductSearchCategory_value)
-	proto.RegisterEnum("google.cloud.vision.v1p3beta1.ProductSearchResultsView", ProductSearchResultsView_name, ProductSearchResultsView_value)
 }
 
 func init() {

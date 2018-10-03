@@ -5,10 +5,11 @@ package websecurityscanner
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -230,9 +231,9 @@ func (m *ScanRun) GetProgressPercent() int32 {
 }
 
 func init() {
-	proto.RegisterType((*ScanRun)(nil), "google.cloud.websecurityscanner.v1alpha.ScanRun")
 	proto.RegisterEnum("google.cloud.websecurityscanner.v1alpha.ScanRun_ExecutionState", ScanRun_ExecutionState_name, ScanRun_ExecutionState_value)
 	proto.RegisterEnum("google.cloud.websecurityscanner.v1alpha.ScanRun_ResultState", ScanRun_ResultState_name, ScanRun_ResultState_value)
+	proto.RegisterType((*ScanRun)(nil), "google.cloud.websecurityscanner.v1alpha.ScanRun")
 }
 
 func init() {

@@ -5,8 +5,9 @@ package configchange
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
 	math "math"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -197,9 +198,9 @@ func (m *Advice) GetDescription() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.api.ChangeType", ChangeType_name, ChangeType_value)
 	proto.RegisterType((*ConfigChange)(nil), "google.api.ConfigChange")
 	proto.RegisterType((*Advice)(nil), "google.api.Advice")
-	proto.RegisterEnum("google.api.ChangeType", ChangeType_name, ChangeType_value)
 }
 
 func init() { proto.RegisterFile("google/api/config_change.proto", fileDescriptor_5c5c17e3f260da51) }

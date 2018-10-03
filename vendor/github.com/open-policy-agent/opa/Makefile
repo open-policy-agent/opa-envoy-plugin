@@ -2,7 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := 0.9.2
+VERSION := 0.9.3-dev
 
 GO := go
 GOVERSION := 1.10
@@ -79,6 +79,16 @@ tag-latest:
 push-latest:
 	docker push $(IMAGE):latest
 	docker push $(IMAGE):latest-debug
+
+.PHONY: docker-login
+docker-login:
+	@docker login -u ${DOCKER_USER} -p ${DOCKER_PASSWORD}
+
+.PHONY: deploy-travis
+deploy-travis: docker-login image-quick push
+
+.PHONY: release-travis
+release-travis: docker-login tag-latest push-latest
 
 .PHONY: install
 install: generate

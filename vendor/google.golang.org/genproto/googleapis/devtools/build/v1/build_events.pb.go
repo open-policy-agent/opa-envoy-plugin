@@ -5,13 +5,14 @@ package build
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/rpc/status"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -947,6 +948,9 @@ func (m *StreamId) GetComponent() StreamId_BuildComponent {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.build.v1.ConsoleOutputStream", ConsoleOutputStream_name, ConsoleOutputStream_value)
+	proto.RegisterEnum("google.devtools.build.v1.BuildEvent_BuildComponentStreamFinished_FinishType", BuildEvent_BuildComponentStreamFinished_FinishType_name, BuildEvent_BuildComponentStreamFinished_FinishType_value)
+	proto.RegisterEnum("google.devtools.build.v1.StreamId_BuildComponent", StreamId_BuildComponent_name, StreamId_BuildComponent_value)
 	proto.RegisterType((*BuildEvent)(nil), "google.devtools.build.v1.BuildEvent")
 	proto.RegisterType((*BuildEvent_InvocationAttemptStarted)(nil), "google.devtools.build.v1.BuildEvent.InvocationAttemptStarted")
 	proto.RegisterType((*BuildEvent_InvocationAttemptFinished)(nil), "google.devtools.build.v1.BuildEvent.InvocationAttemptFinished")
@@ -955,9 +959,6 @@ func init() {
 	proto.RegisterType((*BuildEvent_ConsoleOutput)(nil), "google.devtools.build.v1.BuildEvent.ConsoleOutput")
 	proto.RegisterType((*BuildEvent_BuildComponentStreamFinished)(nil), "google.devtools.build.v1.BuildEvent.BuildComponentStreamFinished")
 	proto.RegisterType((*StreamId)(nil), "google.devtools.build.v1.StreamId")
-	proto.RegisterEnum("google.devtools.build.v1.ConsoleOutputStream", ConsoleOutputStream_name, ConsoleOutputStream_value)
-	proto.RegisterEnum("google.devtools.build.v1.BuildEvent_BuildComponentStreamFinished_FinishType", BuildEvent_BuildComponentStreamFinished_FinishType_name, BuildEvent_BuildComponentStreamFinished_FinishType_value)
-	proto.RegisterEnum("google.devtools.build.v1.StreamId_BuildComponent", StreamId_BuildComponent_name, StreamId_BuildComponent_value)
 }
 
 func init() {

@@ -5,10 +5,11 @@ package servicecontrol
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -208,9 +209,9 @@ func (m *Operation) GetImportance() Operation_Importance {
 }
 
 func init() {
+	proto.RegisterEnum("google.api.servicecontrol.v1.Operation_Importance", Operation_Importance_name, Operation_Importance_value)
 	proto.RegisterType((*Operation)(nil), "google.api.servicecontrol.v1.Operation")
 	proto.RegisterMapType((map[string]string)(nil), "google.api.servicecontrol.v1.Operation.LabelsEntry")
-	proto.RegisterEnum("google.api.servicecontrol.v1.Operation_Importance", Operation_Importance_name, Operation_Importance_value)
 }
 
 func init() {

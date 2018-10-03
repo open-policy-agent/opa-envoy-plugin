@@ -5,11 +5,12 @@ package tasks
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -458,10 +459,10 @@ func (m *AttemptStatus) GetResponseStatus() *status.Status {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.tasks.v2beta2.Task_View", Task_View_name, Task_View_value)
 	proto.RegisterType((*Task)(nil), "google.cloud.tasks.v2beta2.Task")
 	proto.RegisterType((*TaskStatus)(nil), "google.cloud.tasks.v2beta2.TaskStatus")
 	proto.RegisterType((*AttemptStatus)(nil), "google.cloud.tasks.v2beta2.AttemptStatus")
-	proto.RegisterEnum("google.cloud.tasks.v2beta2.Task_View", Task_View_name, Task_View_value)
 }
 
 func init() {

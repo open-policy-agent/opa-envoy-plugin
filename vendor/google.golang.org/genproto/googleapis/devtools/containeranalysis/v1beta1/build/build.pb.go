@@ -5,9 +5,10 @@ package build
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	provenance "google.golang.org/genproto/googleapis/devtools/containeranalysis/v1beta1/provenance"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -251,10 +252,10 @@ func (m *Details) GetProvenanceBytes() string {
 }
 
 func init() {
+	proto.RegisterEnum("grafeas.v1beta1.build.BuildSignature_KeyType", BuildSignature_KeyType_name, BuildSignature_KeyType_value)
 	proto.RegisterType((*Build)(nil), "grafeas.v1beta1.build.Build")
 	proto.RegisterType((*BuildSignature)(nil), "grafeas.v1beta1.build.BuildSignature")
 	proto.RegisterType((*Details)(nil), "grafeas.v1beta1.build.Details")
-	proto.RegisterEnum("grafeas.v1beta1.build.BuildSignature_KeyType", BuildSignature_KeyType_name, BuildSignature_KeyType_value)
 }
 
 func init() {

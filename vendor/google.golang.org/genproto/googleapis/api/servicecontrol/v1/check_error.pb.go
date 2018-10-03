@@ -5,9 +5,10 @@ package servicecontrol
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -166,8 +167,8 @@ func (m *CheckError) GetDetail() string {
 }
 
 func init() {
-	proto.RegisterType((*CheckError)(nil), "google.api.servicecontrol.v1.CheckError")
 	proto.RegisterEnum("google.api.servicecontrol.v1.CheckError_Code", CheckError_Code_name, CheckError_Code_value)
+	proto.RegisterType((*CheckError)(nil), "google.api.servicecontrol.v1.CheckError")
 }
 
 func init() {

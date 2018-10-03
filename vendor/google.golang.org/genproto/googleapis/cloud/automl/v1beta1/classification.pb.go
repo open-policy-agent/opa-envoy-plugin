@@ -5,9 +5,10 @@ package automl
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -389,12 +390,12 @@ func (m *ClassificationEvaluationMetrics_ConfusionMatrix_Row) GetExampleCount() 
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.automl.v1beta1.ClassificationType", ClassificationType_name, ClassificationType_value)
 	proto.RegisterType((*ClassificationAnnotation)(nil), "google.cloud.automl.v1beta1.ClassificationAnnotation")
 	proto.RegisterType((*ClassificationEvaluationMetrics)(nil), "google.cloud.automl.v1beta1.ClassificationEvaluationMetrics")
 	proto.RegisterType((*ClassificationEvaluationMetrics_ConfidenceMetricsEntry)(nil), "google.cloud.automl.v1beta1.ClassificationEvaluationMetrics.ConfidenceMetricsEntry")
 	proto.RegisterType((*ClassificationEvaluationMetrics_ConfusionMatrix)(nil), "google.cloud.automl.v1beta1.ClassificationEvaluationMetrics.ConfusionMatrix")
 	proto.RegisterType((*ClassificationEvaluationMetrics_ConfusionMatrix_Row)(nil), "google.cloud.automl.v1beta1.ClassificationEvaluationMetrics.ConfusionMatrix.Row")
-	proto.RegisterEnum("google.cloud.automl.v1beta1.ClassificationType", ClassificationType_name, ClassificationType_value)
 }
 
 func init() {

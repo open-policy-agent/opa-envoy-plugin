@@ -5,12 +5,13 @@ package dataproc
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "github.com/golang/protobuf/ptypes/empty"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/longrunning"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -233,10 +234,10 @@ func (m *ClusterOperationMetadata) GetWarnings() []string {
 }
 
 func init() {
+	proto.RegisterEnum("google.cloud.dataproc.v1.ClusterOperationStatus_State", ClusterOperationStatus_State_name, ClusterOperationStatus_State_value)
 	proto.RegisterType((*ClusterOperationStatus)(nil), "google.cloud.dataproc.v1.ClusterOperationStatus")
 	proto.RegisterType((*ClusterOperationMetadata)(nil), "google.cloud.dataproc.v1.ClusterOperationMetadata")
 	proto.RegisterMapType((map[string]string)(nil), "google.cloud.dataproc.v1.ClusterOperationMetadata.LabelsEntry")
-	proto.RegisterEnum("google.cloud.dataproc.v1.ClusterOperationStatus_State", ClusterOperationStatus_State_name, ClusterOperationStatus_State_value)
 }
 
 func init() {

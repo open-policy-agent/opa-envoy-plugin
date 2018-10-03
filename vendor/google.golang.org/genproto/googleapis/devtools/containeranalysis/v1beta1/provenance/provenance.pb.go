@@ -5,10 +5,11 @@ package provenance
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	source "google.golang.org/genproto/googleapis/devtools/containeranalysis/v1beta1/source"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -529,6 +530,7 @@ func (m *Artifact) GetNames() []string {
 }
 
 func init() {
+	proto.RegisterEnum("grafeas.v1beta1.provenance.Hash_HashType", Hash_HashType_name, Hash_HashType_value)
 	proto.RegisterType((*BuildProvenance)(nil), "grafeas.v1beta1.provenance.BuildProvenance")
 	proto.RegisterMapType((map[string]string)(nil), "grafeas.v1beta1.provenance.BuildProvenance.BuildOptionsEntry")
 	proto.RegisterType((*Source)(nil), "grafeas.v1beta1.provenance.Source")
@@ -537,7 +539,6 @@ func init() {
 	proto.RegisterType((*Hash)(nil), "grafeas.v1beta1.provenance.Hash")
 	proto.RegisterType((*Command)(nil), "grafeas.v1beta1.provenance.Command")
 	proto.RegisterType((*Artifact)(nil), "grafeas.v1beta1.provenance.Artifact")
-	proto.RegisterEnum("grafeas.v1beta1.provenance.Hash_HashType", Hash_HashType_name, Hash_HashType_value)
 }
 
 func init() {

@@ -5,10 +5,11 @@ package containeranalysis
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -914,6 +915,7 @@ func (m *Artifact) GetNames() []string {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.containeranalysis.v1alpha1.Hash_HashType", Hash_HashType_name, Hash_HashType_value)
 	proto.RegisterType((*BuildProvenance)(nil), "google.devtools.containeranalysis.v1alpha1.BuildProvenance")
 	proto.RegisterMapType((map[string]string)(nil), "google.devtools.containeranalysis.v1alpha1.BuildProvenance.BuildOptionsEntry")
 	proto.RegisterType((*Source)(nil), "google.devtools.containeranalysis.v1alpha1.Source")
@@ -924,7 +926,6 @@ func init() {
 	proto.RegisterType((*RepoSource)(nil), "google.devtools.containeranalysis.v1alpha1.RepoSource")
 	proto.RegisterType((*Command)(nil), "google.devtools.containeranalysis.v1alpha1.Command")
 	proto.RegisterType((*Artifact)(nil), "google.devtools.containeranalysis.v1alpha1.Artifact")
-	proto.RegisterEnum("google.devtools.containeranalysis.v1alpha1.Hash_HashType", Hash_HashType_name, Hash_HashType_value)
 }
 
 func init() {

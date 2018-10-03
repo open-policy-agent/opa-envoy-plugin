@@ -240,10 +240,6 @@ func TestLoadImportsGraph(t *testing.T) {
 }
 
 func TestLoadImportsTestVariants(t *testing.T) {
-	if usesOldGolist {
-		t.Skip("not yet supported in pre-Go 1.10.4 golist fallback implementation")
-	}
-
 	tmp, cleanup := makeTree(t, map[string]string{
 		"src/a/a.go":       `package a; import _ "b"`,
 		"src/b/b.go":       `package b`,
@@ -335,6 +331,33 @@ func TestLoadImportsC(t *testing.T) {
 	}
 }
 
+func TestLoadAbsolutePath(t *testing.T) {
+	tmp, cleanup := makeTree(t, map[string]string{
+		"gopatha/src/a/a.go": `package a`,
+		"gopathb/src/b/b.go": `package b`,
+	})
+	defer cleanup()
+
+	cfg := &packages.Config{
+		Mode: packages.LoadImports,
+		Env: append(os.Environ(),
+			"GOPATH="+filepath.Join(tmp, "gopatha")+string(filepath.ListSeparator)+filepath.Join(tmp, "gopathb"),
+			"GO111MODULE=off"),
+	}
+	initial, err := packages.Load(cfg, filepath.Join(tmp, "gopatha", "src", "a"), filepath.Join(tmp, "gopathb", "src", "b"))
+	if err != nil {
+		t.Fatalf("failed to load imports: %v", err)
+	}
+
+	got := []string{}
+	for _, p := range initial {
+		got = append(got, p.ID)
+	}
+	if !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("initial packages loaded: got [%s], want [a b]", got)
+	}
+}
+
 func TestVendorImports(t *testing.T) {
 	tmp, cleanup := makeTree(t, map[string]string{
 		"src/a/a.go":          `package a; import _ "b"; import _ "c";`,
@@ -406,22 +429,23 @@ func TestConfigDir(t *testing.T) {
 	defer cleanup()
 
 	for _, test := range []struct {
-		dir     string
-		pattern string
-		want    string // value of Name constant, or error
+		dir         string
+		pattern     string
+		want        string // value of Name constant
+		errContains string
 	}{
-		{"", "a", `"a"`},
-		{"", "b", `"b"`},
-		{"", "./a", "packages not found"},
-		{"", "./b", "packages not found"},
-		{filepath.Join(tmp, "/src"), "a", `"a"`},
-		{filepath.Join(tmp, "/src"), "b", `"b"`},
-		{filepath.Join(tmp, "/src"), "./a", `"a"`},
-		{filepath.Join(tmp, "/src"), "./b", `"b"`},
-		{filepath.Join(tmp, "/src/a"), "a", `"a"`},
-		{filepath.Join(tmp, "/src/a"), "b", `"b"`},
-		{filepath.Join(tmp, "/src/a"), "./a", "packages not found"},
-		{filepath.Join(tmp, "/src/a"), "./b", `"a/b"`},
+		{pattern: "a", want: `"a"`},
+		{pattern: "b", want: `"b"`},
+		{pattern: "./a", errContains: "cannot find"},
+		{pattern: "./b", errContains: "cannot find"},
+		{dir: filepath.Join(tmp, "/src"), pattern: "a", want: `"a"`},
+		{dir: filepath.Join(tmp, "/src"), pattern: "b", want: `"b"`},
+		{dir: filepath.Join(tmp, "/src"), pattern: "./a", want: `"a"`},
+		{dir: filepath.Join(tmp, "/src"), pattern: "./b", want: `"b"`},
+		{dir: filepath.Join(tmp, "/src/a"), pattern: "a", want: `"a"`},
+		{dir: filepath.Join(tmp, "/src/a"), pattern: "b", want: `"b"`},
+		{dir: filepath.Join(tmp, "/src/a"), pattern: "./a", errContains: "cannot find"},
+		{dir: filepath.Join(tmp, "/src/a"), pattern: "./b", want: `"a/b"`},
 	} {
 		cfg := &packages.Config{
 			Mode: packages.LoadSyntax, // Use LoadSyntax to ensure that files can be opened.
@@ -430,15 +454,23 @@ func TestConfigDir(t *testing.T) {
 		}
 
 		initial, err := packages.Load(cfg, test.pattern)
-		var got string
+		var got, errMsg string
 		if err != nil {
-			got = err.Error()
-		} else {
-			got = constant(initial[0], "Name").Val().String()
+			errMsg = err.Error()
+		} else if len(initial) > 0 {
+			if len(initial[0].Errors) > 0 {
+				errMsg = initial[0].Errors[0].Error()
+			} else if c := constant(initial[0], "Name"); c != nil {
+				got = c.Val().String()
+			}
 		}
 		if got != test.want {
 			t.Errorf("dir %q, pattern %q: got %s, want %s",
 				test.dir, test.pattern, got, test.want)
+		}
+		if !strings.Contains(errMsg, test.errContains) {
+			t.Errorf("dir %q, pattern %q: error %s, want %s",
+				test.dir, test.pattern, errMsg, test.errContains)
 		}
 	}
 
@@ -1431,5 +1463,9 @@ func makeTree(t *testing.T, tree map[string]string) (dir string, cleanup func())
 }
 
 func constant(p *packages.Package, name string) *types.Const {
-	return p.Types.Scope().Lookup(name).(*types.Const)
+	c := p.Types.Scope().Lookup(name)
+	if c == nil {
+		return nil
+	}
+	return c.(*types.Const)
 }

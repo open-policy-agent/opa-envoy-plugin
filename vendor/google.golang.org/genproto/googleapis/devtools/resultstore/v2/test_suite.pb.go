@@ -5,8 +5,9 @@ package resultstore
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
 	math "math"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -583,12 +584,12 @@ func (m *TestError) GetStackTrace() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.resultstore.v2.TestCase_Result", TestCase_Result_name, TestCase_Result_value)
 	proto.RegisterType((*TestSuite)(nil), "google.devtools.resultstore.v2.TestSuite")
 	proto.RegisterType((*Test)(nil), "google.devtools.resultstore.v2.Test")
 	proto.RegisterType((*TestCase)(nil), "google.devtools.resultstore.v2.TestCase")
 	proto.RegisterType((*TestFailure)(nil), "google.devtools.resultstore.v2.TestFailure")
 	proto.RegisterType((*TestError)(nil), "google.devtools.resultstore.v2.TestError")
-	proto.RegisterEnum("google.devtools.resultstore.v2.TestCase_Result", TestCase_Result_name, TestCase_Result_value)
 }
 
 func init() {

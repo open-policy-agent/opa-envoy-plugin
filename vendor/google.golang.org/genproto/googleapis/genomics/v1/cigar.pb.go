@@ -5,9 +5,10 @@ package genomics
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -169,8 +170,8 @@ func (m *CigarUnit) GetReferenceSequence() string {
 }
 
 func init() {
-	proto.RegisterType((*CigarUnit)(nil), "google.genomics.v1.CigarUnit")
 	proto.RegisterEnum("google.genomics.v1.CigarUnit_Operation", CigarUnit_Operation_name, CigarUnit_Operation_value)
+	proto.RegisterType((*CigarUnit)(nil), "google.genomics.v1.CigarUnit")
 }
 
 func init() { proto.RegisterFile("google/genomics/v1/cigar.proto", fileDescriptor_353bda9a6ec457b8) }

@@ -5,9 +5,10 @@ package source
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1110,6 +1111,7 @@ func (m *CloudWorkspaceId) GetName() string {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.source.v1.AliasContext_Kind", AliasContext_Kind_name, AliasContext_Kind_value)
 	proto.RegisterType((*SourceContext)(nil), "google.devtools.source.v1.SourceContext")
 	proto.RegisterType((*ExtendedSourceContext)(nil), "google.devtools.source.v1.ExtendedSourceContext")
 	proto.RegisterMapType((map[string]string)(nil), "google.devtools.source.v1.ExtendedSourceContext.LabelsEntry")
@@ -1121,7 +1123,6 @@ func init() {
 	proto.RegisterType((*RepoId)(nil), "google.devtools.source.v1.RepoId")
 	proto.RegisterType((*ProjectRepoId)(nil), "google.devtools.source.v1.ProjectRepoId")
 	proto.RegisterType((*CloudWorkspaceId)(nil), "google.devtools.source.v1.CloudWorkspaceId")
-	proto.RegisterEnum("google.devtools.source.v1.AliasContext_Kind", AliasContext_Kind_name, AliasContext_Kind_value)
 }
 
 func init() {

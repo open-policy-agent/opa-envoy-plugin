@@ -5,11 +5,12 @@ package monitoring
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	label "google.golang.org/genproto/googleapis/api/label"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -320,11 +321,11 @@ func (m *NotificationChannel) GetEnabled() *wrappers.BoolValue {
 }
 
 func init() {
+	proto.RegisterEnum("google.monitoring.v3.NotificationChannel_VerificationStatus", NotificationChannel_VerificationStatus_name, NotificationChannel_VerificationStatus_value)
 	proto.RegisterType((*NotificationChannelDescriptor)(nil), "google.monitoring.v3.NotificationChannelDescriptor")
 	proto.RegisterType((*NotificationChannel)(nil), "google.monitoring.v3.NotificationChannel")
 	proto.RegisterMapType((map[string]string)(nil), "google.monitoring.v3.NotificationChannel.LabelsEntry")
 	proto.RegisterMapType((map[string]string)(nil), "google.monitoring.v3.NotificationChannel.UserLabelsEntry")
-	proto.RegisterEnum("google.monitoring.v3.NotificationChannel_VerificationStatus", NotificationChannel_VerificationStatus_name, NotificationChannel_VerificationStatus_value)
 }
 
 func init() {

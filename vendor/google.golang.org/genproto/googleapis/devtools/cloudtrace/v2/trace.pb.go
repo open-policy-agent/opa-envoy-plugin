@@ -5,12 +5,13 @@ package cloudtrace
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1293,6 +1294,8 @@ func (m *TruncatableString) GetTruncatedByteCount() int32 {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.cloudtrace.v2.Span_TimeEvent_MessageEvent_Type", Span_TimeEvent_MessageEvent_Type_name, Span_TimeEvent_MessageEvent_Type_value)
+	proto.RegisterEnum("google.devtools.cloudtrace.v2.Span_Link_Type", Span_Link_Type_name, Span_Link_Type_value)
 	proto.RegisterType((*Span)(nil), "google.devtools.cloudtrace.v2.Span")
 	proto.RegisterType((*Span_Attributes)(nil), "google.devtools.cloudtrace.v2.Span.Attributes")
 	proto.RegisterMapType((map[string]*AttributeValue)(nil), "google.devtools.cloudtrace.v2.Span.Attributes.AttributeMapEntry")
@@ -1308,8 +1311,6 @@ func init() {
 	proto.RegisterType((*StackTrace_StackFrames)(nil), "google.devtools.cloudtrace.v2.StackTrace.StackFrames")
 	proto.RegisterType((*Module)(nil), "google.devtools.cloudtrace.v2.Module")
 	proto.RegisterType((*TruncatableString)(nil), "google.devtools.cloudtrace.v2.TruncatableString")
-	proto.RegisterEnum("google.devtools.cloudtrace.v2.Span_TimeEvent_MessageEvent_Type", Span_TimeEvent_MessageEvent_Type_name, Span_TimeEvent_MessageEvent_Type_value)
-	proto.RegisterEnum("google.devtools.cloudtrace.v2.Span_Link_Type", Span_Link_Type_name, Span_Link_Type_value)
 }
 
 func init() {

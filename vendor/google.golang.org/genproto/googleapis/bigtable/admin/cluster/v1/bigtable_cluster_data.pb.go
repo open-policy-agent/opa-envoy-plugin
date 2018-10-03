@@ -5,11 +5,12 @@ package cluster
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "github.com/golang/protobuf/ptypes/timestamp"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	longrunning "google.golang.org/genproto/googleapis/longrunning"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -238,10 +239,10 @@ func (m *Cluster) GetDefaultStorageType() StorageType {
 }
 
 func init() {
-	proto.RegisterType((*Zone)(nil), "google.bigtable.admin.cluster.v1.Zone")
-	proto.RegisterType((*Cluster)(nil), "google.bigtable.admin.cluster.v1.Cluster")
 	proto.RegisterEnum("google.bigtable.admin.cluster.v1.StorageType", StorageType_name, StorageType_value)
 	proto.RegisterEnum("google.bigtable.admin.cluster.v1.Zone_Status", Zone_Status_name, Zone_Status_value)
+	proto.RegisterType((*Zone)(nil), "google.bigtable.admin.cluster.v1.Zone")
+	proto.RegisterType((*Cluster)(nil), "google.bigtable.admin.cluster.v1.Cluster")
 }
 
 func init() {

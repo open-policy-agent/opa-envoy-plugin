@@ -5,9 +5,10 @@ package containeranalysis
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -342,12 +343,12 @@ func (m *PackageManager_Installation) GetLocation() []*PackageManager_Location {
 }
 
 func init() {
+	proto.RegisterEnum("google.devtools.containeranalysis.v1alpha1.PackageManager_Architecture", PackageManager_Architecture_name, PackageManager_Architecture_value)
 	proto.RegisterType((*PackageManager)(nil), "google.devtools.containeranalysis.v1alpha1.PackageManager")
 	proto.RegisterType((*PackageManager_Distribution)(nil), "google.devtools.containeranalysis.v1alpha1.PackageManager.Distribution")
 	proto.RegisterType((*PackageManager_Location)(nil), "google.devtools.containeranalysis.v1alpha1.PackageManager.Location")
 	proto.RegisterType((*PackageManager_Package)(nil), "google.devtools.containeranalysis.v1alpha1.PackageManager.Package")
 	proto.RegisterType((*PackageManager_Installation)(nil), "google.devtools.containeranalysis.v1alpha1.PackageManager.Installation")
-	proto.RegisterEnum("google.devtools.containeranalysis.v1alpha1.PackageManager_Architecture", PackageManager_Architecture_name, PackageManager_Architecture_value)
 }
 
 func init() {

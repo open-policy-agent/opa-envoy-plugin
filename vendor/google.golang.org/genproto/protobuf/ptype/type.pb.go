@@ -5,10 +5,11 @@ package ptype
 
 import (
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	source_context "google.golang.org/genproto/protobuf/source_context"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -586,14 +587,14 @@ func (m *Option) GetValue() *any.Any {
 }
 
 func init() {
+	proto.RegisterEnum("google.protobuf.Syntax", Syntax_name, Syntax_value)
+	proto.RegisterEnum("google.protobuf.Field_Kind", Field_Kind_name, Field_Kind_value)
+	proto.RegisterEnum("google.protobuf.Field_Cardinality", Field_Cardinality_name, Field_Cardinality_value)
 	proto.RegisterType((*Type)(nil), "google.protobuf.Type")
 	proto.RegisterType((*Field)(nil), "google.protobuf.Field")
 	proto.RegisterType((*Enum)(nil), "google.protobuf.Enum")
 	proto.RegisterType((*EnumValue)(nil), "google.protobuf.EnumValue")
 	proto.RegisterType((*Option)(nil), "google.protobuf.Option")
-	proto.RegisterEnum("google.protobuf.Syntax", Syntax_name, Syntax_value)
-	proto.RegisterEnum("google.protobuf.Field_Kind", Field_Kind_name, Field_Kind_value)
-	proto.RegisterEnum("google.protobuf.Field_Cardinality", Field_Cardinality_name, Field_Cardinality_value)
 }
 
 func init() { proto.RegisterFile("google/protobuf/type.proto", fileDescriptor_dd271cc1e348c538) }
