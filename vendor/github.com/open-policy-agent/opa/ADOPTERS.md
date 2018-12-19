@@ -9,6 +9,8 @@ others are at various stages of testing.
 * [Cloudflare](https://www.cloudflare.com/)
 * [Pinterest](https://www.pinterest.com/)
 * [State Street Corporation](http://www.statestreet.com/)
+* [Nefeli Networks](https://nefeli.io)
+* [Intuit](https://www.intuit.com/company/)
 
 If you have adopted OPA and would like to be included in this list, feel free to
 submit a PR.

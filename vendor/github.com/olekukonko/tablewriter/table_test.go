@@ -17,23 +17,12 @@ import (
 	"testing"
 )
 
-func checkEqual(t *testing.T, got, want interface{}, msgs ...interface{}) {
-	if !reflect.DeepEqual(got, want) {
-		buf := bytes.Buffer{}
-		buf.WriteString("got:\n[%v]\nwant:\n[%v]\n")
-		for _, v := range msgs {
-			buf.WriteString(v.(string))
-		}
-		t.Errorf(buf.String(), got, want)
-	}
-}
-
 func ExampleShort() {
 	data := [][]string{
-		{"A", "The Good", "500"},
-		{"B", "The Very very Bad Man", "288"},
-		{"C", "The Ugly", "120"},
-		{"D", "The Gopher", "800"},
+		[]string{"A", "The Good", "500"},
+		[]string{"B", "The Very very Bad Man", "288"},
+		[]string{"C", "The Ugly", "120"},
+		[]string{"D", "The Gopher", "800"},
 	}
 
 	table := NewWriter(os.Stdout)
@@ -56,8 +45,8 @@ func ExampleShort() {
 
 func ExampleLong() {
 	data := [][]string{
-		{"Learn East has computers with adapted keyboards with enlarged print etc", "  Some Data  ", " Another Data"},
-		{"Instead of lining up the letters all ", "the way across, he splits the keyboard in two", "Like most ergonomic keyboards", "See Data"},
+		[]string{"Learn East has computers with adapted keyboards with enlarged print etc", "  Some Data  ", " Another Data"},
+		[]string{"Instead of lining up the letters all ", "the way across, he splits the keyboard in two", "Like most ergonomic keyboards", "See Data"},
 	}
 
 	table := NewWriter(os.Stdout)
@@ -69,20 +58,10 @@ func ExampleLong() {
 		table.Append(v)
 	}
 	table.Render()
-
-	// Output: *================================*================================*===============================*==========*
-	// |              NAME              |              SIGN              |            RATING             |          |
-	// *================================*================================*===============================*==========*
-	// | Learn East has computers       |   Some Data                    |  Another Data                 |
-	// | with adapted keyboards with    |                                |                               |
-	// | enlarged print etc             |                                |                               |
-	// | Instead of lining up the       | the way across, he splits the  | Like most ergonomic keyboards | See Data |
-	// | letters all                    | keyboard in two                |                               |          |
-	// *================================*================================*===============================*==========*
 }
 
 func ExampleCSV() {
-	table, _ := NewCSV(os.Stdout, "testdata/test.csv", true)
+	table, _ := NewCSV(os.Stdout, "test.csv", true)
 	table.SetCenterSeparator("*")
 	table.SetRowSeparator("=")
 
@@ -100,10 +79,10 @@ func ExampleCSV() {
 // TestNumLines to test the numbers of lines
 func TestNumLines(t *testing.T) {
 	data := [][]string{
-		{"A", "The Good", "500"},
-		{"B", "The Very very Bad Man", "288"},
-		{"C", "The Ugly", "120"},
-		{"D", "The Gopher", "800"},
+		[]string{"A", "The Good", "500"},
+		[]string{"B", "The Very very Bad Man", "288"},
+		[]string{"C", "The Ugly", "120"},
+		[]string{"D", "The Gopher", "800"},
 	}
 
 	buf := &bytes.Buffer{}
@@ -112,15 +91,19 @@ func TestNumLines(t *testing.T) {
 
 	for i, v := range data {
 		table.Append(v)
-		checkEqual(t, table.NumLines(), i+1, "Number of lines failed")
+		if i+1 != table.NumLines() {
+			t.Errorf("Number of lines failed\ngot:\n[%d]\nwant:\n[%d]\n", table.NumLines(), i+1)
+		}
 	}
 
-	checkEqual(t, table.NumLines(), len(data), "Number of lines failed")
+	if len(data) != table.NumLines() {
+		t.Errorf("Number of lines failed\ngot:\n[%d]\nwant:\n[%d]\n", table.NumLines(), len(data))
+	}
 }
 
 func TestCSVInfo(t *testing.T) {
 	buf := &bytes.Buffer{}
-	table, err := NewCSV(buf, "testdata/test_info.csv", true)
+	table, err := NewCSV(buf, "test_info.csv", true)
 	if err != nil {
 		t.Error(err)
 		return
@@ -136,12 +119,15 @@ func TestCSVInfo(t *testing.T) {
   username | varchar(10)  | NO   |     | NULL    |                 
   password | varchar(100) | NO   |     | NULL    |                 
 `
-	checkEqual(t, got, want, "CSV info failed")
+
+	if got != want {
+		t.Errorf("CSV info failed\ngot:\n[%s]\nwant:\n[%s]\n", got, want)
+	}
 }
 
 func TestCSVSeparator(t *testing.T) {
 	buf := &bytes.Buffer{}
-	table, err := NewCSV(buf, "testdata/test.csv", true)
+	table, err := NewCSV(buf, "test.csv", true)
 	if err != nil {
 		t.Error(err)
 		return
@@ -164,17 +150,20 @@ func TestCSVSeparator(t *testing.T) {
 +------------+-----------+---------+
 `
 
-	checkEqual(t, buf.String(), want, "CSV info failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("CSV info failed\ngot:\n[%s]\nwant:\n[%s]\n", got, want)
+	}
 }
 
 func TestNoBorder(t *testing.T) {
 	data := [][]string{
-		{"1/1/2014", "Domain name", "2233", "$10.98"},
-		{"1/1/2014", "January Hosting", "2233", "$54.95"},
-		{"", "    (empty)\n    (empty)", "", ""},
-		{"1/4/2014", "February Hosting", "2233", "$51.00"},
-		{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
-		{"1/4/2014", "    (Discount)", "2233", "-$1.00"},
+		[]string{"1/1/2014", "Domain name", "2233", "$10.98"},
+		[]string{"1/1/2014", "January Hosting", "2233", "$54.95"},
+		[]string{"", "    (empty)\n    (empty)", "", ""},
+		[]string{"1/4/2014", "February Hosting", "2233", "$51.00"},
+		[]string{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
+		[]string{"1/4/2014", "    (Discount)", "2233", "-$1.00"},
 	}
 
 	var buf bytes.Buffer
@@ -196,21 +185,23 @@ func TestNoBorder(t *testing.T) {
   1/4/2014 | February Extra Bandwidth |  2233 | $30.00   
   1/4/2014 |     (Discount)           |  2233 | -$1.00   
 +----------+--------------------------+-------+---------+
-                                        TOTAL | $145.93  
+                                        TOTAL | $145 93  
                                       +-------+---------+
 `
-
-	checkEqual(t, buf.String(), want, "border table rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("border table rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestWithBorder(t *testing.T) {
 	data := [][]string{
-		{"1/1/2014", "Domain name", "2233", "$10.98"},
-		{"1/1/2014", "January Hosting", "2233", "$54.95"},
-		{"", "    (empty)\n    (empty)", "", ""},
-		{"1/4/2014", "February Hosting", "2233", "$51.00"},
-		{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
-		{"1/4/2014", "    (Discount)", "2233", "-$1.00"},
+		[]string{"1/1/2014", "Domain name", "2233", "$10.98"},
+		[]string{"1/1/2014", "January Hosting", "2233", "$54.95"},
+		[]string{"", "    (empty)\n    (empty)", "", ""},
+		[]string{"1/4/2014", "February Hosting", "2233", "$51.00"},
+		[]string{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
+		[]string{"1/4/2014", "    (Discount)", "2233", "-$1.00"},
 	}
 
 	var buf bytes.Buffer
@@ -232,19 +223,21 @@ func TestWithBorder(t *testing.T) {
 | 1/4/2014 | February Extra Bandwidth |  2233 | $30.00  |
 | 1/4/2014 |     (Discount)           |  2233 | -$1.00  |
 +----------+--------------------------+-------+---------+
-|                                       TOTAL | $145.93 |
+|                                       TOTAL | $145 93 |
 +----------+--------------------------+-------+---------+
 `
-
-	checkEqual(t, buf.String(), want, "border table rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("border table rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintingInMarkdown(t *testing.T) {
 	data := [][]string{
-		{"1/1/2014", "Domain name", "2233", "$10.98"},
-		{"1/1/2014", "January Hosting", "2233", "$54.95"},
-		{"1/4/2014", "February Hosting", "2233", "$51.00"},
-		{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
+		[]string{"1/1/2014", "Domain name", "2233", "$10.98"},
+		[]string{"1/1/2014", "January Hosting", "2233", "$54.95"},
+		[]string{"1/4/2014", "February Hosting", "2233", "$51.00"},
+		[]string{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
 	}
 
 	var buf bytes.Buffer
@@ -262,7 +255,10 @@ func TestPrintingInMarkdown(t *testing.T) {
 | 1/4/2014 | February Hosting         | 2233 | $51.00 |
 | 1/4/2014 | February Extra Bandwidth | 2233 | $30.00 |
 `
-	checkEqual(t, buf.String(), want, "border table rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("border table rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintHeading(t *testing.T) {
@@ -273,7 +269,10 @@ func TestPrintHeading(t *testing.T) {
 	want := `| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | A | B | C |
 +---+---+---+---+---+---+---+---+---+---+---+---+
 `
-	checkEqual(t, buf.String(), want, "header rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("header rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintHeadingWithoutAutoFormat(t *testing.T) {
@@ -285,7 +284,10 @@ func TestPrintHeadingWithoutAutoFormat(t *testing.T) {
 	want := `| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | a | b | c |
 +---+---+---+---+---+---+---+---+---+---+---+---+
 `
-	checkEqual(t, buf.String(), want, "header rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("header rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintFooter(t *testing.T) {
@@ -297,7 +299,10 @@ func TestPrintFooter(t *testing.T) {
 	want := `| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | A | B | C |
 +---+---+---+---+---+---+---+---+---+---+---+---+
 `
-	checkEqual(t, buf.String(), want, "footer rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("footer rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintFooterWithoutAutoFormat(t *testing.T) {
@@ -310,16 +315,19 @@ func TestPrintFooterWithoutAutoFormat(t *testing.T) {
 	want := `| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | a | b | c |
 +---+---+---+---+---+---+---+---+---+---+---+---+
 `
-	checkEqual(t, buf.String(), want, "footer rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("footer rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintShortCaption(t *testing.T) {
 	var buf bytes.Buffer
 	data := [][]string{
-		{"A", "The Good", "500"},
-		{"B", "The Very very Bad Man", "288"},
-		{"C", "The Ugly", "120"},
-		{"D", "The Gopher", "800"},
+		[]string{"A", "The Good", "500"},
+		[]string{"B", "The Very very Bad Man", "288"},
+		[]string{"C", "The Ugly", "120"},
+		[]string{"D", "The Gopher", "800"},
 	}
 
 	table := NewWriter(&buf)
@@ -341,16 +349,19 @@ func TestPrintShortCaption(t *testing.T) {
 +------+-----------------------+--------+
 Short caption.
 `
-	checkEqual(t, buf.String(), want, "long caption for short example rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("long caption for short example rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintLongCaptionWithShortExample(t *testing.T) {
 	var buf bytes.Buffer
 	data := [][]string{
-		{"A", "The Good", "500"},
-		{"B", "The Very very Bad Man", "288"},
-		{"C", "The Ugly", "120"},
-		{"D", "The Gopher", "800"},
+		[]string{"A", "The Good", "500"},
+		[]string{"B", "The Very very Bad Man", "288"},
+		[]string{"C", "The Ugly", "120"},
+		[]string{"D", "The Gopher", "800"},
 	}
 
 	table := NewWriter(&buf)
@@ -374,15 +385,18 @@ This is a very long caption. The text
 should wrap. If not, we have a problem
 that needs to be solved.
 `
-	checkEqual(t, buf.String(), want, "long caption for short example rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("long caption for short example rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintCaptionWithFooter(t *testing.T) {
 	data := [][]string{
-		{"1/1/2014", "Domain name", "2233", "$10.98"},
-		{"1/1/2014", "January Hosting", "2233", "$54.95"},
-		{"1/4/2014", "February Hosting", "2233", "$51.00"},
-		{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
+		[]string{"1/1/2014", "Domain name", "2233", "$10.98"},
+		[]string{"1/1/2014", "January Hosting", "2233", "$54.95"},
+		[]string{"1/4/2014", "February Hosting", "2233", "$51.00"},
+		[]string{"1/4/2014", "February Extra Bandwidth", "2233", "$30.00"},
 	}
 
 	var buf bytes.Buffer
@@ -401,19 +415,22 @@ func TestPrintCaptionWithFooter(t *testing.T) {
   1/4/2014 | February Hosting         |  2233 | $51.00   
   1/4/2014 | February Extra Bandwidth |  2233 | $30.00   
 +----------+--------------------------+-------+---------+
-                                        TOTAL | $146.93  
+                                        TOTAL | $146 93  
                                       +-------+---------+
 This is a very long caption. The text should wrap to the
 width of the table.
 `
-	checkEqual(t, buf.String(), want, "border table rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("border table rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestPrintLongCaptionWithLongExample(t *testing.T) {
 	var buf bytes.Buffer
 	data := [][]string{
-		{"Learn East has computers with adapted keyboards with enlarged print etc", "Some Data", "Another Data"},
-		{"Instead of lining up the letters all", "the way across, he splits the keyboard in two", "Like most ergonomic keyboards"},
+		[]string{"Learn East has computers with adapted keyboards with enlarged print etc", "Some Data", "Another Data"},
+		[]string{"Instead of lining up the letters all", "the way across, he splits the keyboard in two", "Like most ergonomic keyboards"},
 	}
 
 	table := NewWriter(&buf)
@@ -437,7 +454,10 @@ func TestPrintLongCaptionWithLongExample(t *testing.T) {
 This is a very long caption. The text should wrap. If not, we have a problem that needs to be
 solved.
 `
-	checkEqual(t, buf.String(), want, "long caption for long example rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("long caption for long example rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func Example_autowrap() {
@@ -714,7 +734,10 @@ func TestPrintLine(t *testing.T) {
 	table := NewWriter(&buf)
 	table.SetHeader(header)
 	table.printLine(false)
-	checkEqual(t, buf.String(), want, "line rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("line rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestAnsiStrip(t *testing.T) {
@@ -731,7 +754,10 @@ func TestAnsiStrip(t *testing.T) {
 	table := NewWriter(&buf)
 	table.SetHeader(header)
 	table.printLine(false)
-	checkEqual(t, buf.String(), want, "line rendering failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("line rendering failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func NewCustomizedTable(out io.Writer) *Table {
@@ -750,10 +776,10 @@ func TestSubclass(t *testing.T) {
 	table := NewCustomizedTable(buf)
 
 	data := [][]string{
-		{"A", "The Good", "500"},
-		{"B", "The Very very Bad Man", "288"},
-		{"C", "The Ugly", "120"},
-		{"D", "The Gopher", "800"},
+		[]string{"A", "The Good", "500"},
+		[]string{"B", "The Very very Bad Man", "288"},
+		[]string{"C", "The Ugly", "120"},
+		[]string{"D", "The Gopher", "800"},
 	}
 
 	for _, v := range data {
@@ -761,20 +787,23 @@ func TestSubclass(t *testing.T) {
 	}
 	table.Render()
 
+	output := string(buf.Bytes())
 	want := `  A  The Good               500  
   B  The Very very Bad Man  288  
   C  The Ugly               120  
   D  The Gopher             800  
 `
-	checkEqual(t, buf.String(), want, "test subclass failed")
+	if output != want {
+		t.Error(fmt.Sprintf("Unexpected output '%v' != '%v'", output, want))
+	}
 }
 
 func TestAutoMergeRows(t *testing.T) {
 	data := [][]string{
-		{"A", "The Good", "500"},
-		{"A", "The Very very Bad Man", "288"},
-		{"B", "The Very very Bad Man", "120"},
-		{"B", "The Very very Bad Man", "200"},
+		[]string{"A", "The Good", "500"},
+		[]string{"A", "The Very very Bad Man", "288"},
+		[]string{"B", "The Very very Bad Man", "120"},
+		[]string{"B", "The Very very Bad Man", "200"},
 	}
 	var buf bytes.Buffer
 	table := NewWriter(&buf)
@@ -821,17 +850,20 @@ func TestAutoMergeRows(t *testing.T) {
 |      |                       |    200 |
 +------+-----------------------+--------+
 `
-	checkEqual(t, buf.String(), want)
+	got = buf.String()
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 
 	buf.Reset()
 	table = NewWriter(&buf)
 	table.SetHeader([]string{"Name", "Sign", "Rating"})
 
 	dataWithlongText := [][]string{
-		{"A", "The Good", "500"},
-		{"A", "The Very very very very very Bad Man", "288"},
-		{"B", "The Very very very very very Bad Man", "120"},
-		{"C", "The Very very Bad Man", "200"},
+		[]string{"A", "The Good", "500"},
+		[]string{"A", "The Very very very very very Bad Man", "288"},
+		[]string{"B", "The Very very very very very Bad Man", "120"},
+		[]string{"C", "The Very very Bad Man", "200"},
 	}
 	table.AppendBulk(dataWithlongText)
 	table.SetAutoMergeCells(true)
@@ -851,12 +883,15 @@ func TestAutoMergeRows(t *testing.T) {
 | C    | The Very very Bad Man          |    200 |
 +------+--------------------------------+--------+
 `
-	checkEqual(t, buf.String(), want)
+	got = buf.String()
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestClearRows(t *testing.T) {
 	data := [][]string{
-		{"1/1/2014", "Domain name", "2233", "$10.98"},
+		[]string{"1/1/2014", "Domain name", "2233", "$10.98"},
 	}
 
 	var buf bytes.Buffer
@@ -872,12 +907,15 @@ func TestClearRows(t *testing.T) {
 +----------+-------------+-------+---------+
 | 1/1/2014 | Domain name |  2233 | $10.98  |
 +----------+-------------+-------+---------+
-|                          TOTAL | $145.93 |
+|                          TOTAL | $145 93 |
 +----------+-------------+-------+---------+
 `
 	want := originalWant
 
-	checkEqual(t, buf.String(), want, "table clear rows failed")
+	got := buf.String()
+	if got != want {
+		t.Errorf("table clear rows failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 
 	buf.Reset()
 	table.ClearRows()
@@ -887,11 +925,14 @@ func TestClearRows(t *testing.T) {
 |   DATE   | DESCRIPTION |  CV2  | AMOUNT  |
 +----------+-------------+-------+---------+
 +----------+-------------+-------+---------+
-|                          TOTAL | $145.93 |
+|                          TOTAL | $145 93 |
 +----------+-------------+-------+---------+
 `
 
-	checkEqual(t, buf.String(), want, "table clear rows failed")
+	got = buf.String()
+	if got != want {
+		t.Errorf("table clear failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 
 	buf.Reset()
 	table.AppendBulk(data) // Add Bulk Data
@@ -902,16 +943,19 @@ func TestClearRows(t *testing.T) {
 +----------+-------------+-------+---------+
 | 1/1/2014 | Domain name |  2233 | $10.98  |
 +----------+-------------+-------+---------+
-|                          TOTAL | $145.93 |
+|                          TOTAL | $145 93 |
 +----------+-------------+-------+---------+
 `
 
-	checkEqual(t, buf.String(), want, "table clear rows failed")
+	got = buf.String()
+	if got != want {
+		t.Errorf("table clear rows failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestClearFooters(t *testing.T) {
 	data := [][]string{
-		{"1/1/2014", "Domain name", "2233", "$10.98"},
+		[]string{"1/1/2014", "Domain name", "2233", "$10.98"},
 	}
 
 	var buf bytes.Buffer
@@ -933,7 +977,10 @@ func TestClearFooters(t *testing.T) {
 +----------+-------------+-------+---------+
 `
 
-	checkEqual(t, buf.String(), want)
+	got := buf.String()
+	if got != want {
+		t.Errorf("table clear rows failed\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestMoreDataColumnsThanHeaders(t *testing.T) {
@@ -942,8 +989,8 @@ func TestMoreDataColumnsThanHeaders(t *testing.T) {
 		table  = NewWriter(buf)
 		header = []string{"A", "B", "C"}
 		data   = [][]string{
-			{"a", "b", "c", "d"},
-			{"1", "2", "3", "4"},
+			[]string{"a", "b", "c", "d"},
+			[]string{"1", "2", "3", "4"},
 		}
 		want = `+---+---+---+---+
 | A | B | C |   |
@@ -958,7 +1005,11 @@ func TestMoreDataColumnsThanHeaders(t *testing.T) {
 	table.AppendBulk(data)
 	table.Render()
 
-	checkEqual(t, buf.String(), want)
+	got := buf.String()
+
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestMoreFooterColumnsThanHeaders(t *testing.T) {
@@ -967,8 +1018,8 @@ func TestMoreFooterColumnsThanHeaders(t *testing.T) {
 		table  = NewWriter(buf)
 		header = []string{"A", "B", "C"}
 		data   = [][]string{
-			{"a", "b", "c", "d"},
-			{"1", "2", "3", "4"},
+			[]string{"a", "b", "c", "d"},
+			[]string{"1", "2", "3", "4"},
 		}
 		footer = []string{"a", "b", "c", "d", "e"}
 		want   = `+---+---+---+---+---+
@@ -986,7 +1037,11 @@ func TestMoreFooterColumnsThanHeaders(t *testing.T) {
 	table.AppendBulk(data)
 	table.Render()
 
-	checkEqual(t, buf.String(), want)
+	got := buf.String()
+
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestSetColMinWidth(t *testing.T) {
@@ -995,8 +1050,8 @@ func TestSetColMinWidth(t *testing.T) {
 		table  = NewWriter(buf)
 		header = []string{"AAA", "BBB", "CCC"}
 		data   = [][]string{
-			{"a", "b", "c"},
-			{"1", "2", "3"},
+			[]string{"a", "b", "c"},
+			[]string{"1", "2", "3"},
 		}
 		footer = []string{"a", "b", "cccc"}
 		want   = `+-----+-----+-------+
@@ -1015,13 +1070,19 @@ func TestSetColMinWidth(t *testing.T) {
 	table.SetColMinWidth(2, 5)
 	table.Render()
 
-	checkEqual(t, buf.String(), want)
+	got := buf.String()
+
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s\n", got, want)
+	}
 }
 
 func TestWrapString(t *testing.T) {
 	want := []string{"ああああああああああああああああああああああああ", "あああああああ"}
 	got, _ := WrapString("ああああああああああああああああああああああああ あああああああ", 55)
-	checkEqual(t, got, want)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("\ngot:\n%v\nwant:\n%v\n", got, want)
+	}
 }
 
 func TestCustomAlign(t *testing.T) {
@@ -1030,8 +1091,8 @@ func TestCustomAlign(t *testing.T) {
 		table  = NewWriter(buf)
 		header = []string{"AAA", "BBB", "CCC"}
 		data   = [][]string{
-			{"a", "b", "c"},
-			{"1", "2", "3"},
+			[]string{"a", "b", "c"},
+			[]string{"1", "2", "3"},
 		}
 		footer = []string{"a", "b", "cccc"}
 		want   = `+-----+-----+-------+
@@ -1051,43 +1112,9 @@ func TestCustomAlign(t *testing.T) {
 	table.SetColumnAlignment([]int{ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT})
 	table.Render()
 
-	checkEqual(t, buf.String(), want)
-}
+	got := buf.String()
 
-func TestTitle(t *testing.T) {
-	ts := []struct {
-		text string
-		want string
-	}{
-		{"", ""},
-		{"foo", "FOO"},
-		{"Foo", "FOO"},
-		{"foO", "FOO"},
-		{".foo", "FOO"},
-		{"foo.", "FOO"},
-		{".foo.", "FOO"},
-		{".foo.bar.", "FOO BAR"},
-		{"_foo", "FOO"},
-		{"foo_", "FOO"},
-		{"_foo_", "FOO"},
-		{"_foo_bar_", "FOO BAR"},
-		{" foo", "FOO"},
-		{"foo ", "FOO"},
-		{" foo ", "FOO"},
-		{" foo bar ", "FOO BAR"},
-		{"0.1", "0.1"},
-		{"FOO 0.1", "FOO 0.1"},
-		{".1 0.1", ".1 0.1"},
-		{"1. 0.1", "1. 0.1"},
-		{"1. 0.", "1. 0."},
-		{".1. 0.", ".1. 0."},
-		{".$ . $.", "$ . $"},
-		{".$. $.", "$  $"},
-	}
-	for _, tt := range ts {
-		got := Title(tt.text)
-		if got != tt.want {
-			t.Errorf("want %q, bot got %q", tt.want, got)
-		}
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s\n", got, want)
 	}
 }

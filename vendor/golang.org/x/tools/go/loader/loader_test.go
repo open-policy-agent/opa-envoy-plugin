@@ -15,7 +15,6 @@ import (
 	"go/types"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -128,10 +127,6 @@ func TestLoad_MissingInitialPackage(t *testing.T) {
 }
 
 func TestLoad_MissingInitialPackage_AllowErrors(t *testing.T) {
-	if runtime.Compiler == "gccgo" {
-		t.Skip("gccgo has no standard library test files")
-	}
-
 	var conf loader.Config
 	conf.AllowErrors = true
 	conf.Import("nosuchpkg")
@@ -256,10 +251,6 @@ func TestLoad_FromSource_Success(t *testing.T) {
 }
 
 func TestLoad_FromImports_Success(t *testing.T) {
-	if runtime.Compiler == "gccgo" {
-		t.Skip("gccgo has no standard library test files")
-	}
-
 	var conf loader.Config
 	conf.ImportWithTests("fmt")
 	conf.ImportWithTests("errors")

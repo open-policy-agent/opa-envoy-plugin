@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/bundle"
@@ -20,16 +21,21 @@ import (
 // UpdateRequestV1 represents the status update message that OPA sends to
 // remote HTTP endpoints.
 type UpdateRequestV1 struct {
-	Labels map[string]string `json:"labels"`
-	Bundle bundle.Status     `json:"bundle"`
+	Labels    map[string]string `json:"labels"`
+	Bundle    *bundle.Status    `json:"bundle,omitempty"`
+	Discovery *bundle.Status    `json:"discovery,omitempty"`
 }
 
 // Plugin implements status reporting. Updates can be triggered by the caller.
 type Plugin struct {
-	manager *plugins.Manager
-	config  Config
-	update  chan bundle.Status
-	stop    chan chan struct{}
+	manager          *plugins.Manager
+	config           Config
+	bundleCh         chan bundle.Status
+	lastBundleStatus *bundle.Status
+	discoCh          chan bundle.Status
+	lastDiscoStatus  *bundle.Status
+	stop             chan chan struct{}
+	reconfig         chan interface{}
 }
 
 // Config contains configuration for the plugin.
@@ -40,24 +46,32 @@ type Config struct {
 
 func (c *Config) validateAndInjectDefaults(services []string) error {
 
-	found := false
+	if c.Service == "" && len(services) != 0 {
+		c.Service = services[0]
+	} else {
+		found := false
 
-	for _, svc := range services {
-		if svc == c.Service {
-			found = true
-			break
+		for _, svc := range services {
+			if svc == c.Service {
+				found = true
+				break
+			}
 		}
-	}
 
-	if !found {
-		return fmt.Errorf("invalid service name %q in status", c.Service)
+		if !found {
+			return fmt.Errorf("invalid service name %q in status", c.Service)
+		}
 	}
 
 	return nil
 }
 
-// New returns a new Plugin with the given config.
-func New(config []byte, manager *plugins.Manager) (*Plugin, error) {
+// ParseConfig validates the config and injects default values.
+func ParseConfig(config []byte, services []string) (*Config, error) {
+
+	if config == nil {
+		return nil, nil
+	}
 
 	var parsedConfig Config
 
@@ -65,36 +79,67 @@ func New(config []byte, manager *plugins.Manager) (*Plugin, error) {
 		return nil, err
 	}
 
-	if err := parsedConfig.validateAndInjectDefaults(manager.Services()); err != nil {
+	if err := parsedConfig.validateAndInjectDefaults(services); err != nil {
 		return nil, err
 	}
 
+	return &parsedConfig, nil
+}
+
+// New returns a new Plugin with the given config.
+func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
+
 	plugin := &Plugin{
-		manager: manager,
-		config:  parsedConfig,
-		update:  make(chan bundle.Status),
-		stop:    make(chan chan struct{}),
+		manager:  manager,
+		config:   *parsedConfig,
+		bundleCh: make(chan bundle.Status),
+		discoCh:  make(chan bundle.Status),
+		stop:     make(chan chan struct{}),
+		reconfig: make(chan interface{}),
 	}
 
-	return plugin, nil
+	return plugin
+}
+
+// Name identifies the plugin on manager.
+const Name = "status"
+
+// Lookup returns the status plugin registered with the manager.
+func Lookup(manager *plugins.Manager) *Plugin {
+	if p := manager.Plugin(Name); p != nil {
+		return p.(*Plugin)
+	}
+	return nil
 }
 
 // Start starts the plugin.
 func (p *Plugin) Start(ctx context.Context) error {
+	p.logInfo("Starting status reporter.")
 	go p.loop()
 	return nil
 }
 
 // Stop stops the plugin.
 func (p *Plugin) Stop(ctx context.Context) {
+	p.logInfo("Stopping status reporter.")
 	done := make(chan struct{})
 	p.stop <- done
 	_ = <-done
 }
 
-// Update notifies the plugin with a new bundle.Status.
-func (p *Plugin) Update(status bundle.Status) {
-	p.update <- status
+// UpdateBundleStatus notifies the plugin that the policy bundle was updated.
+func (p *Plugin) UpdateBundleStatus(status bundle.Status) {
+	p.bundleCh <- status
+}
+
+// UpdateDiscoveryStatus notifies the plugin that the discovery bundle was updated.
+func (p *Plugin) UpdateDiscoveryStatus(status bundle.Status) {
+	p.discoCh <- status
+}
+
+// Reconfigure notifies the plugin with a new configuration.
+func (p *Plugin) Reconfigure(_ context.Context, config interface{}) {
+	p.reconfig <- config
 }
 
 func (p *Plugin) loop() {
@@ -103,13 +148,23 @@ func (p *Plugin) loop() {
 
 	for {
 		select {
-		case status := <-p.update:
-			err := p.oneShot(ctx, status)
+		case status := <-p.bundleCh:
+			err := p.oneShot(ctx, false, status)
 			if err != nil {
 				p.logError("%v.", err)
 			} else {
-				p.logInfo("Status update sent successfully.")
+				p.logInfo("Status update sent successfully in response to bundle update.")
 			}
+		case status := <-p.discoCh:
+			err := p.oneShot(ctx, true, status)
+			if err != nil {
+				p.logError("%v.", err)
+			} else {
+				p.logInfo("Status update sent successfully in response to discovery update.")
+			}
+
+		case newConfig := <-p.reconfig:
+			p.reconfigure(newConfig)
 
 		case done := <-p.stop:
 			cancel()
@@ -119,11 +174,18 @@ func (p *Plugin) loop() {
 	}
 }
 
-func (p *Plugin) oneShot(ctx context.Context, status bundle.Status) error {
+func (p *Plugin) oneShot(ctx context.Context, disco bool, status bundle.Status) error {
+
+	if disco {
+		p.lastDiscoStatus = &status
+	} else {
+		p.lastBundleStatus = &status
+	}
 
 	req := UpdateRequestV1{
-		Labels: p.manager.Labels,
-		Bundle: status,
+		Labels:    p.manager.Labels(),
+		Discovery: p.lastDiscoStatus,
+		Bundle:    p.lastBundleStatus,
 	}
 
 	resp, err := p.manager.Client(p.config.Service).
@@ -148,6 +210,18 @@ func (p *Plugin) oneShot(ctx context.Context, status bundle.Status) error {
 	}
 }
 
+func (p *Plugin) reconfigure(config interface{}) {
+	newConfig := config.(*Config)
+
+	if reflect.DeepEqual(p.config, *newConfig) {
+		p.logDebug("Status reporter configuration unchanged.")
+		return
+	}
+
+	p.logInfo("Status reporter configuration changed.")
+	p.config = *newConfig
+}
+
 func (p *Plugin) logError(fmt string, a ...interface{}) {
 	logrus.WithFields(p.logrusFields()).Errorf(fmt, a...)
 }
@@ -162,6 +236,6 @@ func (p *Plugin) logDebug(fmt string, a ...interface{}) {
 
 func (p *Plugin) logrusFields() logrus.Fields {
 	return logrus.Fields{
-		"plugin": "status",
+		"plugin": Name,
 	}
 }
