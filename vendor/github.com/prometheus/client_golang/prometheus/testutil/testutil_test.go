@@ -135,11 +135,109 @@ func TestCollectAndCompare(t *testing.T) {
 
 	expected := `
 
-		some_total{ label1 = "value1" } 1
+		some_total{ label1 = "value1" } 1.0
 	`
 
 	if err := CollectAndCompare(c, strings.NewReader(metadata+expected), "some_total"); err != nil {
 		t.Errorf("unexpected collecting result:\n%s", err)
+	}
+}
+
+func TestCollectAndCompareNoLabel(t *testing.T) {
+	const metadata = `
+		# HELP some_total A value that represents a counter.
+		# TYPE some_total counter
+	`
+
+	c := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "some_total",
+		Help: "A value that represents a counter.",
+	})
+	c.Inc()
+
+	expected := `
+
+		some_total 1.0
+	`
+
+	if err := CollectAndCompare(c, strings.NewReader(metadata+expected), "some_total"); err != nil {
+		t.Errorf("unexpected collecting result:\n%s", err)
+	}
+}
+
+func TestCollectAndCompareHistogram(t *testing.T) {
+	inputs := []struct {
+		name        string
+		c           prometheus.Collector
+		metadata    string
+		expect      string
+		labels      []string
+		observation float64
+	}{
+		{
+			name: "Testing Histogram Collector",
+			c: prometheus.NewHistogram(prometheus.HistogramOpts{
+				Name:    "some_histogram",
+				Help:    "An example of a histogram",
+				Buckets: []float64{1, 2, 3},
+			}),
+			metadata: `
+				# HELP some_histogram An example of a histogram
+				# TYPE some_histogram histogram
+			`,
+			expect: `
+				some_histogram{le="1"} 0.0
+				some_histogram{le="2"} 0.0
+				some_histogram{le="3"} 1.0
+        			some_histogram_bucket{le="+Inf"} 1.0
+        			some_histogram_sum 2.5
+        			some_histogram_count 1
+
+			`,
+			observation: 2.5,
+		},
+		{
+			name: "Testing HistogramVec Collector",
+			c: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "some_histogram",
+				Help:    "An example of a histogram",
+				Buckets: []float64{1, 2, 3},
+			}, []string{"test"}),
+
+			metadata: `
+				# HELP some_histogram An example of a histogram
+				# TYPE some_histogram histogram
+			`,
+			expect: `
+            			some_histogram_bucket{test="test",le="1"} 0.0
+            			some_histogram_bucket{test="test",le="2"} 0.0
+            			some_histogram_bucket{test="test",le="3"} 1.0
+            			some_histogram_bucket{test="test",le="+Inf"} 1.0
+            			some_histogram_sum{test="test"} 2.5
+           		 	some_histogram_count{test="test"} 1.0
+		
+			`,
+			observation: 2.5,
+		},
+	}
+
+	for _, input := range inputs {
+		switch collector := input.c.(type) {
+		case prometheus.Histogram:
+			collector.Observe(input.observation)
+		case *prometheus.HistogramVec:
+			collector.WithLabelValues("test").Observe(input.observation)
+		default:
+			t.Fatalf("unsuported collector tested")
+
+		}
+
+		t.Run(input.name, func(t *testing.T) {
+			if err := CollectAndCompare(input.c, strings.NewReader(input.metadata+input.expect)); err != nil {
+				t.Errorf("unexpected collecting result:\n%s", err)
+			}
+		})
+
 	}
 }
 
@@ -159,7 +257,7 @@ func TestNoMetricFilter(t *testing.T) {
 	c.Inc()
 
 	expected := `
-		some_total{label1="value1"} 1
+		some_total{label1="value1"} 1.0
 	`
 
 	if err := CollectAndCompare(c, strings.NewReader(metadata+expected)); err != nil {
@@ -183,7 +281,7 @@ func TestMetricNotFound(t *testing.T) {
 	c.Inc()
 
 	expected := `
-		some_other_metric{label1="value1"} 1
+		some_other_metric{label1="value1"} 1.0
 	`
 
 	expectedError := `
@@ -191,14 +289,14 @@ metric output does not match expectation; want:
 
 # HELP some_other_metric A value that represents a counter.
 # TYPE some_other_metric counter
-some_other_metric{label1="value1"} 1
+some_other_metric{label1="value1"} 1.0
 
 
 got:
 
 # HELP some_total A value that represents a counter.
 # TYPE some_total counter
-some_total{label1="value1"} 1
+some_total{label1="value1"} 1.0
 
 `
 
