@@ -88,14 +88,6 @@ func (h *handlerServer) GetPageInfo(abspath, relpath string, mode PageInfoMode, 
 		return ioutil.NopCloser(bytes.NewReader(data)), nil
 	}
 
-	// Make the syscall/js package always visible by default.
-	// It defaults to the host's GOOS/GOARCH, and golang.org's
-	// linux/amd64 means the wasm syscall/js package was blank.
-	// And you can't run godoc on js/wasm anyway, so host defaults
-	// don't make sense here.
-	if goos == "" && goarch == "" && relpath == "syscall/js" {
-		goos, goarch = "js", "wasm"
-	}
 	if goos != "" {
 		ctxt.GOOS = goos
 	}
@@ -658,15 +650,7 @@ func formatGoSource(buf *bytes.Buffer, text []byte, links []analysis.Link, patte
 		//
 		// The first tab for the code snippet needs to start in column 9, so
 		// it indents a full 8 spaces, hence the two nbsp's. Otherwise the tab
-		// character only indents a short amount.
-		//
-		// Due to rounding and font width Firefox might not treat 8 rendered
-		// characters as 8 characters wide, and subsequently may treat the tab
-		// character in the 9th position as moving the width from (7.5 or so) up
-		// to 8. See
-		// https://github.com/webcompat/web-bugs/issues/17530#issuecomment-402675091
-		// for a fuller explanation. The solution is to add a CSS class to
-		// explicitly declare the width to be 8 characters.
+		// character only indents about two spaces.
 		fmt.Fprintf(saved, `<span id="L%d" class="ln">%6d&nbsp;&nbsp;</span>`, n, n)
 		n++
 		saved.Write(line)

@@ -80,10 +80,7 @@ func TestTypeAliases(t *testing.T) {
 	checkPkg(t, pkg1, "export")
 
 	// export
-	exportdata, err := gcimporter.BExportData(fset1, pkg1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	exportdata := gcimporter.BExportData(fset1, pkg1)
 
 	// import
 	imports := make(map[string]*types.Package)

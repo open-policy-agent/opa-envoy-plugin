@@ -1261,6 +1261,37 @@ func TestRewriteLocalVarDeclarationErrors(t *testing.T) {
 	}
 }
 
+func TestCompileInvalidEqAssignExpr(t *testing.T) {
+
+	c := NewCompiler()
+
+	c.Modules["error"] = MustParseModule(`package errors
+
+
+	p {
+		# Type checking runs at a later stage so these errors will not be #
+		# caught until then. The stages before type checking should be tolerant
+		# of invalid eq and assign calls.
+		assign()
+		assign(1)
+		eq()
+		eq(1)
+	}`)
+
+	var prev func()
+	checkRecursion := reflect.ValueOf(c.checkRecursion)
+
+	for _, stage := range c.stages {
+		if reflect.ValueOf(stage).Pointer() == checkRecursion.Pointer() {
+			break
+		}
+		prev = stage
+	}
+
+	compileStages(c, prev)
+	assertNotFailed(t, c)
+}
+
 func TestCompilerRewriteComprehensionTerm(t *testing.T) {
 
 	c := NewCompiler()
@@ -1319,6 +1350,16 @@ func TestCompilerRewriteDoubleEq(t *testing.T) {
 			note:  "calls",
 			input: "p { count([1,2]) == 2 }",
 			exp:   `count([1,2], __local0__); __local0__ = 2`,
+		},
+		{
+			note:  "embedded",
+			input: "p { x = 1; y = [x == 0] }",
+			exp:   `x = 1; equal(x, 0, __local0__); y = [__local0__]`,
+		},
+		{
+			note:  "embedded in call",
+			input: `p { x = 0; neq(true, x == 1) }`,
+			exp:   `x = 0; equal(x, 1, __local0__); neq(true, __local0__)`,
 		},
 	}
 	for _, tc := range tests {
@@ -1435,9 +1476,9 @@ func TestCompilerRewriteWithValue(t *testing.T) {
 			expected: `p { __local0__ = data.test.arr[0]; __local1__ = data.test.arr[1]; true with input.a as __local0__ with input.b as __local1__ }`,
 		},
 		{
-			note:    "data target",
-			input:   `p { true with data.q as 1 }`,
-			wantErr: fmt.Errorf("rego_type_error: with keyword target must be input"),
+			note:    "invalid target",
+			input:   `p { true with foo.q as 1 }`,
+			wantErr: fmt.Errorf("rego_type_error: with keyword target must start with input or data"),
 		},
 	}
 
@@ -1459,6 +1500,23 @@ func TestCompilerRewriteWithValue(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompilerMockFunction(t *testing.T) {
+	c := NewCompiler()
+	c.Modules["test"] = MustParseModule(`
+	package test
+
+	is_allowed(label) {
+	    label == "test_label"
+	}
+
+	p {true with data.test.is_allowed as "blah" }
+	`)
+	compileStages(c, c.rewriteWithModifiers)
+
+	expectedError := fmt.Errorf("rego_compile_error: with keyword cannot replace rules with arguments")
+	assertCompilerErrorStrings(t, c, []string{expectedError.Error()})
 }
 
 func TestCompilerSetGraph(t *testing.T) {
@@ -2117,6 +2175,16 @@ func TestQueryCompiler(t *testing.T) {
 		input    string
 		expected interface{}
 	}{
+		{
+			note:     "invalid eq",
+			q:        "eq()",
+			expected: fmt.Errorf("too few arguments"),
+		},
+		{
+			note:     "invalid eq",
+			q:        "eq(1)",
+			expected: fmt.Errorf("too few arguments"),
+		},
 		{"rewrite assignment", "a := 1; [b, c] := data.foo", "", nil, "", "__local0__ = 1; [__local1__, __local2__] = data.foo"},
 		{"exports resolved", "z", `package a.b.c`, nil, "", "data.a.b.c.z"},
 		{"imports resolved", "z", `package a.b.c.d`, []string{"import data.a.b.c.z"}, "", "data.a.b.c.z"},
@@ -2124,7 +2192,7 @@ func TestQueryCompiler(t *testing.T) {
 		{"unsafe vars", "z", "", nil, "", fmt.Errorf("1 error occurred: 1:1: rego_unsafe_var_error: var z is unsafe")},
 		{"safe vars", `data; abc`, `package ex`, []string{"import input.xyz as abc"}, `{}`, `data; input.xyz`},
 		{"reorder", `x != 1; x = 0`, "", nil, "", `x = 0; x != 1`},
-		{"bad with target", "x = 1 with data.p as null", "", nil, "", fmt.Errorf("1 error occurred: 1:12: rego_type_error: with keyword target must be input")},
+		{"bad with target", "x = 1 with foo.p as null", "", nil, "", fmt.Errorf("1 error occurred: 1:12: rego_type_error: with keyword target must start with input or data")},
 		{"rewrite with value", `1 with input as [z]`, "package a.b.c", nil, "", `__local1__ = data.a.b.c.z; __local0__ = [__local1__]; 1 with input as __local0__`},
 		{"unsafe exprs", "count(sum())", "", nil, "", fmt.Errorf("1 error occurred: 1:1: rego_unsafe_var_error: expression is unsafe")},
 		{"check types", "x = data.a.b.c.z; y = null; x = y", "", nil, "", fmt.Errorf("match error\n\tleft  : number\n\tright : null")},
@@ -2198,6 +2266,7 @@ func TestQueryCompilerRecompile(t *testing.T) {
 
 func assertCompilerErrorStrings(t *testing.T, compiler *Compiler, expected []string) {
 	result := compilerErrsToStringSlice(compiler.Errors)
+
 	if len(result) != len(expected) {
 		t.Fatalf("Expected %d:\n%v\nBut got %d:\n%v", len(expected), strings.Join(expected, "\n"), len(result), strings.Join(result, "\n"))
 	}
@@ -2235,12 +2304,21 @@ func getCompilerWithParsedModules(mods map[string]string) *Compiler {
 // helper function to run compiler upto given stage. If nil is provided, a
 // normal compile run is performed.
 func compileStages(c *Compiler, upto func()) {
+
+	for name := range c.Modules {
+		c.sorted = append(c.sorted, name)
+	}
+
+	sort.Strings(c.sorted)
 	c.SetErrorLimit(0)
+
 	if upto == nil {
 		c.compile()
 		return
 	}
+
 	target := reflect.ValueOf(upto)
+
 	for _, fn := range c.stages {
 		if fn(); c.Failed() {
 			return

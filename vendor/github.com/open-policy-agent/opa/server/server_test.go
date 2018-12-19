@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -139,7 +140,6 @@ func Test405StatusCodev1(t *testing.T) {
 			{http.MethodDelete, "/query", "", 405, ""},
 			{http.MethodOptions, "/query", "", 405, ""},
 			{http.MethodTrace, "/query", "", 405, ""},
-			{http.MethodPost, "/query", "", 405, ""},
 			{http.MethodPut, "/query", "", 405, ""},
 			{http.MethodPatch, "/query", "", 405, ""},
 		}},
@@ -151,7 +151,7 @@ func Test405StatusCodev1(t *testing.T) {
 	}
 }
 
-// Tests that the responses for (theoretically) valid resources but with forbidden mewthods return the proper status code
+// Tests that the responses for (theoretically) valid resources but with forbidden methods return the proper status code
 func Test405StatusCodev0(t *testing.T) {
 	tests := []struct {
 		note string
@@ -355,6 +355,40 @@ func TestCompileV1UnsafeBuiltin(t *testing.T) {
 
 	if f.recorder.Body.String() != expected {
 		t.Fatalf(`Expected %v but got: %v`, expected, f.recorder.Body.String())
+	}
+}
+
+func TestDataV1Redirection(t *testing.T) {
+	f := newFixture(t)
+	// Testing redirect at the root level
+	if err := f.v1(http.MethodPut, "/data/", `{"foo": [1,2,3]}`, 301, ""); err != nil {
+		t.Fatalf("Unexpected error from PUT: %v", err)
+	}
+	locHdr := f.recorder.Header().Get("Location")
+	if strings.Compare(locHdr, "/v1/data") != 0 {
+		t.Fatalf("Unexpected error Location header value: %v", locHdr)
+	}
+	RedirectedPath := strings.SplitAfter(locHdr, "/v1")[1]
+	if err := f.v1(http.MethodPut, RedirectedPath, `{"foo": [1,2,3]}`, 204, ""); err != nil {
+		t.Fatalf("Unexpected error from PUT: %v", err)
+	}
+	if err := f.v1(http.MethodGet, RedirectedPath, "", 200, `{"result": {"foo": [1,2,3]}}`); err != nil {
+		t.Fatalf("Unexpected error from GET: %v", err)
+	}
+	// Now we test redirection a few levels down
+	if err := f.v1(http.MethodPut, "/data/a/b/c/", `{"foo": [1,2,3]}`, 301, ""); err != nil {
+		t.Fatalf("Unexpected error from PUT: %v", err)
+	}
+	locHdrLv := f.recorder.Header().Get("Location")
+	if strings.Compare(locHdrLv, "/v1/data/a/b/c") != 0 {
+		t.Fatalf("Unexpected error Location header value: %v", locHdrLv)
+	}
+	RedirectedPathLvl := strings.SplitAfter(locHdrLv, "/v1")[1]
+	if err := f.v1(http.MethodPut, RedirectedPathLvl, `{"foo": [1,2,3]}`, 204, ""); err != nil {
+		t.Fatalf("Unexpected error from PUT: %v", err)
+	}
+	if err := f.v1(http.MethodGet, RedirectedPathLvl, "", 200, `{"result": {"foo": [1,2,3]}}`); err != nil {
+		t.Fatalf("Unexpected error from GET: %v", err)
 	}
 }
 
@@ -652,6 +686,57 @@ p = true { false }`
 			executeRequests(t, tc.reqs)
 		})
 	}
+}
+
+func TestDataYAML(t *testing.T) {
+
+	testMod1 := `package testmod
+import input.req1
+gt1 = true { req1 > 1 }`
+
+	inputYaml1 := `
+---
+input:
+  req1: 2`
+
+	inputYaml2 := `
+---
+req1: 2`
+
+	f := newFixture(t)
+
+	if err := f.v1(http.MethodPut, "/policies/test", testMod1, 200, ""); err != nil {
+		t.Fatalf("Unexpected error from PUT /policies/test: %v", err)
+	}
+
+	// First JSON and then later yaml to make sure both work
+	if err := f.v1(http.MethodPost, "/data/testmod/gt1", `{"input": {"req1": 2}}`, 200, `{"result": true}`); err != nil {
+		t.Fatalf("Unexpected error from PUT /policies/test: %v", err)
+	}
+
+	req := newReqV1(http.MethodPost, "/data/testmod/gt1", inputYaml1)
+	req.Header.Set("Content-Type", "application/x-yaml")
+	if err := f.executeRequest(req, 200, `{"result": true}`); err != nil {
+		t.Fatalf("Unexpected error from POST with yaml: %v", err)
+	}
+
+	req = newReqV0(http.MethodPost, "/data/testmod/gt1", inputYaml2)
+	req.Header.Set("Content-Type", "application/x-yaml")
+	if err := f.executeRequest(req, 200, `true`); err != nil {
+		t.Fatalf("Unexpected error from POST with yaml: %v", err)
+	}
+
+	if err := f.v1(http.MethodPut, "/policies/test2", `package system
+main = data.testmod.gt1`, 200, ""); err != nil {
+		t.Fatalf("Unexpected error from PUT /policies/test: %v", err)
+	}
+
+	req = newReqUnversioned(http.MethodPost, "/", inputYaml2)
+	req.Header.Set("Content-Type", "application/x-yaml")
+	if err := f.executeRequest(req, 200, `true`); err != nil {
+		t.Fatalf("Unexpected error from POST with yaml: %v", err)
+	}
+
 }
 
 func TestDataPutV1IfNoneMatch(t *testing.T) {
@@ -1207,6 +1292,25 @@ func TestIndexGetCompileError(t *testing.T) {
 	}
 }
 
+func TestVersionGet(t *testing.T) {
+
+	f := newFixture(t)
+
+	get := newReqV1(http.MethodGet, "/data/system/version", "")
+	f.server.Handler.ServeHTTP(f.recorder, get)
+	if f.recorder.Code != 200 {
+		t.Fatalf("Expected 200 OK but got %v", f.recorder)
+		return
+	}
+
+	page := f.recorder.Body.String()
+	var re = regexp.MustCompile(`[\s\S]*Version\b[\s\S]*BuildCommit\b[\s\S]*BuildTimestamp\b[\s\S]*BuildHostname\b`)
+	if !re.MatchString(page) {
+		t.Errorf("Expected page to contain 'version' but got: %v", page)
+		return
+	}
+}
+
 func TestPoliciesPutV1(t *testing.T) {
 	f := newFixture(t)
 	req := newReqV1(http.MethodPut, "/policies/1", testMod)
@@ -1422,9 +1526,30 @@ func TestPoliciesPathSlashes(t *testing.T) {
 	}
 }
 
-func TestQueryWatchBasic(t *testing.T) {
+func TestQueryPostBasic(t *testing.T) {
 	f := newFixture(t)
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithStore(f.server.store).
+		WithManager(f.server.manager).
+		WithDiagnosticsBuffer(NewBoundedBuffer(8)).
+		Init(context.Background())
 
+	setup := []tr{
+		{http.MethodPost, "/query", `{"query": "a=data.k.x with data.k as {\"x\" : 7}"}`, 200, `{"result":[{"a":7}]}`},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestQueryWatchBasic(t *testing.T) {
 	// Test basic watch results.
 	exp := strings.Join([]string{
 		"HTTP/1.1 200 OK\nContent-Type: application/json\nTransfer-Encoding: chunked\n\n10",
@@ -1441,32 +1566,39 @@ func TestQueryWatchBasic(t *testing.T) {
 `,
 		``,
 	}, "\r\n")
-	recorder := newMockConn()
 
-	get := newReqV1(http.MethodGet, `/query?q=a=data.x&watch`, "")
-	go f.server.Handler.ServeHTTP(recorder, get)
-	<-recorder.hijacked
-	<-recorder.write
-
-	tests := []trw{
-		{tr{http.MethodPut, "/data/x", `{"a":1,"b":2}`, 204, ""}, recorder.write},
-		{tr{http.MethodPut, "/data/x", `"foo"`, 204, ""}, recorder.write},
-		{tr{http.MethodPut, "/data/x", `7`, 204, ""}, recorder.write},
+	requests := []*http.Request{
+		newReqV1(http.MethodGet, `/query?q=a=data.x&watch`, ""),
+		newReqV1(http.MethodPost, `/query?&watch`, `{"query": "a=data.x"}`),
 	}
 
-	for _, test := range tests {
-		tr := test.tr
-		if err := f.v1(tr.method, tr.path, tr.body, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
-		if test.wait != nil {
-			<-test.wait
-		}
-	}
-	recorder.Close()
+	for _, get := range requests {
+		f := newFixture(t)
+		recorder := newMockConn()
+		go f.server.Handler.ServeHTTP(recorder, get)
+		<-recorder.hijacked
+		<-recorder.write
 
-	if result := recorder.buf.String(); result != exp {
-		t.Fatalf("Expected stream to equal %s, got %s", exp, result)
+		tests := []trw{
+			{tr{http.MethodPut, "/data/x", `{"a":1,"b":2}`, 204, ""}, recorder.write},
+			{tr{http.MethodPut, "/data/x", `"foo"`, 204, ""}, recorder.write},
+			{tr{http.MethodPut, "/data/x", `7`, 204, ""}, recorder.write},
+		}
+
+		for _, test := range tests {
+			tr := test.tr
+			if err := f.v1(tr.method, tr.path, tr.body, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+			if test.wait != nil {
+				<-test.wait
+			}
+		}
+		recorder.Close()
+
+		if result := recorder.buf.String(); result != exp {
+			t.Fatalf("Expected stream to equal %s, got %s", exp, result)
+		}
 	}
 }
 

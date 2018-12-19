@@ -86,6 +86,37 @@ complex types.
 | <span class="opa-keep-it-together">``regex.split(pattern, string, output)``</span> | 2 | ``output`` is ``array[string]`` representing elements of ``string`` separated by ``pattern`` |
 | <span class="opa-keep-it-together">``regex.globs_match(glob1, glob2)``</span> | 2 | true if the intersection of regex-style globs ``glob1`` and ``glob2`` matches a non-empty set of non-empty strings. The set of regex symbols is limited for this builtin: only ``.``, ``*``, ``+``, ``[``, ``-``, ``]`` and ``\`` are treated as special symbols. |
 | <span class="opa-keep-it-together">``regex.template_match(patter, string, delimiter_start, delimiter_end, output)``</span> | 4 | ``output`` is true if ``string`` matches ``pattern``. ``pattern`` is a string containing ``0..n`` regular expressions delimited by ``delimiter_start`` and ``delimiter_end``. Example ``regex.template_match("urn:foo:{.*}", "urn:foo:bar:baz", "{", "}", x)`` returns ``true`` for ``x``. |
+| <span class="opa-keep-it-together">``regex.find_n(pattern, string, number)``</span> | 3 | returns an ``array[string]`` with the ``number`` of values matching the ``pattern``. A ``number`` of ``-1`` means all matches. |
+
+### Glob
+| Built-in | Inputs | Description |
+| ------- |--------|-------------|
+| <span class="opa-keep-it-together">``glob.match(pattern, delimiters, match, output)``</span> | 3 | ``output`` is true if ``match`` can be found in ``pattern`` which is separated by ``delimiters``. For valid patterns, check the table below. Argument ``delimiters`` is an array of single-characters (e.g. `[".", ":"]`). If ``delimiters`` is empty, it defaults to ``["."]``. |
+| <span class="opa-keep-it-together">``glob.quote_meta(pattern, output)``</span> | 1 | ``output`` is the escaped string of ``pattern``. Calling ``glob.quote_meta("*.github.com", output)`` returns ``\\*.github.com`` as ``output``. |
+
+The following table shows examples of how ``glob.match`` works:
+
+| ``call`` | ``output`` | Description |
+| -------- | ---------- | ----------- |
+| ``glob.match("*.github.com", [], "api.github.com", output)`` | ``true`` | A glob with the default ``["."]`` delimiter. |
+| ``glob.match("*:github:com", [":"], "api:github:com", output)`` | ``true`` | A glob with delimiters ``[":"]``. |
+| ``glob.match("api.**.com", [], "api.github.com", output)`` | ``true`` | A super glob. |
+| ``glob.match("api.**.com", [], "api.cdn.github.com", output)`` | ``true`` | A super glob. |
+| ``glob.match("?at", [], "cat", output)`` | ``true`` | A glob with a single character wildcard. |
+| ``glob.match("?at", [], "at", output)`` | ``false`` | A glob with a single character wildcard. |
+| ``glob.match("[abc]at", [], "bat", output)`` | ``true`` | A glob with character-list matchers. |
+| ``glob.match("[abc]at", [], "cat", output)`` | ``true`` | A glob with character-list matchers. |
+| ``glob.match("[abc]at", [], "lat", output)`` | ``false`` | A glob with character-list matchers. |
+| ``glob.match("[!abc]at", [], "cat", output)`` | ``false`` | A glob with negated character-list matchers. |
+| ``glob.match("[!abc]at", [], "lat", output)`` | ``true`` | A glob with negated character-list matchers. |
+| ``glob.match("[a-c]at", [], "cat", output)`` | ``true`` | A glob with character-range matchers. |
+| ``glob.match("[a-c]at", [], "lat", output)`` | ``false`` | A glob with character-range matchers. |
+| ``glob.match("[!a-c]at", [], "cat", output)`` | ``false`` | A glob with negated character-range matchers. |
+| ``glob.match("[!a-c]at", [], "lat", output)`` | ``true`` | A glob with negated character-range matchers. |
+| ``glob.match(""{cat,bat,[fr]at}", [], "cat", output)`` | ``true`` | A glob with pattern-alternatives matchers. |
+| ``glob.match(""{cat,bat,[fr]at}", [], "bat", output)`` | ``true`` | A glob with pattern-alternatives matchers. |
+| ``glob.match(""{cat,bat,[fr]at}", [], "rat", output)`` | ``true`` | A glob with pattern-alternatives matchers. |
+| ``glob.match(""{cat,bat,[fr]at}", [], "at", output)`` | ``false`` | A glob with pattern-alternatives matchers. |
 
 ### Types
 
@@ -132,8 +163,23 @@ complex types.
 | <span class="opa-keep-it-together">``io.jwt.verify_es256(string, certificate, output)``</span> | 1 | ``output`` is ``true`` if the ES256 signature of the input token is valid. ``certificate`` is the PEM encoded certificate used to verify the ES256 signature|
 | <span class="opa-keep-it-together">``io.jwt.verify_hs256(string, secret, output)``</span> | 1 | ``output`` is ``true`` if the Secret signature of the input token is valid. ``secret`` is a plain text secret used to verify the HS256 signature|
 | <span class="opa-keep-it-together">``io.jwt.decode(string, [header, payload, sig])``</span> | 1 | ``header`` and ``payload`` are ``object``. ``signature`` is the hexadecimal representation of the signature on the token. |
+| <span class="opa-keep-it-together">``io.jwt.decode_verify(string, constraints, [valid, header, payload])``</span> | 2 | If the input token verifies and meets the requirements of ``constraints`` then ``valid`` is ``true`` and ``header`` and ``payload`` are objects containing the JOSE header and the JWT claim set. Otherwise, ``valid`` is ``false`` and ``header`` and ``payload`` are ``{}``. |
 
 The input `string` is a JSON Web Token encoded with JWS Compact Serialization. JWE and JWS JSON Serialization are not supported. If nested signing was used, the ``header``, ``payload`` and ``signature`` will represent the most deeply nested token.
+
+For ``io.jwt.decode_verify``, ``constraints`` is an object with the following members:
+
+| Name | Meaning | Required |
+| ---- | ------- | -------- |
+| ``cert`` | A PEM encoded certificate containing an RSA or ECDSA public key. | See below |
+| ``secret`` | The secret key for HS256, HS384 and HS512 verification. | See below |
+| ``alg`` | The JWA algorithm name to use. If it is absent then any algorithm that is compatible with the key is accepted. | Optional |
+| ``iss`` | The issuer string. If it is present the only tokens with this issuer are accepted. If it is absent then any issuer is accepted. | Optional |
+|``time`` | The time in nanoseconds to verify the token at. If this is present then the ``exp`` and ``nbf`` claims are compared against this value. If it is absent then they are compared against the current time. | Optional |
+|``aud`` | The audience that the verifier identifies with.  If this is present then the ``aud`` claim is checked against it. If it is absent then the ``aud`` claim must be absent too. | Optional |
+
+Exactly one of ``cert`` and ``secret`` must be present.
+If there are any unrecognized constraints then the token is considered invalid.
 
 ### Time
 
@@ -165,7 +211,7 @@ evaluation query will always return the same value.
 ### HTTP
 | Built-in | Inputs | Description |
 | ------- |--------|-------------|
-| <span class="opa-keep-it-together">``http.send(request, output)``</span> | 1 | ``http.send`` executes a HTTP request and returns the response.``request`` is an object containing keys ``method``, ``url`` and  optionally ``body`` and ``enable_redirect``. For example, ``http.send({"method": "get", "url": "http://www.openpolicyagent.org/"}, output)``. ``output`` is an object containing keys ``status``, ``status_code`` and ``body`` which represent the HTTP status, status code and response body respectively. Sample output, ``{"status": "200 OK", "status_code": 200, "body": null``}. By default, http redirects are not enabled. To enable, set ``enable_redirect`` to ``true``.|
+| <span class="opa-keep-it-together">``http.send(request, output)``</span> | 1 | ``http.send`` executes a HTTP request and returns the response.``request`` is an object containing keys ``method``, ``url`` and  optionally ``body``, ``enable_redirect`` and ``headers``. For example, ``http.send({"method": "get", "url": "http://www.openpolicyagent.org/", "headers": {"X-Foo":"bar", "X-Opa": "rules"}}, output)``. ``output`` is an object containing keys ``status``, ``status_code`` and ``body`` which represent the HTTP status, status code and response body respectively. Sample output, ``{"status": "200 OK", "status_code": 200, "body": null``}. By default, http redirects are not enabled. To enable, set ``enable_redirect`` to ``true``.|
 
 ### Net
 | Built-in | Inputs | Description |
@@ -176,6 +222,11 @@ evaluation query will always return the same value.
 | Built-in | Inputs | Description |
 | ------- |--------|-------------|
 | <span class="opa-keep-it-together">``rego.parse_module(filename, string, output)``</span> | 2 | ``rego.parse_module`` parses the input ``string`` as a Rego module and returns the AST as a JSON object ``output``. |
+
+### OPA
+| Built-in | Inputs | Description |
+| ------- |--------|-------------|
+| <span class="opa-keep-it-together">``opa.runtime(output)``</span> | 0 | ``opa.runtime`` returns a JSON object ``output`` that describes the runtime environment where OPA is deployed. **Caution**: Policies that depend on the output of ``opa.runtime`` may return different answers depending on how OPA was started. If possible, prefer using an explicit `input` or `data` value instead of `opa.runtime`. The ``output`` of ``opa.runtime`` will include a ``"config"`` key if OPA was started with a configuration file. The ``output`` of ``opa.runtime`` will include a ``"env"`` key containing the environment variables that the OPA process was started with. |
 
 ### Debugging
 | Built-in | Inputs | Description |
@@ -249,7 +300,7 @@ The grammar defined above makes use of the following syntax. See [the Wikipedia 
 ```
 []     optional (zero or one instances)
 {}     repetition (zero or more instances)
-|      alteration (one of the instances)
+|      alternation (one of the instances)
 ()     grouping (order of expansion)
 STRING JSON string
 NUMBER JSON number

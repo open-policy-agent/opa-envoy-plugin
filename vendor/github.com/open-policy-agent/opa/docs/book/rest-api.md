@@ -637,7 +637,6 @@ public_servers[server] {
 ```
 
 > cURL's `-d/--data` flag removes newline characters from input files. Use the `--data-binary` flag instead.
-{: .opa-tip}
 
 #### Example Response
 
@@ -998,6 +997,17 @@ The server returns 400 if either:
 The server returns 200 if the path refers to an undefined document. In this
 case, the response will not contain a `result` property.
 
+#### Response Message
+
+- **result** - The base or virtual document referred to by the URL path. If the
+  path is undefined, this key will be omitted.
+- **metrics** - If query metrics are enabled, this field contains query
+  performance metrics collected during the parse, compile, and evaluation steps.
+* **decision_id** - If decision logging is enabled, this field contains a string
+  that uniquely identifies the decision. The identifier will be included in the
+  decision log event for this decision. Callers can use the identifier for
+  correlation purposes.
+
 ### Get a Document (with Input)
 
 ```
@@ -1084,6 +1094,10 @@ HTTP/1.1 200 OK
 {}
 ```
 
+#### Request Headers
+
+- **Content-Type: application/x-yaml**: Indicates the request body is a YAML encoded object.
+
 #### Query Parameters
 
 - **partial** - Use the partial evaluation (optimization) when evaluating the query.
@@ -1106,6 +1120,17 @@ The server returns 400 if either:
 
 The server returns 200 if the path refers to an undefined document. In this
 case, the response will not contain a `result` property.
+
+#### Response Message
+
+- **result** - The base or virtual document referred to by the URL path. If the
+  path is undefined, this key will be omitted.
+- **metrics** - If query metrics are enabled, this field contains query
+  performance metrics collected during the parse, compile, and evaluation steps.
+* **decision_id** - If decision logging is enabled, this field contains a string
+  that uniquely identifies the decision. The identifier will be included in the
+  decision log event for this decision. Callers can use the identifier for
+  correlation purposes.
 
 ### Get a Document (Webhook)
 
@@ -1159,6 +1184,10 @@ Content-Type: application/json
 ```json
 true
 ```
+
+#### Request Headers
+
+- **Content-Type: application/x-yaml**: Indicates the request body is a YAML encoded object.
 
 #### Query Parameters
 
@@ -1308,8 +1337,10 @@ Execute a simple query.
 
 OPA serves POST requests without a URL path by querying for the document at
 path `/data/system/main`. The content of that document defines the response
-entirely. The policy example below shows how to define a rule that will produce a
-value for the `/data/system/main` document.
+entirely. The policy example below shows how to define a rule that will
+produce a value for the `/data/system/main` document. You can configure OPA
+to use a different URL path to serve these queries. See the [Configuration Reference](configuration.md)
+for more information.
 
 The request message body is mapped to the [Input Document](/how-does-opa-work.md#the-input-document).
 
@@ -1350,6 +1381,10 @@ Content-Type: application/json
 "hello, alice"
 ```
 
+#### Request Headers
+
+- **Content-Type: application/x-yaml**: Indicates the request body is a YAML encoded object.
+
 #### Query Parameters
 
 - **pretty** - If parameter is `true`, response will formatted for humans.
@@ -1361,7 +1396,7 @@ Content-Type: application/json
 - **404** - not found
 - **500** - server error
 
-If the `/data/system/main` document is undefined (e.g., because the administrator has not defined one) the server returns 404.
+If the default decision (defaulting to `/system/main`) is undefined, the server returns 404.
 
 ### Execute an Ad-hoc Query
 
@@ -1616,8 +1651,7 @@ The following table summarizes the behavior for partial evaluation results.
 
 ## Authentication
 
-The API is secured via [HTTPS, Authentication, and
-Authorization](/documentation/references/security).
+The API is secured via [HTTPS, Authentication, and Authorization](security.md).
 
 ###  Bearer Tokens
 

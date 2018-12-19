@@ -748,7 +748,7 @@ iterate_ground[x] { data.topdown.virtual.constants[x] = 1 }
 	assertTopDownWithPath(t, compiler, store, "base/virtual: undefined-2", []string{"topdown", "v"}, "{}", `{"h": {"k": [1,2,3]}}`)
 	assertTopDownWithPath(t, compiler, store, "base/virtual: missing input value", []string{"topdown", "u"}, "{}", "{}")
 	assertTopDownWithPath(t, compiler, store, "iterate ground", []string{"topdown", "iterate_ground"}, "{}", `["p", "r"]`)
-	assertTopDownWithPath(t, compiler, store, "base/virtual: conflicts", []string{"topdown.conflicts"}, "{}", fmt.Errorf("base and virtual document keys must be disjoint"))
+	assertTopDownWithPath(t, compiler, store, "base/virtual: conflicts", []string{"topdown.conflicts"}, "{}", `{"k": "foo"}`)
 }
 
 func TestTopDownNestedReferences(t *testing.T) {
@@ -1580,12 +1580,12 @@ func TestTopDownJWTBuiltins(t *testing.T) {
 	}
 }
 
-func TestTopDownJWTVerifyRSA(t *testing.T) {
-	const certPem = `-----BEGIN CERTIFICATE-----\nMIIFiDCCA3ACCQCGV6XsfG/oRTANBgkqhkiG9w0BAQUFADCBhTELMAkGA1UEBhMC\nVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEO\nMAwGA1UECgwFU3R5cmExDDAKBgNVBAsMA0RldjESMBAGA1UEAwwJbG9jYWxob3N0\nMRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5cmEwHhcNMTgwMzA2MDAxNTU5WhcNMTkw\nMzA2MDAxNTU5WjCBhTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx\nFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEOMAwGA1UECgwFU3R5cmExDDAKBgNVBAsM\nA0RldjESMBAGA1UEAwwJbG9jYWxob3N0MRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5\ncmEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDucnAwTRA0zqDQ671L\nKWOVwhjhycFyzyhZUd7vhsnslOBiYM6TYIDXhETfAk2RQoRE/9xF16woMD8FOglc\nlSuhi+GNfFRif6LfArm84ZFj1ZS1MX2logikhXhRJQ7AOHe5+ED0re3KH5lWyqfz\nR6bQuPYwTQSBJy6Tq7T9RiOM29yadCX64OaCEbzEFmHtNlbb5px4zCVvgskg/fpV\nGGCMpAYjGDatbxE5eAloVs1EJuI5RSqWr1JRm6EejxM04BFdfGn1HgWrsKXtlvBa\n00/AC0zXL5n6LK7+L3WbRguVTZcE4Yu70gDwhmM+VsKeT9LKClX003BNj0NJDRB9\ndw9MaWxsXDNHNOWEfbnASXeP7ZRv3D81ftij6P8SL14ZnxyrRty8TAN4ij3wd41l\nastRQCtrJFi+HzO606XOp6HDzBoWT0DGl8Sn2hZ6RLPyBnD04vvvcSGeCVjHGOQ8\nc3OTroK58u5MR/q4T00sTkeeVAxuKoEWKsjIBYYrJTe/a2mEq9yiDGbPNYDnWnQZ\njSUZm+Us23Y2sm/agZ5zKXcEuoecGL6sYCixr/xeB9BPxEiTthH+0M8OY99qpIhz\nSmj41wdgQfzZi/6B8pIr77V/KywYKxJEmzw8Uy48aC/rZ8WsT8QdKwclo1aiNJhx\n79OvGbZFoeHD/w7igpx+ttpF/wIDAQABMA0GCSqGSIb3DQEBBQUAA4ICAQC3wWUs\nfXz+aSfFVz+O3mLFkr65NIgazbGAySgMgMNVuadheIkPL4k21atyflfpx4pg9FGv\n40vWCLMajpvynfz4oqah0BACnpqzQ8Dx6HYkmlXK8fLB+WtPrZBeUEsGPKuJYt4M\nd5TeY3VpNgWOPXmnE4lvxHZqh/8OwmOpjBfC9E3e2eqgwiwOkXnMaZEPgKP6JiWk\nEFaQ9jgMQqJZnNcv6NmiqqsZeI0/NNjBpkmEWQl+wLegVusHiQ0FMBMQ0taEo21r\nzUwHoNJR3h3wgGQiKxKOH1FUKHBV7hEqObLraD/hfG5xYucJfvvAAP1iH0ycPs+9\nhSccrn5/HY1c9AZnW8Kh7atp/wFP+sHjtECWK/lUmXfhASS293hprCpJk2n9pkmR\nziXKJhjwkxlC8NcHuiVfaxdfDa4+1Qta2gK7GEypbvLoEmIt/dsYUsxUg84lwJJ9\nnyC/pfZ5a8wFSf186JeVH4kHd3bnkzlQz460HndOMSJ/Xi1wSfuZlOVupFf8TVKl\np4j28MTLH2Wqx50NssKThdaX6hoCiMqreYa+EVaN1f/cIGQxZSCzdzMCKqdB8lKB\n3Eax+5zsIa/UyPwGxZcyXBRHAlz5ZnkjuRxInyiMkBWWz3IZXjTe6Fq8BNd2UWNc\nw35+2nO5n1LKXgR2+nzhZUOk8TPsi9WUywRluQ==\n-----END CERTIFICATE-----`
-	const certPemPs = `-----BEGIN CERTIFICATE-----\nMIIC/DCCAeSgAwIBAgIJAJRvYDU3ei3EMA0GCSqGSIb3DQEBCwUAMBMxETAPBgNV\nBAMMCHdoYXRldmVyMB4XDTE4MDgxMDEwMzgxNloXDTE4MDkwOTEwMzgxNlowEzER\nMA8GA1UEAwwId2hhdGV2ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB\nAQC4kCmzLMW/5jzkzkmN7Me8wPD+ymBUIjsGqliGfMrfFfDV2eTPVtZcYD3IXoB4\nAOUT7XJzWjOsBRFOcVKKEiCPjXiLcwLb/QWQ1x0Budft32r3+N0KQd1rgcRHTPNc\nJoeWCfOgDPp51RTzTT6HQuV4ud+CDhRJP7QMVMIgal9Nuzs49LLZaBPW8/rFsHjk\nJQ4kDujSrpcT6F2FZY3SmWsOJgP7RjVKk5BheYeFKav5ZV4p6iHn/TN4RVpvpNBh\n5z/XoHITJ6lpkHSDpbIaQUTpobU2um8N3biz+HsEAmD9Laa27WUpYSpiM6DDMSXl\ndBDJdumerVRJvXYCtfXqtl17AgMBAAGjUzBRMB0GA1UdDgQWBBRz74MkVzT2K52/\nFJC4mTa9coM/DTAfBgNVHSMEGDAWgBRz74MkVzT2K52/FJC4mTa9coM/DTAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAD1ZE4IaIAetqGG+vt9oz1\nIx0j4EPok0ONyhhmiSsF6rSv8zlNWweVf5y6Z+AoTNY1Fym0T7dbpbqIox0EdKV3\nFLzniWOjznupbnqfXwHX/g1UAZSyt3akSatVhvNpGlnd7efTIAiNinX/TkzIjhZ7\nihMIZCGykT1P0ys1OaeEf57wAzviatD4pEMTIW0OOqY8bdRGhuJR1kKUZ/2Nm8Ln\ny7E0y8uODVbH9cAwGyzWB/QFc+bffNgi9uJaPQQc5Zxwpu9utlqyzFvXgV7MBYUK\nEYSLyxp4g4e5aujtLugaC8H6n9vP1mEBr/+T8HGynBZHNTKlDhhL9qDbpkkNB6/w\n-----END CERTIFICATE-----`
-	const certPemEs256 = `-----BEGIN CERTIFICATE-----\nMIIBcDCCARagAwIBAgIJAMZmuGSIfvgzMAoGCCqGSM49BAMCMBMxETAPBgNVBAMM\nCHdoYXRldmVyMB4XDTE4MDgxMDE0Mjg1NFoXDTE4MDkwOTE0Mjg1NFowEzERMA8G\nA1UEAwwId2hhdGV2ZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATPwn3WCEXL\nmjp/bFniDwuwsfu7bASlPae2PyWhqGeWwe23Xlyx+tSqxlkXYe4pZ23BkAAscpGj\nyn5gXHExyDlKo1MwUTAdBgNVHQ4EFgQUElRjSoVgKjUqY5AXz2o74cLzzS8wHwYD\nVR0jBBgwFoAUElRjSoVgKjUqY5AXz2o74cLzzS8wDwYDVR0TAQH/BAUwAwEB/zAK\nBggqhkjOPQQDAgNIADBFAiEA4yQ/88ZrUX68c6kOe9G11u8NUaUzd8pLOtkKhniN\nOHoCIHmNX37JOqTcTzGn2u9+c8NlnvZ0uDvsd1BmKPaUmjmm\n-----END CERTIFICATE-----\n`
+const certPem = `-----BEGIN CERTIFICATE-----\nMIIFiDCCA3ACCQCGV6XsfG/oRTANBgkqhkiG9w0BAQUFADCBhTELMAkGA1UEBhMC\nVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEO\nMAwGA1UECgwFU3R5cmExDDAKBgNVBAsMA0RldjESMBAGA1UEAwwJbG9jYWxob3N0\nMRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5cmEwHhcNMTgwMzA2MDAxNTU5WhcNMTkw\nMzA2MDAxNTU5WjCBhTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx\nFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEOMAwGA1UECgwFU3R5cmExDDAKBgNVBAsM\nA0RldjESMBAGA1UEAwwJbG9jYWxob3N0MRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5\ncmEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDucnAwTRA0zqDQ671L\nKWOVwhjhycFyzyhZUd7vhsnslOBiYM6TYIDXhETfAk2RQoRE/9xF16woMD8FOglc\nlSuhi+GNfFRif6LfArm84ZFj1ZS1MX2logikhXhRJQ7AOHe5+ED0re3KH5lWyqfz\nR6bQuPYwTQSBJy6Tq7T9RiOM29yadCX64OaCEbzEFmHtNlbb5px4zCVvgskg/fpV\nGGCMpAYjGDatbxE5eAloVs1EJuI5RSqWr1JRm6EejxM04BFdfGn1HgWrsKXtlvBa\n00/AC0zXL5n6LK7+L3WbRguVTZcE4Yu70gDwhmM+VsKeT9LKClX003BNj0NJDRB9\ndw9MaWxsXDNHNOWEfbnASXeP7ZRv3D81ftij6P8SL14ZnxyrRty8TAN4ij3wd41l\nastRQCtrJFi+HzO606XOp6HDzBoWT0DGl8Sn2hZ6RLPyBnD04vvvcSGeCVjHGOQ8\nc3OTroK58u5MR/q4T00sTkeeVAxuKoEWKsjIBYYrJTe/a2mEq9yiDGbPNYDnWnQZ\njSUZm+Us23Y2sm/agZ5zKXcEuoecGL6sYCixr/xeB9BPxEiTthH+0M8OY99qpIhz\nSmj41wdgQfzZi/6B8pIr77V/KywYKxJEmzw8Uy48aC/rZ8WsT8QdKwclo1aiNJhx\n79OvGbZFoeHD/w7igpx+ttpF/wIDAQABMA0GCSqGSIb3DQEBBQUAA4ICAQC3wWUs\nfXz+aSfFVz+O3mLFkr65NIgazbGAySgMgMNVuadheIkPL4k21atyflfpx4pg9FGv\n40vWCLMajpvynfz4oqah0BACnpqzQ8Dx6HYkmlXK8fLB+WtPrZBeUEsGPKuJYt4M\nd5TeY3VpNgWOPXmnE4lvxHZqh/8OwmOpjBfC9E3e2eqgwiwOkXnMaZEPgKP6JiWk\nEFaQ9jgMQqJZnNcv6NmiqqsZeI0/NNjBpkmEWQl+wLegVusHiQ0FMBMQ0taEo21r\nzUwHoNJR3h3wgGQiKxKOH1FUKHBV7hEqObLraD/hfG5xYucJfvvAAP1iH0ycPs+9\nhSccrn5/HY1c9AZnW8Kh7atp/wFP+sHjtECWK/lUmXfhASS293hprCpJk2n9pkmR\nziXKJhjwkxlC8NcHuiVfaxdfDa4+1Qta2gK7GEypbvLoEmIt/dsYUsxUg84lwJJ9\nnyC/pfZ5a8wFSf186JeVH4kHd3bnkzlQz460HndOMSJ/Xi1wSfuZlOVupFf8TVKl\np4j28MTLH2Wqx50NssKThdaX6hoCiMqreYa+EVaN1f/cIGQxZSCzdzMCKqdB8lKB\n3Eax+5zsIa/UyPwGxZcyXBRHAlz5ZnkjuRxInyiMkBWWz3IZXjTe6Fq8BNd2UWNc\nw35+2nO5n1LKXgR2+nzhZUOk8TPsi9WUywRluQ==\n-----END CERTIFICATE-----`
+const certPemPs = `-----BEGIN CERTIFICATE-----\nMIIC/DCCAeSgAwIBAgIJAJRvYDU3ei3EMA0GCSqGSIb3DQEBCwUAMBMxETAPBgNV\nBAMMCHdoYXRldmVyMB4XDTE4MDgxMDEwMzgxNloXDTE4MDkwOTEwMzgxNlowEzER\nMA8GA1UEAwwId2hhdGV2ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB\nAQC4kCmzLMW/5jzkzkmN7Me8wPD+ymBUIjsGqliGfMrfFfDV2eTPVtZcYD3IXoB4\nAOUT7XJzWjOsBRFOcVKKEiCPjXiLcwLb/QWQ1x0Budft32r3+N0KQd1rgcRHTPNc\nJoeWCfOgDPp51RTzTT6HQuV4ud+CDhRJP7QMVMIgal9Nuzs49LLZaBPW8/rFsHjk\nJQ4kDujSrpcT6F2FZY3SmWsOJgP7RjVKk5BheYeFKav5ZV4p6iHn/TN4RVpvpNBh\n5z/XoHITJ6lpkHSDpbIaQUTpobU2um8N3biz+HsEAmD9Laa27WUpYSpiM6DDMSXl\ndBDJdumerVRJvXYCtfXqtl17AgMBAAGjUzBRMB0GA1UdDgQWBBRz74MkVzT2K52/\nFJC4mTa9coM/DTAfBgNVHSMEGDAWgBRz74MkVzT2K52/FJC4mTa9coM/DTAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAD1ZE4IaIAetqGG+vt9oz1\nIx0j4EPok0ONyhhmiSsF6rSv8zlNWweVf5y6Z+AoTNY1Fym0T7dbpbqIox0EdKV3\nFLzniWOjznupbnqfXwHX/g1UAZSyt3akSatVhvNpGlnd7efTIAiNinX/TkzIjhZ7\nihMIZCGykT1P0ys1OaeEf57wAzviatD4pEMTIW0OOqY8bdRGhuJR1kKUZ/2Nm8Ln\ny7E0y8uODVbH9cAwGyzWB/QFc+bffNgi9uJaPQQc5Zxwpu9utlqyzFvXgV7MBYUK\nEYSLyxp4g4e5aujtLugaC8H6n9vP1mEBr/+T8HGynBZHNTKlDhhL9qDbpkkNB6/w\n-----END CERTIFICATE-----`
+const certPemEs256 = `-----BEGIN CERTIFICATE-----\nMIIBcDCCARagAwIBAgIJAMZmuGSIfvgzMAoGCCqGSM49BAMCMBMxETAPBgNVBAMM\nCHdoYXRldmVyMB4XDTE4MDgxMDE0Mjg1NFoXDTE4MDkwOTE0Mjg1NFowEzERMA8G\nA1UEAwwId2hhdGV2ZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATPwn3WCEXL\nmjp/bFniDwuwsfu7bASlPae2PyWhqGeWwe23Xlyx+tSqxlkXYe4pZ23BkAAscpGj\nyn5gXHExyDlKo1MwUTAdBgNVHQ4EFgQUElRjSoVgKjUqY5AXz2o74cLzzS8wHwYD\nVR0jBBgwFoAUElRjSoVgKjUqY5AXz2o74cLzzS8wDwYDVR0TAQH/BAUwAwEB/zAK\nBggqhkjOPQQDAgNIADBFAiEA4yQ/88ZrUX68c6kOe9G11u8NUaUzd8pLOtkKhniN\nOHoCIHmNX37JOqTcTzGn2u9+c8NlnvZ0uDvsd1BmKPaUmjmm\n-----END CERTIFICATE-----\n`
+const certPemBad = `-----BEGIN CERT-----\nMIIFiDCCA3ACCQCGV6XsfG/oRTANBgkqhkiG9w0BAQUFADCBhTELMAkGA1UEBhMC\nVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEO\nMAwGA1UECgwFU3R5cmExDDAKBgNVBAsMA0RldjESMBAGA1UEAwwJbG9jYWxob3N0\nMRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5cmEwHhcNMTgwMzA2MDAxNTU5WhcNMTkw\nMzA2MDAxNTU5WjCBhTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx\nFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEOMAwGA1UECgwFU3R5cmExDDAKBgNVBAsM\nA0RldjESMBAGA1UEAwwJbG9jYWxob3N0MRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5\ncmEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDucnAwTRA0zqDQ671L\nKWOVwhjhycFyzyhZUd7vhsnslOBiYM6TYIDXhETfAk2RQoRE/9xF16woMD8FOglc\nlSuhi+GNfFRif6LfArm84ZFj1ZS1MX2logikhXhRJQ7AOHe5+ED0re3KH5lWyqfz\nR6bQuPYwTQSBJy6Tq7T9RiOM29yadCX64OaCEbzEFmHtNlbb5px4zCVvgskg/fpV\nGGCMpAYjGDatbxE5eAloVs1EJuI5RSqWr1JRm6EejxM04BFdfGn1HgWrsKXtlvBa\n00/AC0zXL5n6LK7+L3WbRguVTZcE4Yu70gDwhmM+VsKeT9LKClX003BNj0NJDRB9\ndw9MaWxsXDNHNOWEfbnASXeP7ZRv3D81ftij6P8SL14ZnxyrRty8TAN4ij3wd41l\nastRQCtrJFi+HzO606XOp6HDzBoWT0DGl8Sn2hZ6RLPyBnD04vvvcSGeCVjHGOQ8\nc3OTroK58u5MR/q4T00sTkeeVAxuKoEWKsjIBYYrJTe/a2mEq9yiDGbPNYDnWnQZ\njSUZm+Us23Y2sm/agZ5zKXcEuoecGL6sYCixr/xeB9BPxEiTthH+0M8OY99qpIhz\nSmj41wdgQfzZi/6B8pIr77V/KywYKxJEmzw8Uy48aC/rZ8WsT8QdKwclo1aiNJhx\n79OvGbZFoeHD/w7igpx+ttpF/wIDAQABMA0GCSqGSIb3DQEBBQUAA4ICAQC3wWUs\nfXz+aSfFVz+O3mLFkr65NIgazbGAySgMgMNVuadheIkPL4k21atyflfpx4pg9FGv\n40vWCLMajpvynfz4oqah0BACnpqzQ8Dx6HYkmlXK8fLB+WtPrZBeUEsGPKuJYt4M\nd5TeY3VpNgWOPXmnE4lvxHZqh/8OwmOpjBfC9E3e2eqgwiwOkXnMaZEPgKP6JiWk\nEFaQ9jgMQqJZnNcv6NmiqqsZeI0/NNjBpkmEWQl+wLegVusHiQ0FMBMQ0taEo21r\nzUwHoNJR3h3wgGQiKxKOH1FUKHBV7hEqObLraD/hfG5xYucJfvvAAP1iH0ycPs+9\nhSccrn5/HY1c9AZnW8Kh7atp/wFP+sHjtECWK/lUmXfhASS293hprCpJk2n9pkmR\nziXKJhjwkxlC8NcHuiVfaxdfDa4+1Qta2gK7GEypbvLoEmIt/dsYUsxUg84lwJJ9\nnyC/pfZ5a8wFSf186JeVH4kHd3bnkzlQz460HndOMSJ/Xi1wSfuZlOVupFf8TVKl\np4j28MTLH2Wqx50NssKThdaX6hoCiMqreYa+EVaN1f/cIGQxZSCzdzMCKqdB8lKB\n3Eax+5zsIa/UyPwGxZcyXBRHAlz5ZnkjuRxInyiMkBWWz3IZXjTe6Fq8BNd2UWNc\nw35+2nO5n1LKXgR2+nzhZUOk8TPsi9WUywRluQ==\n-----END CERT-----`
 
-	const certPemBad = `-----BEGIN CERT-----\nMIIFiDCCA3ACCQCGV6XsfG/oRTANBgkqhkiG9w0BAQUFADCBhTELMAkGA1UEBhMC\nVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEO\nMAwGA1UECgwFU3R5cmExDDAKBgNVBAsMA0RldjESMBAGA1UEAwwJbG9jYWxob3N0\nMRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5cmEwHhcNMTgwMzA2MDAxNTU5WhcNMTkw\nMzA2MDAxNTU5WjCBhTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx\nFTATBgNVBAcMDFJlZHdvb2QgQ2l0eTEOMAwGA1UECgwFU3R5cmExDDAKBgNVBAsM\nA0RldjESMBAGA1UEAwwJbG9jYWxob3N0MRgwFgYJKoZIhvcNAQkBFglhc2hAc3R5\ncmEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDucnAwTRA0zqDQ671L\nKWOVwhjhycFyzyhZUd7vhsnslOBiYM6TYIDXhETfAk2RQoRE/9xF16woMD8FOglc\nlSuhi+GNfFRif6LfArm84ZFj1ZS1MX2logikhXhRJQ7AOHe5+ED0re3KH5lWyqfz\nR6bQuPYwTQSBJy6Tq7T9RiOM29yadCX64OaCEbzEFmHtNlbb5px4zCVvgskg/fpV\nGGCMpAYjGDatbxE5eAloVs1EJuI5RSqWr1JRm6EejxM04BFdfGn1HgWrsKXtlvBa\n00/AC0zXL5n6LK7+L3WbRguVTZcE4Yu70gDwhmM+VsKeT9LKClX003BNj0NJDRB9\ndw9MaWxsXDNHNOWEfbnASXeP7ZRv3D81ftij6P8SL14ZnxyrRty8TAN4ij3wd41l\nastRQCtrJFi+HzO606XOp6HDzBoWT0DGl8Sn2hZ6RLPyBnD04vvvcSGeCVjHGOQ8\nc3OTroK58u5MR/q4T00sTkeeVAxuKoEWKsjIBYYrJTe/a2mEq9yiDGbPNYDnWnQZ\njSUZm+Us23Y2sm/agZ5zKXcEuoecGL6sYCixr/xeB9BPxEiTthH+0M8OY99qpIhz\nSmj41wdgQfzZi/6B8pIr77V/KywYKxJEmzw8Uy48aC/rZ8WsT8QdKwclo1aiNJhx\n79OvGbZFoeHD/w7igpx+ttpF/wIDAQABMA0GCSqGSIb3DQEBBQUAA4ICAQC3wWUs\nfXz+aSfFVz+O3mLFkr65NIgazbGAySgMgMNVuadheIkPL4k21atyflfpx4pg9FGv\n40vWCLMajpvynfz4oqah0BACnpqzQ8Dx6HYkmlXK8fLB+WtPrZBeUEsGPKuJYt4M\nd5TeY3VpNgWOPXmnE4lvxHZqh/8OwmOpjBfC9E3e2eqgwiwOkXnMaZEPgKP6JiWk\nEFaQ9jgMQqJZnNcv6NmiqqsZeI0/NNjBpkmEWQl+wLegVusHiQ0FMBMQ0taEo21r\nzUwHoNJR3h3wgGQiKxKOH1FUKHBV7hEqObLraD/hfG5xYucJfvvAAP1iH0ycPs+9\nhSccrn5/HY1c9AZnW8Kh7atp/wFP+sHjtECWK/lUmXfhASS293hprCpJk2n9pkmR\nziXKJhjwkxlC8NcHuiVfaxdfDa4+1Qta2gK7GEypbvLoEmIt/dsYUsxUg84lwJJ9\nnyC/pfZ5a8wFSf186JeVH4kHd3bnkzlQz460HndOMSJ/Xi1wSfuZlOVupFf8TVKl\np4j28MTLH2Wqx50NssKThdaX6hoCiMqreYa+EVaN1f/cIGQxZSCzdzMCKqdB8lKB\n3Eax+5zsIa/UyPwGxZcyXBRHAlz5ZnkjuRxInyiMkBWWz3IZXjTe6Fq8BNd2UWNc\nw35+2nO5n1LKXgR2+nzhZUOk8TPsi9WUywRluQ==\n-----END CERT-----`
+func TestTopDownJWTVerifyRSA(t *testing.T) {
 
 	params := []struct {
 		note   string
@@ -1737,6 +1737,289 @@ func TestTopDownJWTVerifyHS256(t *testing.T) {
 		tests = append(tests, test{
 			p.note,
 			[]string{fmt.Sprintf(`p = x { io.jwt.verify_hs256("%s", "%s", x) }`, p.input1, p.input2)},
+			exp,
+		})
+	}
+
+	data := loadSmallTestData()
+
+	for _, tc := range tests {
+		runTopDownTestCase(t, data, tc.note, tc.rules, tc.expected)
+	}
+}
+
+func TestTopDownJWTDecodeVerify(t *testing.T) {
+	params := []struct {
+		note        string // test name
+		token       string // JWT
+		constraints string // constraints argument
+		valid       bool   // expected validity value
+		header      string // expected header
+		payload     string // expected claims
+		err         string // expected error or "" for succes
+	}{
+		{
+			"ps256-unconstrained", // no constraints at all (apart from supplying a key)
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			true,
+			`{"alg": "PS256", "typ": "JWT"}`,
+			`{"iss": "xxx"}`,
+			"",
+		},
+		{
+			"ps256-key-wrong", // wrong key for signature
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s"}`, certPem),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-key-wrong", // wrong key for signature
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImV4cCI6IDMwMDB9.hqDP3AzshNhUZMI02U3nLPrj93QFrgs-74XFrF1Vry2bplrz-NKpdVdfTu8iY_bhmkWf2Om5DdwRZj2ZgpGahtnshnHaRq0RyqF-m3Y7oNj6JL_YMwgxsFIIHtBlagBqDU-gZK99iqSOSGqVhvxqX6gCqFgE7vnEGHeeDedtRM53coAJuwzy8rQV9m3TewoofPdPasGv-dBLQZ3qgmnibkSgb7SmFpjXBy8zL3xJXOZhAHYlgcmcEoFVaWlBguIcWA87WZlpCLYcdYTJzSZweC3QLUhZ4RLJW84-LMKp6xWLLPrp3OgnsduB2G9PYMmYw_qCkuY1KGwfH4PvCQbAzQ",
+			fmt.Sprintf(`{"cert": "%s"}`, certPem),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"ps256-iss-ok", // enforce issuer
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s", "iss": "xxx"}`, certPemPs),
+			true,
+			`{"alg": "PS256", "typ": "JWT"}`,
+			`{"iss": "xxx"}`,
+			"",
+		},
+		{
+			"ps256-iss-wrong", // wrong issuer
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s", "iss": "yyy"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"ps256-alg-ok", // constrained algorithm
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s", "alg": "PS256"}`, certPemPs),
+			true,
+			`{"alg": "PS256", "typ": "JWT"}`,
+			`{"iss": "xxx"}`,
+			"",
+		},
+		{
+			"ps256-alg-wrong", // constrained algorithm, and it's wrong
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s", "alg": "RS256"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-exp-ok", // token expires, and it's still valid
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImV4cCI6IDMwMDB9.hqDP3AzshNhUZMI02U3nLPrj93QFrgs-74XFrF1Vry2bplrz-NKpdVdfTu8iY_bhmkWf2Om5DdwRZj2ZgpGahtnshnHaRq0RyqF-m3Y7oNj6JL_YMwgxsFIIHtBlagBqDU-gZK99iqSOSGqVhvxqX6gCqFgE7vnEGHeeDedtRM53coAJuwzy8rQV9m3TewoofPdPasGv-dBLQZ3qgmnibkSgb7SmFpjXBy8zL3xJXOZhAHYlgcmcEoFVaWlBguIcWA87WZlpCLYcdYTJzSZweC3QLUhZ4RLJW84-LMKp6xWLLPrp3OgnsduB2G9PYMmYw_qCkuY1KGwfH4PvCQbAzQ",
+			fmt.Sprintf(`{"cert": "%s", "time": 2000000000000}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"iss": "xxx", "exp": 3000}`,
+			"",
+		},
+		{
+			"rs256-exp-expired", // token expires, and it's stale at a chosen time
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImV4cCI6IDMwMDB9.hqDP3AzshNhUZMI02U3nLPrj93QFrgs-74XFrF1Vry2bplrz-NKpdVdfTu8iY_bhmkWf2Om5DdwRZj2ZgpGahtnshnHaRq0RyqF-m3Y7oNj6JL_YMwgxsFIIHtBlagBqDU-gZK99iqSOSGqVhvxqX6gCqFgE7vnEGHeeDedtRM53coAJuwzy8rQV9m3TewoofPdPasGv-dBLQZ3qgmnibkSgb7SmFpjXBy8zL3xJXOZhAHYlgcmcEoFVaWlBguIcWA87WZlpCLYcdYTJzSZweC3QLUhZ4RLJW84-LMKp6xWLLPrp3OgnsduB2G9PYMmYw_qCkuY1KGwfH4PvCQbAzQ",
+			fmt.Sprintf(`{"cert": "%s", "time": 4000000000000}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-exp-now-expired", // token expires, and it's stale at the current implicitly specified real time
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImV4cCI6IDMwMDB9.hqDP3AzshNhUZMI02U3nLPrj93QFrgs-74XFrF1Vry2bplrz-NKpdVdfTu8iY_bhmkWf2Om5DdwRZj2ZgpGahtnshnHaRq0RyqF-m3Y7oNj6JL_YMwgxsFIIHtBlagBqDU-gZK99iqSOSGqVhvxqX6gCqFgE7vnEGHeeDedtRM53coAJuwzy8rQV9m3TewoofPdPasGv-dBLQZ3qgmnibkSgb7SmFpjXBy8zL3xJXOZhAHYlgcmcEoFVaWlBguIcWA87WZlpCLYcdYTJzSZweC3QLUhZ4RLJW84-LMKp6xWLLPrp3OgnsduB2G9PYMmYw_qCkuY1KGwfH4PvCQbAzQ",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-exp-now-explicit-expired", // token expires, and it's stale at the current explicitly specified real time
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImV4cCI6IDMwMDB9.hqDP3AzshNhUZMI02U3nLPrj93QFrgs-74XFrF1Vry2bplrz-NKpdVdfTu8iY_bhmkWf2Om5DdwRZj2ZgpGahtnshnHaRq0RyqF-m3Y7oNj6JL_YMwgxsFIIHtBlagBqDU-gZK99iqSOSGqVhvxqX6gCqFgE7vnEGHeeDedtRM53coAJuwzy8rQV9m3TewoofPdPasGv-dBLQZ3qgmnibkSgb7SmFpjXBy8zL3xJXOZhAHYlgcmcEoFVaWlBguIcWA87WZlpCLYcdYTJzSZweC3QLUhZ4RLJW84-LMKp6xWLLPrp3OgnsduB2G9PYMmYw_qCkuY1KGwfH4PvCQbAzQ",
+			fmt.Sprintf(`{"cert": "%s", "time": now}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-nbf-ok", // token has a commencement time, and it's commenced at a chosen time
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJuYmYiOiAxMDAwLCAiaXNzIjogInh4eCJ9.cwwYDfJhU_ambPIpwBJwDek05miffoudprr41IAYsl0IKekb1ii2uEgwkNM-LJtVXHe9hsK3gANFyfqoJuCZIBvaNMx_3Z0BUdeBs4k1UwBiZCpuud0ofgHKURwvehNgqDvRfchq_-K_Agi2iRdl0oShgLjN-gVbBl8pRwUbQrvASlcsCpZIKUyOzXNtaIZEFh1z6ISDy8UHHOdoieKpN23swya7QAcEb0wXEEKMkkhiRd5QHgWLk37Lnw2K89mKcq4Om0CtV9nHrxxmpYGSMPojCy16Gjdg5-xKyJWvxCfb3YUBUVM4RWa7ICOPRJWPuHxu9pPYG63hb_qDU6NLsw",
+			fmt.Sprintf(`{"cert": "%s", "time": 2000000000000}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"iss": "xxx", "nbf": 1000}`,
+			"",
+		},
+		{
+			"rs256-nbf-now-ok", // token has a commencement time, and it's commenced at the current implicitly specified time
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJuYmYiOiAxMDAwLCAiaXNzIjogInh4eCJ9.cwwYDfJhU_ambPIpwBJwDek05miffoudprr41IAYsl0IKekb1ii2uEgwkNM-LJtVXHe9hsK3gANFyfqoJuCZIBvaNMx_3Z0BUdeBs4k1UwBiZCpuud0ofgHKURwvehNgqDvRfchq_-K_Agi2iRdl0oShgLjN-gVbBl8pRwUbQrvASlcsCpZIKUyOzXNtaIZEFh1z6ISDy8UHHOdoieKpN23swya7QAcEb0wXEEKMkkhiRd5QHgWLk37Lnw2K89mKcq4Om0CtV9nHrxxmpYGSMPojCy16Gjdg5-xKyJWvxCfb3YUBUVM4RWa7ICOPRJWPuHxu9pPYG63hb_qDU6NLsw",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"iss": "xxx", "nbf": 1000}`,
+			"",
+		},
+		{
+			"rs256-nbf-toosoon", // token has a commencement time, and the chosen time is too early
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJuYmYiOiAxMDAwLCAiaXNzIjogInh4eCJ9.cwwYDfJhU_ambPIpwBJwDek05miffoudprr41IAYsl0IKekb1ii2uEgwkNM-LJtVXHe9hsK3gANFyfqoJuCZIBvaNMx_3Z0BUdeBs4k1UwBiZCpuud0ofgHKURwvehNgqDvRfchq_-K_Agi2iRdl0oShgLjN-gVbBl8pRwUbQrvASlcsCpZIKUyOzXNtaIZEFh1z6ISDy8UHHOdoieKpN23swya7QAcEb0wXEEKMkkhiRd5QHgWLk37Lnw2K89mKcq4Om0CtV9nHrxxmpYGSMPojCy16Gjdg5-xKyJWvxCfb3YUBUVM4RWa7ICOPRJWPuHxu9pPYG63hb_qDU6NLsw",
+			fmt.Sprintf(`{"cert": "%s", "time": 500000000000}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-alg-missing", // alg is missing from the JOSE header
+			"eyJ0eXAiOiAiSldUIiwgImtpZCI6ICJrMSJ9.eyJpc3MiOiAieHh4IiwgInN1YiI6ICJmcmVkIn0.J4J4FgUD_P5fviVVjgvQWJDg-5XYTP_tHCwB3kSlYVKv8vmnZRNh4ke68OxfMP96iM-LZswG2fNqe-_piGIMepF5rCe1iIWAuz3qqkxfS9YVF3hvwoXhjJT0yIgrDMl1lfW5_XipNshZoxddWK3B7dnVW74MFazEEFuefiQm3PdMUX8jWGsmfgPnqBIZTizErNhoIMuRvYaVM1wA2nfrpVGONxMTaw8T0NRwYIuZwubbnNQ1yLhI0y3dsZvQ_lrh9Khtk9fS1V3SRh7aa9AvferJ4T-48qn_V1m3sINPgoA-uLGyyu3k_GkXRYW1yGNC-MH4T2cwhj89WITbIhusgQ",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-crit-junk", // the JOSE header contains an unrecognized critical parameter
+			"eyJjcml0IjogWyJqdW5rIl0sICJraWQiOiAiazEiLCAiYWxnIjogIlJTMjU2IiwgInR5cCI6ICJKV1QiLCAianVuayI6ICJ4eHgifQ.eyJpc3MiOiAieHh4IiwgInN1YiI6ICJmcmVkIn0.YfoUpW5CgDBtxtBuOix3cdYJGT8cX9Mq7wOhIbjDK7eRQUsAmMY_0EQPh7bd7Yi1gLI3e11BKzguf2EHqAa1kbkHWwFniBO-RIi8q42v2uxC4lpEpIjfaaXB5XmsLfAXtYRqh0AObvbSho6VDXBP_Kn81nhIiE2yFbH14_jhRMSxDBs5ToSkXV-XJHw5bONP8NxPqEk9KF3ZJGzN7J_KoD6LjqfYai5K0eLNEIZh4C1WjTdmCKMR4K6ieZRQWZiSsnhSqLSQERir4n22G3QsdY7dOnCp-SS4VYu3V-PfsOSFMvQ-TTAN1geqMZ9A7k1CCLW0wxKBs-KCiYzmRTzwxA",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rsa256-nested", // one nesting level
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCIsICJjdHkiOiAiSldUIn0.ZXlKaGJHY2lPaUFpVWxNeU5UWWlMQ0FpZEhsd0lqb2dJa3BYVkNKOS5leUpwYzNNaU9pQWllSGg0SW4wLnJSUnJlUU9DYW9ZLW1Nazcyak5GZVk1YVlFUWhJZ0lFdFZkUTlYblltUUwyTHdfaDdNbkk0U0VPMVBwa0JIVEpyZnljbEplTHpfalJ2UGdJMlcxaDFCNGNaVDhDZ21pVXdxQXI5c0puZHlVQ1FtSWRrbm53WkI5cXAtX3BTdGRHWEo5WnAzeEo4NXotVEJpWlN0QUNUZFdlUklGSUU3VkxPa20tRmxZdzh5OTdnaUN4TmxUdWl3amxlTjMwZDhnWHUxNkZGQzJTSlhtRjZKbXYtNjJHbERhLW1CWFZ0bGJVSTVlWVUwaTdueTNyQjBYUVQxRkt4ZUZ3OF85N09FdV9jY3VLcl82ZHlHZVFHdnQ5Y3JJeEFBMWFZbDdmbVBrNkVhcjllTTNKaGVYMi00Wkx0d1FOY1RDT01YV0dIck1DaG5MWVc4WEFrTHJEbl9yRmxUaVMtZw.Xicc2sWCZ_Nithucsw9XD7YOKrirUdEnH3MyiPM-Ck3vEU2RsTBsfU2JPhfjp3phc0VOgsAXCzwU5PwyNyUo1490q8YSym-liMyO2Lk-hjH5fAxoizg9yD4II_lK6Wz_Tnpc0bBGDLdbuUhvgvO7yqo-leBQlsfRXOvw4VSPSEy8QPtbURtbnLpWY2jGBKz7vGI_o4qDJ3PicG0kyEiWZNh3wjeeCYRCWvXN8qh7Uk5EA-8J5vX651GqV-7gmaX1n-8DXamhaCQcE-p1cjSj04-X-_bJlQtmb-TT3bSyUPxgHVncvxNUby8jkUTzfi5MMbmIzWWkxI5YtJTdtmCkPQ",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"iss": "xxx"}`,
+			"",
+		},
+		{
+			"rsa256-nested2", // two nesting levels
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCIsICJjdHkiOiAiSldUIn0.ZXlKaGJHY2lPaUFpVWxNeU5UWWlMQ0FpZEhsd0lqb2dJa3BYVkNJc0lDSmpkSGtpT2lBaVNsZFVJbjAuWlhsS2FHSkhZMmxQYVVGcFZXeE5lVTVVV1dsTVEwRnBaRWhzZDBscWIyZEphM0JZVmtOS09TNWxlVXB3WXpOTmFVOXBRV2xsU0dnMFNXNHdMbkpTVW5KbFVVOURZVzlaTFcxTmF6Y3lhazVHWlZrMVlWbEZVV2hKWjBsRmRGWmtVVGxZYmxsdFVVd3lUSGRmYURkTmJrazBVMFZQTVZCd2EwSklWRXB5Wm5samJFcGxUSHBmYWxKMlVHZEpNbGN4YURGQ05HTmFWRGhEWjIxcFZYZHhRWEk1YzBwdVpIbFZRMUZ0U1dScmJtNTNXa0k1Y1hBdFgzQlRkR1JIV0VvNVduQXplRW80TlhvdFZFSnBXbE4wUVVOVVpGZGxVa2xHU1VVM1ZreFBhMjB0Um14WmR6aDVPVGRuYVVONFRteFVkV2wzYW14bFRqTXdaRGhuV0hVeE5rWkdRekpUU2xodFJqWktiWFl0TmpKSGJFUmhMVzFDV0ZaMGJHSlZTVFZsV1ZVd2FUZHVlVE55UWpCWVVWUXhSa3Q0WlVaM09GODVOMDlGZFY5alkzVkxjbDgyWkhsSFpWRkhkblE1WTNKSmVFRkJNV0ZaYkRkbWJWQnJOa1ZoY2psbFRUTkthR1ZZTWkwMFdreDBkMUZPWTFSRFQwMVlWMGRJY2sxRGFHNU1XVmM0V0VGclRISkVibDl5Um14VWFWTXRady5YaWNjMnNXQ1pfTml0aHVjc3c5WEQ3WU9LcmlyVWRFbkgzTXlpUE0tQ2szdkVVMlJzVEJzZlUySlBoZmpwM3BoYzBWT2dzQVhDendVNVB3eU55VW8xNDkwcThZU3ltLWxpTXlPMkxrLWhqSDVmQXhvaXpnOXlENElJX2xLNld6X1RucGMwYkJHRExkYnVVaHZndk83eXFvLWxlQlFsc2ZSWE92dzRWU1BTRXk4UVB0YlVSdGJuTHBXWTJqR0JLejd2R0lfbzRxREozUGljRzBreUVpV1pOaDN3amVlQ1lSQ1d2WE44cWg3VWs1RUEtOEo1dlg2NTFHcVYtN2dtYVgxbi04RFhhbWhhQ1FjRS1wMWNqU2owNC1YLV9iSmxRdG1iLVRUM2JTeVVQeGdIVm5jdnhOVWJ5OGprVVR6Zmk1TU1ibUl6V1dreEk1WXRKVGR0bUNrUFE.ODBVH_gooCLJxtPVr1MjJC1syG4MnVUFP9LkI9pSaj0QABV4vpfqrBshHn8zOPgUTDeHwbc01Qy96cQlTMQQb94YANmZyL1nzwmdR4piiGXMGSlcCNfDg1o8DK4msMSR-X-j2IkxBDB8rfeFSfLRMgDCjAF0JolW7qWmMD9tBmFNYAjly4vMwToOXosDmFLl5eqyohXDf-3Ohljm5kIjtyMWkt5S9EVuwlIXh2owK5l59c4-TH29gkuaZ3uU4LFPjD7XKUrlOQnEMuu2QD8LAqTyxbnY4JyzUWEvyTM1dVmGnFpLKCg9QBly__y1u2ffhvDsHyuCmEKAbhPE98YvFA",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"iss": "xxx"}`,
+			"",
+		},
+		{
+			"es256-unconstrained", // ECC key, no constraints
+			"eyJhbGciOiAiRVMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.JvbTLBF06FR70gb7lCbx_ojhp4bk9--B_aULgNlYM0fYf9OSawaqBQp2lwW6FADFtRJ2WFUk5g0zwVOUlnrlzw",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemEs256),
+			true,
+			`{"alg": "ES256", "typ": "JWT"}`,
+			`{"iss": "xxx"}`,
+			"",
+		},
+		{
+			"hs256-unconstrained", // HMAC key, no constraints
+			`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWxpY2UiLCJhenAiOiJhbGljZSIsInN1Ym9yZGluYXRlcyI6W10sImhyIjpmYWxzZX0.rz3jTY033z-NrKfwrK89_dcLF7TN4gwCMj-fVBDyLoM`,
+			`{"secret": "secret"}`,
+			true,
+			`{"alg": "HS256", "typ": "JWT"}`,
+			`{"user": "alice", "azp": "alice", "subordinates": [], "hr": false}`,
+			"",
+		},
+		{
+			"hs256-key-wrong", // HMAC with wrong key
+			`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWxpY2UiLCJhenAiOiJhbGljZSIsInN1Ym9yZGluYXRlcyI6W10sImhyIjpmYWxzZX0.rz3jTY033z-NrKfwrK89_dcLF7TN4gwCMj-fVBDyLoM`,
+			`{"secret": "the wrong key"}`,
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-aud", // constraint requires an audience, found right one in JWT
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImF1ZCI6ICJmcmVkIn0.F-9m2Tx8r1tuQFirazsI4FK05bXX3uP4ut8M2FryJ07k3bQhy262fdwNDmuFcGx0NfL-c80agcwGoTzMWXkVEgZ2KTz0QSAdcdGk3ZWtUy-Mj2IilZ1dzkVvW8LsithYFTGcUtkelFDrJwtMQ0Kum7SXJpC_HCBk4PbftY0XD6jRgHLnQdeT9_J11L4sd19vCdpxxxm3_m_yvUV3ZynzB4vhQbS3CET4EClAVhi-m_gMh9mj85gY1ycIz6-FxWv8xM2Igm2SMeIdyJwAvEGnIauRS928P_OqVCZgCH2Pafnxtzy77Llpxy8XS0xu5PtPw3_azhg33GaXDCFsfz6GpA",
+			fmt.Sprintf(`{"cert": "%s", "aud": "fred"}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"aud": "fred", "iss": "xxx"}`,
+			"",
+		},
+		{
+			"rs256-aud-list", // constraint requires an audience, found list including right one in JWT
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImF1ZCI6IFsiZnJlZCIsICJib2IiXX0.k8jW7PUiMkQCKCjnSFBFFKPDO0RXwZgVkLUwUfi8sMdrrcKi12LC8wd5fLBn0YraFtMXWKdMweKf9ZC-K33h5TK7kkTVKOXctF50mleMlUn0Up_XjtdP1v-2WOfivUXcexN1o-hu0kH7sSQnielXIjC2EAleG6A54YUOZFBdzvd1PKHlsxA7x2iiL73uGeFlyxoaMki8E5tx7FY6JGF1RdhWCoIV5A5J8QnwI5EetduJQ505U65Pk7UApWYWu4l2DT7KCCJa5dJaBvCBemVxWaBhCQWtJKU2ZgOEkpiK7b_HsdeRBmpG9Oi1o5mt5ybC09VxSD-lEda_iJO_7i042A",
+			fmt.Sprintf(`{"cert": "%s", "aud": "bob"}`, certPemPs),
+			true,
+			`{"alg": "RS256", "typ": "JWT"}`,
+			`{"aud": ["fred", "bob"], "iss": "xxx"}`,
+			"",
+		},
+		{
+			"ps256-no-aud", // constraint requires an audience, none in JWT
+			"eyJhbGciOiAiUFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4In0.iCePYnD1U13oBe_6ylhmojmkY_VZNYXqVszAej8RImMGv51OEqARmYFkRZYTiYCiVFober7vcDq_stOj1uAJCuttygGW_dpHiN-3EWsU2E2vCnXlygWe0ud38pOC-OVyEFbXxO9-m51vnS-3VmBjEO8G1UE8bLFXTeFOGkUIj9dqlefJSWh5wa8XA3g9mj0jqpuJi-7QgEIeVHk-JzhGpoFqI2f-Df_agVvc2x4V-6fJmj7wV2IsaFPRi36mVQmg8S-dkxu4AlaeCILhyNZl8ewjBHHBjJFRwzcy88L00mzdO51ZxEYsBdQav3ux2sc6vjT9PvvjAwzcthQxEoEaNA",
+			fmt.Sprintf(`{"cert": "%s", "aud": "cath"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-missing-aud", // constraint requires no audience, found one in JWT
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImF1ZCI6ICJmcmVkIn0.F-9m2Tx8r1tuQFirazsI4FK05bXX3uP4ut8M2FryJ07k3bQhy262fdwNDmuFcGx0NfL-c80agcwGoTzMWXkVEgZ2KTz0QSAdcdGk3ZWtUy-Mj2IilZ1dzkVvW8LsithYFTGcUtkelFDrJwtMQ0Kum7SXJpC_HCBk4PbftY0XD6jRgHLnQdeT9_J11L4sd19vCdpxxxm3_m_yvUV3ZynzB4vhQbS3CET4EClAVhi-m_gMh9mj85gY1ycIz6-FxWv8xM2Igm2SMeIdyJwAvEGnIauRS928P_OqVCZgCH2Pafnxtzy77Llpxy8XS0xu5PtPw3_azhg33GaXDCFsfz6GpA",
+			fmt.Sprintf(`{"cert": "%s"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-wrong-aud", // constraint requires an audience, found wrong one in JWT
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImF1ZCI6ICJmcmVkIn0.F-9m2Tx8r1tuQFirazsI4FK05bXX3uP4ut8M2FryJ07k3bQhy262fdwNDmuFcGx0NfL-c80agcwGoTzMWXkVEgZ2KTz0QSAdcdGk3ZWtUy-Mj2IilZ1dzkVvW8LsithYFTGcUtkelFDrJwtMQ0Kum7SXJpC_HCBk4PbftY0XD6jRgHLnQdeT9_J11L4sd19vCdpxxxm3_m_yvUV3ZynzB4vhQbS3CET4EClAVhi-m_gMh9mj85gY1ycIz6-FxWv8xM2Igm2SMeIdyJwAvEGnIauRS928P_OqVCZgCH2Pafnxtzy77Llpxy8XS0xu5PtPw3_azhg33GaXDCFsfz6GpA",
+			fmt.Sprintf(`{"cert": "%s", "aud": "cath"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+		{
+			"rs256-wrong-aud-list", // constraint requires an audience, found list of wrong ones in JWT
+			"eyJhbGciOiAiUlMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAieHh4IiwgImF1ZCI6IFsiZnJlZCIsICJib2IiXX0.k8jW7PUiMkQCKCjnSFBFFKPDO0RXwZgVkLUwUfi8sMdrrcKi12LC8wd5fLBn0YraFtMXWKdMweKf9ZC-K33h5TK7kkTVKOXctF50mleMlUn0Up_XjtdP1v-2WOfivUXcexN1o-hu0kH7sSQnielXIjC2EAleG6A54YUOZFBdzvd1PKHlsxA7x2iiL73uGeFlyxoaMki8E5tx7FY6JGF1RdhWCoIV5A5J8QnwI5EetduJQ505U65Pk7UApWYWu4l2DT7KCCJa5dJaBvCBemVxWaBhCQWtJKU2ZgOEkpiK7b_HsdeRBmpG9Oi1o5mt5ybC09VxSD-lEda_iJO_7i042A",
+			fmt.Sprintf(`{"cert": "%s", "aud": "cath"}`, certPemPs),
+			false,
+			`{}`,
+			`{}`,
+			"",
+		},
+	}
+
+	type test struct {
+		note     string
+		rules    []string
+		expected interface{}
+	}
+	tests := []test{}
+
+	for _, p := range params {
+		var exp interface{}
+		exp = fmt.Sprintf(`[%#v, %s, %s]`, p.valid, p.header, p.payload)
+		if p.err != "" {
+			exp = errors.New(p.err)
+		}
+
+		tests = append(tests, test{
+			p.note,
+			[]string{fmt.Sprintf(`p = [x, y, z] { time.now_ns(now); io.jwt.decode_verify("%s", %s, [x, y, z]) }`, p.token, p.constraints)},
 			exp,
 		})
 	}
@@ -2305,6 +2588,35 @@ loopback = input { true }
 composite[x] { input.foo[_] = x; x > 2 }
 vars = {"foo": input.foo, "bar": input.bar} { true }
 input_eq { input.x = 1 }
+allow_basic = true {data.a = "testdata"}
+allow_merge_1 = true {data.b = {"v1": "hello", "v2": "world"}}
+allow_merge_2 = true {data.b = {"v1": "hello", "v2": "world", "v3": "again"}}
+virtual[x] { data.a.b[x] = 1 }
+mock_var = {"a": 0, "b": 0}
+mock_rule = false {1 = 2}
+
+allow1 {
+	data.label.b.c = [1,2,3]
+}
+
+allow2 {
+	data.label.b.c[x] = 2
+}
+
+allow3 {
+	data.label.b[x] = 1
+}
+
+allow4 {
+	data.label.b.c.d[x] = 1
+}
+
+allow {
+	allow1
+	allow2
+	not allow3
+	not allow4
+}
 `,
 
 		`package test
@@ -2317,6 +2629,22 @@ composite[x] { ex.composite[x] with input.foo as [1, 2, 3, 4] }
 vars = x { foo = "hello"; bar = "world"; x = ex.vars with input.foo as foo with input.bar as bar }
 conflict = true { ex.loopback with input.foo as "x" with input.foo.bar as "y" }
 negation_invalidate[x] { data.a[_] = x; not data.ex.input_eq with input.x as x }
+basic_data = true {ex.allow_basic = true with data.a as "testdata"}
+map_data_1 = true {ex.allow_merge_1 = true with data.b.v2 as "world"}
+map_data_2 = true {ex.allow_merge_2 = true with data.b.v2 as "world" with data.b.v3 as "again"}
+data_conflict = true {ex.allow_basic = true with data.a.b as 5}
+base_doc_exact_value[x] { data.a.b[x] = 1 with data.a.b as {"c": 1, "d": 2, "e": 1} }
+base_doc_any_index[x] { data.a.b[x] with data.a.b as {"c": 1, "d": 2, "e": 1} }
+undefined_1 { data.a.b.c with data.a.b as 1 }
+undefined_2 { data.l.a with data.l as 1 }
+virtual_doc_exact_value[x] { ex.virtual = x with data.a.b as {"c": 1, "d": 2, "e": 1} }
+virtual_doc_any_index[x] { ex.virtual[x] with data.a.b as {"c": 1, "d": 2, "e": 1} }
+virtual_doc_specific_index = y { y = ex.virtual["c"] with data.a.b as {"c": 1, "d": 2, "e": 1} }
+virtual_doc_not_specific_index = true { not ex.virtual["d"] with data.a.b as {"c": 1, "d": 2, "e": 1} }
+test_mock_var = y {y = ex.mock_var with ex.mock_var as {"c": 1, "d": 2}}
+test_mock_rule {ex.mock_rule with ex.mock_rule as true}
+test_rule_chain {ex.allow with data.label.b.c as [1,2,3]}
+only_with_data_no_with_input { ex.input_eq with data.foo as 1 }
 `,
 	})
 
@@ -2328,6 +2656,23 @@ negation_invalidate[x] { data.a[_] = x; not data.ex.input_eq with input.x as x }
 	assertTopDownWithPath(t, compiler, store, "with vars", []string{"test", "vars"}, "", `{"foo": "hello", "bar": "world"}`)
 	assertTopDownWithPath(t, compiler, store, "with conflict", []string{"test", "conflict"}, "", fmt.Errorf("conflicting input documents"))
 	assertTopDownWithPath(t, compiler, store, "With invalidate", []string{"test", "negation_invalidate"}, "", "[2,3,4]")
+	assertTopDownWithPath(t, compiler, store, "with basic data", []string{"test", "basic_data"}, "", "true")
+	assertTopDownWithPath(t, compiler, store, "with map data overwrite", []string{"test", "map_data_1"}, "", "true")
+	assertTopDownWithPath(t, compiler, store, "with map data new key", []string{"test", "map_data_2"}, "", "true")
+	assertTopDownWithPath(t, compiler, store, "with data conflict", []string{"test", "data_conflict"}, "", fmt.Errorf("eval_with_merge_error"))
+	assertTopDownWithPath(t, compiler, store, "with base doc exact value", []string{"test", "base_doc_exact_value"}, "", `["c", "e"]`)
+	assertTopDownWithPath(t, compiler, store, "with base doc any index", []string{"test", "base_doc_any_index"}, "", `["c", "d", "e"]`)
+	assertTopDownWithPath(t, compiler, store, "undefined_1", []string{"test", "undefined_1"}, "", "")
+	assertTopDownWithPath(t, compiler, store, "undefined_2", []string{"test", "undefined_2"}, "", "")
+	assertTopDownWithPath(t, compiler, store, "with virtual doc exact value", []string{"test", "virtual_doc_exact_value"}, "", `[["c", "e"]]`)
+	assertTopDownWithPath(t, compiler, store, "with virtual doc any index", []string{"test", "virtual_doc_any_index"}, "", `["c", "e"]`)
+	assertTopDownWithPath(t, compiler, store, "with virtual doc specific index", []string{"test", "virtual_doc_specific_index"}, "", `"c"`)
+	assertTopDownWithPath(t, compiler, store, "with virtual doc not specific index", []string{"test", "virtual_doc_not_specific_index"}, "", "true")
+	assertTopDownWithPath(t, compiler, store, "with mock var", []string{"test", "test_mock_var"}, "", `{"c": 1, "d": 2}`)
+	assertTopDownWithPath(t, compiler, store, "with mock rule", []string{"test", "test_mock_rule"}, "", "true")
+	assertTopDownWithPath(t, compiler, store, "with rule chain", []string{"test", "test_rule_chain"}, "", "true")
+	assertTopDownWithPath(t, compiler, store, "bug 1083", []string{"test", "only_with_data_no_with_input"}, "", "")
+
 }
 
 func TestTopDownElseKeyword(t *testing.T) {

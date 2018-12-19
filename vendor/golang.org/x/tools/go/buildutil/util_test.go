@@ -15,10 +15,6 @@ import (
 )
 
 func TestContainingPackage(t *testing.T) {
-	if runtime.Compiler == "gccgo" {
-		t.Skip("gccgo has no GOROOT")
-	}
-
 	// unvirtualized:
 	goroot := runtime.GOROOT()
 	gopath := gopathContainingTools(t)

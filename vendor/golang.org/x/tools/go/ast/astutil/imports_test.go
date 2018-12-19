@@ -367,7 +367,6 @@ type T time.Time
 type T time.Time
 `,
 		out: `package main // comment
-
 import "time"
 
 type T time.Time
@@ -400,7 +399,6 @@ type T time.Time
 `,
 		out: `// comment before
 package main // comment on
-
 import "time"
 
 type T time.Time

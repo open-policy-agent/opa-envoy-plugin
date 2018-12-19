@@ -9,30 +9,27 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"github.com/sirupsen/logrus"
-	"gopkg.in/fsnotify.v1"
 	"io"
 	"io/ioutil"
 	"os"
+	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/internal/runtime"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/plugins/bundle"
+	"github.com/open-policy-agent/opa/plugins/discovery"
 	"github.com/open-policy-agent/opa/plugins/logs"
-	"github.com/open-policy-agent/opa/plugins/status"
 	"github.com/open-policy-agent/opa/repl"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
-	"github.com/open-policy-agent/opa/util"
 	"github.com/open-policy-agent/opa/version"
-	"sync"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	fsnotify "gopkg.in/fsnotify.v1"
 )
 
 var (
@@ -135,7 +132,9 @@ type Runtime struct {
 	Store   storage.Store
 	Manager *plugins.Manager
 
-	decisionLogger func(context.Context, *server.Info)
+	// TODO(tsandall): remove this field since it's available on the manager
+	// and doesn't have to duplicated here or on the server.
+	info *ast.Term // runtime information provided to evaluation engine
 }
 
 // NewRuntime returns a new Runtime object initialized with params.
@@ -175,26 +174,37 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, errors.Wrapf(err, "storage error")
 	}
 
-	m, plugins, err := initPlugins(params.ID, store, params.ConfigFile)
+	var bs []byte
+
+	if params.ConfigFile != "" {
+		bs, err = ioutil.ReadFile(params.ConfigFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "config error")
+		}
+	}
+
+	info, err := runtime.Term(runtime.Params{Config: bs})
 	if err != nil {
 		return nil, err
 	}
 
-	var decisionLogger func(context.Context, *server.Info)
-
-	if p, ok := plugins["decision_logs"]; ok {
-		decisionLogger = p.(*logs.Plugin).Log
-
-		if params.DecisionIDFactory == nil {
-			params.DecisionIDFactory = generateDecisionID
-		}
+	manager, err := plugins.New(bs, params.ID, store, plugins.Info(info))
+	if err != nil {
+		return nil, errors.Wrapf(err, "config error")
 	}
 
+	disco, err := discovery.New(manager, discovery.CustomPlugins(registeredPlugins))
+	if err != nil {
+		return nil, errors.Wrapf(err, "config error")
+	}
+
+	manager.Register("discovery", disco)
+
 	rt := &Runtime{
-		Store:          store,
-		Manager:        m,
-		Params:         params,
-		decisionLogger: decisionLogger,
+		Store:   store,
+		Params:  params,
+		Manager: manager,
+		info:    info,
 	}
 
 	return rt, nil
@@ -211,8 +221,9 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 	}).Infof("First line of log stream.")
 
 	if err := rt.Manager.Start(ctx); err != nil {
-		logrus.WithField("err", err).Fatalf("Unable to initialize plugins.")
+		logrus.WithField("err", err).Fatalf("Failed to start plugins.")
 	}
+
 	defer rt.Manager.Stop(ctx)
 
 	s, err := server.New().
@@ -225,8 +236,9 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 		WithAuthentication(rt.Params.Authentication).
 		WithAuthorization(rt.Params.Authorization).
 		WithDiagnosticsBuffer(rt.Params.DiagnosticsBuffer).
-		WithDecisionIDFactory(rt.Params.DecisionIDFactory).
+		WithDecisionIDFactory(rt.decisionIDFactory).
 		WithDecisionLogger(rt.decisionLogger).
+		WithRuntime(rt.info).
 		Init(ctx)
 
 	if err != nil {
@@ -267,10 +279,11 @@ func (rt *Runtime) StartREPL(ctx context.Context) {
 		fmt.Fprintln(rt.Params.Output, "error starting plugins:", err)
 		os.Exit(1)
 	}
+
 	defer rt.Manager.Stop(ctx)
 
 	banner := rt.getBanner()
-	repl := repl.New(rt.Store, rt.Params.HistoryPath, rt.Params.Output, rt.Params.OutputFormat, rt.Params.ErrorLimit, banner)
+	repl := repl.New(rt.Store, rt.Params.HistoryPath, rt.Params.Output, rt.Params.OutputFormat, rt.Params.ErrorLimit, banner).WithRuntime(rt.info)
 
 	if rt.Params.Watch {
 		if err := rt.startWatcher(ctx, rt.Params.Paths, onReloadPrinter(rt.Params.Output)); err != nil {
@@ -280,6 +293,24 @@ func (rt *Runtime) StartREPL(ctx context.Context) {
 	}
 
 	repl.Loop(ctx)
+}
+
+func (rt *Runtime) decisionIDFactory() string {
+	if rt.Params.DecisionIDFactory != nil {
+		return rt.Params.DecisionIDFactory()
+	}
+	if logs.Lookup(rt.Manager) != nil {
+		return generateDecisionID()
+	}
+	return ""
+}
+
+func (rt *Runtime) decisionLogger(ctx context.Context, event *server.Info) {
+	plugin := logs.Lookup(rt.Manager)
+	if plugin == nil {
+		return
+	}
+	plugin.Log(ctx, event)
 }
 
 func (rt *Runtime) startWatcher(ctx context.Context, paths []string, onReload func(time.Duration, error)) error {
@@ -387,7 +418,16 @@ func compileAndStoreInputs(ctx context.Context, store storage.Store, txn storage
 		}
 	}
 
+	warnDiagnosticPolicyDeprecated(c)
+
 	return nil
+}
+
+func warnDiagnosticPolicyDeprecated(c *ast.Compiler) {
+	rules := c.GetRules(ast.MustParseRef("data.system.diagnostics"))
+	if len(rules) > 0 {
+		logrus.Warn("The diagnostics feature has been deprecated and will be removed. Use the Decision Logging feature. See https://www.openpolicyagent.org/docs/decision_logs.html for information.")
+	}
 }
 
 func getWatcher(rootPaths []string) (*fsnotify.Watcher, error) {
@@ -468,162 +508,6 @@ func setupLogging(config LoggingConfig) {
 	logrus.SetLevel(lvl)
 }
 
-// TODO(tsandall): revisit how plugins are wired up to the manager and how
-// everything is started and stopped. We could introduce a package-scoped
-// plugin registry that allows for (dynamic) init-time plugin registration.
-
-func initPlugins(id string, store storage.Store, configFile string) (*plugins.Manager, map[string]plugins.Plugin, error) {
-
-	var bs []byte
-	var err error
-
-	if configFile != "" {
-		bs, err = ioutil.ReadFile(configFile)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	m, err := plugins.New(bs, id, store)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	plugins := map[string]plugins.Plugin{}
-
-	bundlePlugin, err := initBundlePlugin(m, bs)
-	if err != nil {
-		return nil, nil, err
-	} else if bundlePlugin != nil {
-		plugins["bundle"] = bundlePlugin
-	}
-
-	if bundlePlugin != nil {
-		statusPlugin, err := initStatusPlugin(m, bs, bundlePlugin)
-		if err != nil {
-			return nil, nil, err
-		} else if statusPlugin != nil {
-			plugins["status"] = statusPlugin
-		}
-	}
-
-	decisionLogsPlugin, err := initDecisionLogsPlugin(m, bs)
-	if err != nil {
-		return nil, nil, err
-	} else if decisionLogsPlugin != nil {
-		plugins["decision_logs"] = decisionLogsPlugin
-	}
-
-	err = initRegisteredPlugins(m, bs)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return m, plugins, nil
-}
-
-func initBundlePlugin(m *plugins.Manager, bs []byte) (*bundle.Plugin, error) {
-
-	var config struct {
-		Bundle json.RawMessage `json:"bundle"`
-	}
-
-	if err := util.Unmarshal(bs, &config); err != nil {
-		return nil, err
-	}
-
-	if config.Bundle == nil {
-		return nil, nil
-	}
-
-	p, err := bundle.New(config.Bundle, m)
-	if err != nil {
-		return nil, err
-	}
-
-	m.Register(p)
-
-	return p, nil
-}
-
-func initDecisionLogsPlugin(m *plugins.Manager, bs []byte) (*logs.Plugin, error) {
-
-	var config struct {
-		DecisionLogs json.RawMessage `json:"decision_logs"`
-	}
-
-	if err := util.Unmarshal(bs, &config); err != nil {
-		return nil, err
-	}
-
-	if config.DecisionLogs == nil {
-		return nil, nil
-	}
-
-	p, err := logs.New(config.DecisionLogs, m)
-	if err != nil {
-		return nil, err
-	}
-
-	m.Register(p)
-
-	return p, nil
-}
-
-func initRegisteredPlugins(m *plugins.Manager, bs []byte) error {
-
-	var config struct {
-		Plugins map[string]json.RawMessage `json:"plugins"`
-	}
-
-	if err := util.Unmarshal(bs, &config); err != nil {
-		return err
-	}
-
-	for name, factory := range registeredPlugins {
-		pc, ok := config.Plugins[name]
-		if !ok {
-			continue
-		}
-		plugin, err := factory(m, pc)
-		if err != nil {
-			return err
-		}
-		m.Register(plugin)
-	}
-
-	return nil
-
-}
-
-func initStatusPlugin(m *plugins.Manager, bs []byte, bundlePlugin *bundle.Plugin) (*status.Plugin, error) {
-
-	var config struct {
-		Status json.RawMessage `json:"status"`
-	}
-
-	if err := util.Unmarshal(bs, &config); err != nil {
-		return nil, err
-	}
-
-	if config.Status == nil {
-		return nil, nil
-	}
-
-	p, err := status.New(config.Status, m)
-	if err != nil {
-		return nil, err
-	}
-
-	m.Register(p)
-
-	bundlePlugin.Register(bundlePluginListener("status-plugin"), func(s bundle.Status) {
-		p.Update(s)
-	})
-
-	return p, nil
-}
-
 func generateInstanceID() (string, error) {
 	return uuid4()
 }
@@ -646,8 +530,6 @@ func uuid4() (string, error) {
 	bs[6] = bs[6]&^0xf0 | 0x40
 	return fmt.Sprintf("%x-%x-%x-%x-%x", bs[0:4], bs[4:6], bs[6:8], bs[8:10], bs[10:]), nil
 }
-
-type bundlePluginListener string
 
 func init() {
 	registeredPlugins = make(map[string]plugins.PluginInitFunc)

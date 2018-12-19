@@ -2,12 +2,15 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := 0.9.2
+VERSION := 0.10.2
 
 GO := go
 GOVERSION := 1.10
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
+
+DOCKER_INSTALLED := $(shell hash docker 2>/dev/null && echo 1 || echo 0)
+DOCKER := docker
 
 BIN := opa_$(GOOS)_$(GOARCH)
 
@@ -45,12 +48,24 @@ version:
 deps:
 	@./build/install-deps.sh
 
+.PHONY: wasm-build
+wasm-build:
+ifeq ($(DOCKER_INSTALLED), 1)
+	@$(MAKE) -C wasm build
+	cp wasm/_obj/opa.wasm internal/compiler/wasm/opa/opa.wasm
+else
+	@echo "Docker not installed. Skipping OPA-WASM library build."
+endif
+
 .PHONY: generate
-generate:
+generate: wasm-build
 	$(GO) generate
 
 .PHONY: build
-build: generate
+build: go-build
+
+.PHONY: go-build
+go-build: generate
 	$(GO) build -o $(BIN) -ldflags $(LDFLAGS)
 
 .PHONY: image
@@ -80,13 +95,44 @@ push-latest:
 	docker push $(IMAGE):latest
 	docker push $(IMAGE):latest-debug
 
+.PHONY: docker-login
+docker-login:
+	@docker login -u ${DOCKER_USER} -p ${DOCKER_PASSWORD}
+
+.PHONY: deploy-travis
+deploy-travis: docker-login image-quick push
+
+.PHONY: release-travis
+release-travis: deploy-travis tag-latest push-latest
+
 .PHONY: install
 install: generate
 	$(GO) install -ldflags $(LDFLAGS)
 
 .PHONY: test
-test: generate
+test: opa-wasm-test go-test wasm-test
+
+.PHONY: opa-wasm-test
+opa-wasm-test:
+ifeq ($(DOCKER_INSTALLED), 1)
+	@$(MAKE)  -C wasm test
+else
+	@echo "Docker not installed. Skipping OPA-WASM library test."
+endif
+
+.PHONY: go-test
+go-test: generate
 	$(GO) test ./...
+
+.PHONY: wasm-test
+wasm-test: generate
+ifeq ($(DOCKER_INSTALLED), 1)
+	@mkdir -p _test
+	@$(GO) run test/wasm/cmd/testgen.go --input-dir test/wasm/assets --output _test/testcases.tar.gz
+	@$(DOCKER) run -it --rm -e VERBOSE=$(VERBOSE) -v $(PWD):/src -w /src node:8 ./build/test-wasm.sh
+else
+	@echo "Docker not installed. Skipping WASM-based test execution."
+endif
 
 .PHONY: perf
 perf: generate
@@ -111,11 +157,16 @@ check-lint:
 fmt:
 	$(GO) fmt ./...
 
+.PHONY: wasm-clean
+wasm-clean:
+	@$(MAKE) -C wasm clean
+
 .PHONY: clean
-clean:
+clean: wasm-clean
 	rm -f .Dockerfile_*
 	rm -f opa_*_*
 	rm -fr site.tar.gz docs/_site docs/node_modules docs/book/_book docs/book/node_modules
+	rm -fr _test
 
 .PHONY: docs
 docs:
@@ -123,8 +174,12 @@ docs:
 		-v $(PWD):/go/src/github.com/open-policy-agent/opa \
 		-w /go/src/github.com/open-policy-agent/opa \
 		-p 4000:4000 \
+		-u $(shell id -u $(USER)):$(shell id -g $(USER)) \
+		-e GITBOOK_DIR=/go/src/github.com/open-policy-agent/opa/.gitbook \
+		-e npm_config_cache=/go/src/github.com/open-policy-agent/opa/.npm \
 		$(REPOSITORY)/release-builder:$(RELEASE_BUILDER_VERSION) \
 		./build/build-docs.sh --output-dir=/go/src/github.com/open-policy-agent/opa --serve=4000
+
 
 ######################################################
 #
@@ -161,6 +216,7 @@ release-local:
 .PHONY: release-patch
 release-patch:
 	@docker run -it --rm \
+		-e LAST_VERSION=$(LAST_VERSION) \
 		-v $(PWD):/_src \
 		python:2.7 \
 		/_src/build/gen-release-patch.sh --version=$(VERSION) --source-url=/_src

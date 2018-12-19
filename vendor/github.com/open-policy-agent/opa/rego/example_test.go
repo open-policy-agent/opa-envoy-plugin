@@ -9,11 +9,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/util"
 )
 
@@ -191,23 +193,10 @@ func ExampleRego_Eval_compiler() {
 		}
 	`
 
-	// Parse the module. The first argument is used as an identifier in error messages.
-	parsed, err := ast.ParseModule("example.rego", module)
-	if err != nil {
-		// Handle error.
-	}
-
-	// Create a new compiler and compile the module. The keys are used as
-	// identifiers in error messages.
-	compiler := ast.NewCompiler()
-	compiler.Compile(map[string]*ast.Module{
-		"example.rego": parsed,
+	// Compile the module. The keys are used as identifiers in error messages.
+	compiler, err := ast.CompileModules(map[string]string{
+		"example.rego": module,
 	})
-
-	if compiler.Failed() {
-		// Handle error. Compilation errors are stored on the compiler.
-		panic(compiler.Errors)
-	}
 
 	// Create a new query that uses the compiled policy from above.
 	rego := rego.New(
@@ -568,4 +557,31 @@ func ExampleRego_Partial() {
 	//
 	// Query #1: "GET" = input.method; input.path = ["reviews", _]; input.is_admin
 	// Query #2: "GET" = input.method; input.path = ["reviews", user3]; user3 = input.user
+}
+
+func ExampleRego_Eval_tracer() {
+
+	ctx := context.Background()
+
+	buf := topdown.NewBufferTracer()
+
+	// Create very simple query that binds a single variable, and enables tracing.
+	rego := rego.New(
+		rego.Query("x = 1"),
+		rego.Tracer(buf),
+	)
+
+	// Run evaluation.
+	rego.Eval(ctx)
+
+	// Inspect results.
+	topdown.PrettyTrace(os.Stdout, *buf)
+
+	// Output:
+	//
+	// Enter x = 1
+	// | Eval x = 1
+	// | Exit x = 1
+	// Redo x = 1
+	// | Redo x = 1
 }

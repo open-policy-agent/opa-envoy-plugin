@@ -10,9 +10,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/open-policy-agent/opa/internal/runtime"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/cover"
 	"github.com/open-policy-agent/opa/tester"
+	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +30,7 @@ var testParams = struct {
 	errLimit     int
 	outputFormat *util.EnumFlag
 	coverage     bool
+	threshold    float64
 	timeout      time.Duration
 	ignore       []string
 }{
@@ -109,16 +113,30 @@ func opaTest(args []string) int {
 		return 1
 	}
 
-	runner := tester.NewRunner().
-		SetCompiler(compiler).
-		SetStore(store)
+	info, err := runtime.Term(runtime.Params{})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 
-	var coverTracer *cover.Cover
+	if testParams.threshold > 0 && !testParams.coverage {
+		testParams.coverage = true
+	}
+
+	var cov *cover.Cover
+	var coverTracer topdown.Tracer
 
 	if testParams.coverage {
-		coverTracer = cover.New()
-		runner = runner.SetTracer(coverTracer)
+		cov = cover.New()
+		coverTracer = cov
 	}
+
+	runner := tester.NewRunner().
+		SetCompiler(compiler).
+		SetStore(store).
+		EnableTracing(testParams.verbose).
+		SetCoverageTracer(coverTracer).
+		SetRuntime(info)
 
 	ch, err := runner.Run(ctx, modules)
 	if err != nil {
@@ -142,9 +160,10 @@ func opaTest(args []string) int {
 		}
 	} else {
 		reporter = tester.JSONCoverageReporter{
-			Cover:   coverTracer,
-			Modules: modules,
-			Output:  os.Stdout,
+			Cover:     cov,
+			Modules:   modules,
+			Output:    os.Stdout,
+			Threshold: testParams.threshold,
 		}
 	}
 
@@ -163,6 +182,9 @@ func opaTest(args []string) int {
 
 	if err := reporter.Report(dup); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		if _, ok := err.(*cover.CoverageThresholdError); ok {
+			return 2
+		}
 		return 1
 	}
 
@@ -173,7 +195,8 @@ func init() {
 	testCommand.Flags().BoolVarP(&testParams.verbose, "verbose", "v", false, "set verbose reporting mode")
 	testCommand.Flags().DurationVarP(&testParams.timeout, "timeout", "t", time.Second*5, "set test timeout")
 	testCommand.Flags().VarP(testParams.outputFormat, "format", "f", "set output format")
-	testCommand.Flags().BoolVarP(&testParams.coverage, "coverage", "c", false, "report coverage")
+	testCommand.Flags().BoolVarP(&testParams.coverage, "coverage", "c", false, "report coverage (overrides debug tracing)")
+	testCommand.Flags().Float64VarP(&testParams.threshold, "threshold", "", 0, "set coverage threshold and exit with non-zero status if coverage is less than threshold %")
 	setMaxErrors(testCommand.Flags(), &testParams.errLimit)
 	setIgnore(testCommand.Flags(), &testParams.ignore)
 	RootCommand.AddCommand(testCommand)

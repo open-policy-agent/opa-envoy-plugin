@@ -603,28 +603,15 @@ type metaImport struct {
 // errNoMatch is returned from matchGoImport when there's no applicable match.
 var errNoMatch = errors.New("no import match")
 
-// pathPrefix reports whether sub is a prefix of s,
-// only considering entire path components.
-func pathPrefix(s, sub string) bool {
-	// strings.HasPrefix is necessary but not sufficient.
-	if !strings.HasPrefix(s, sub) {
-		return false
-	}
-	// The remainder after the prefix must either be empty or start with a slash.
-	rem := s[len(sub):]
-	return rem == "" || rem[0] == '/'
-}
-
 // matchGoImport returns the metaImport from imports matching importPath.
 // An error is returned if there are multiple matches.
 // errNoMatch is returned if none match.
 func matchGoImport(imports []metaImport, importPath string) (_ metaImport, err error) {
 	match := -1
 	for i, im := range imports {
-		if !pathPrefix(importPath, im.Prefix) {
+		if !strings.HasPrefix(importPath, im.Prefix) {
 			continue
 		}
-
 		if match != -1 {
 			err = fmt.Errorf("multiple meta tags match import path %q", importPath)
 			return
