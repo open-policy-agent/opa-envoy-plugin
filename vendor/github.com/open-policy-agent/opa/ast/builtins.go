@@ -27,7 +27,6 @@ func RegisterBuiltin(b *Builtin) {
 // by default. When adding a new built-in function to OPA, update this
 // list.
 var DefaultBuiltins = [...]*Builtin{
-
 	// Unification/equality ("=")
 	Equality,
 
@@ -81,6 +80,7 @@ var DefaultBuiltins = [...]*Builtin{
 	RegexSplit,
 	GlobsMatch,
 	RegexTemplateMatch,
+	RegexFind,
 
 	// Sets
 	SetDiff,
@@ -121,6 +121,7 @@ var DefaultBuiltins = [...]*Builtin{
 	JWTVerifyPS256,
 	JWTVerifyES256,
 	JWTVerifyHS256,
+	JWTDecodeVerify,
 
 	// Time
 	NowNanos,
@@ -156,11 +157,18 @@ var DefaultBuiltins = [...]*Builtin{
 	// Rego
 	RegoParseModule,
 
+	// OPA
+	OPARuntime,
+
 	// Tracing
 	Trace,
 
 	// CIDR
 	NetCIDROverlap,
+
+	// Glob
+	GlobMatch,
+	GlobQuoteMeta,
 }
 
 // BuiltinMap provides a convenient mapping of built-in names to
@@ -622,6 +630,20 @@ var RegexSplit = &Builtin{
 	),
 }
 
+// RegexFind takes two strings and a number, the pattern, the value and number of match values to
+// return, -1 means all match values.
+var RegexFind = &Builtin{
+	Name: "regex.find_n",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+			types.N,
+		),
+		types.NewArray(nil, types.S),
+	),
+}
+
 // GlobsMatch takes two strings regexp-style strings and evaluates to true if their
 // intersection matches a non-empty set of non-empty strings.
 // Examples:
@@ -976,6 +998,22 @@ var JWTVerifyHS256 = &Builtin{
 	),
 }
 
+// JWTDecodeVerify verifies a JWT signature under parameterized constraints and decodes the claims if it is valid.
+var JWTDecodeVerify = &Builtin{
+	Name: "io.jwt.decode_verify",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)),
+		),
+		types.NewArray([]types.Type{
+			types.B,
+			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+		}, nil),
+	),
+}
+
 /**
  * Time
  */
@@ -1232,6 +1270,20 @@ var RegoParseModule = &Builtin{
 }
 
 /**
+ * OPA
+ */
+
+// OPARuntime returns an object containing OPA runtime information such as the
+// configuration that OPA was booted with.
+var OPARuntime = &Builtin{
+	Name: "opa.runtime",
+	Decl: types.NewFunction(
+		nil,
+		types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)),
+	),
+}
+
+/**
  * Trace
  */
 
@@ -1269,6 +1321,34 @@ var Union = &Builtin{
 			types.NewSet(types.NewSet(types.A)),
 		),
 		types.NewSet(types.A),
+	),
+}
+
+/**
+ * Glob
+ */
+
+// GlobMatch - not to be confused with regex.globs_match - parses and matches strings against the glob notation.
+var GlobMatch = &Builtin{
+	Name: "glob.match",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.NewArray(nil, types.S),
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// GlobQuoteMeta returns a string which represents a version of the pattern where all asterisks have been escaped.
+var GlobQuoteMeta = &Builtin{
+	Name: "glob.quote_meta",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+		),
+		types.S,
 	),
 }
 

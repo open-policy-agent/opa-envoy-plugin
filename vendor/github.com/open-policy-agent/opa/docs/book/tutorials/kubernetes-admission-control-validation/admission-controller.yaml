@@ -78,14 +78,14 @@ spec:
         # authentication and authorization on the daemon. See the Security page for
         # details: https://www.openpolicyagent.org/docs/security.html.
         - name: opa
-          image: openpolicyagent/opa:0.9.2
+          image: openpolicyagent/opa:0.10.2
           args:
             - "run"
             - "--server"
             - "--tls-cert-file=/certs/tls.crt"
             - "--tls-private-key-file=/certs/tls.key"
             - "--addr=0.0.0.0:443"
-            - "--insecure-addr=127.0.0.1:8181"
+            - "--addr=http://127.0.0.1:8181"
           volumeMounts:
             - readOnly: true
               mountPath: /certs
