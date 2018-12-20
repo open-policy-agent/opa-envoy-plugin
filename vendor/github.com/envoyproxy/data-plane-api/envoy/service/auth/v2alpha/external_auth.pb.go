@@ -31,7 +31,7 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type CheckRequest struct {
 	// The request attributes.
-	Attributes           *AttributeContext `protobuf:"bytes,1,opt,name=attributes" json:"attributes,omitempty"`
+	Attributes           *AttributeContext `protobuf:"bytes,1,opt,name=attributes,proto3" json:"attributes,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -81,10 +81,10 @@ func (m *CheckRequest) GetAttributes() *AttributeContext {
 type DeniedHttpResponse struct {
 	// This field allows the authorization service to send a HTTP response status
 	// code to the downstream client other than 403 (Forbidden).
-	Status *_type.HttpStatus `protobuf:"bytes,1,opt,name=status" json:"status,omitempty"`
+	Status *_type.HttpStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	// This field allows the authorization service to send HTTP response headers
 	// to the the downstream client.
-	Headers []*core.HeaderValueOption `protobuf:"bytes,2,rep,name=headers" json:"headers,omitempty"`
+	Headers []*core.HeaderValueOption `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty"`
 	// This field allows the authorization service to send a response body data
 	// to the the downstream client.
 	Body                 string   `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
@@ -155,7 +155,7 @@ type OkHttpResponse struct {
 	// the filter will append the correspondent header value to the matched request header. Note that
 	// by Leaving `append` as false, the filter will either add a new header, or override an existing
 	// one if there is a match.
-	Headers              []*core.HeaderValueOption `protobuf:"bytes,2,rep,name=headers" json:"headers,omitempty"`
+	Headers              []*core.HeaderValueOption `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
 	XXX_unrecognized     []byte                    `json:"-"`
 	XXX_sizecache        int32                     `json:"-"`
@@ -204,7 +204,7 @@ func (m *OkHttpResponse) GetHeaders() []*core.HeaderValueOption {
 // Intended for gRPC and Network Authorization servers `only`.
 type CheckResponse struct {
 	// Status `OK` allows the request. Any other status indicates the request should be denied.
-	Status *rpc.Status `protobuf:"bytes,1,opt,name=status" json:"status,omitempty"`
+	Status *rpc.Status `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	// An message that contains HTTP response attributes. This message is
 	// used when the authorization service needs to send custom responses to the
 	// downstream client or, to modify/add request headers being dispatched to the upstream.
@@ -258,10 +258,10 @@ type isCheckResponse_HttpResponse interface {
 }
 
 type CheckResponse_DeniedResponse struct {
-	DeniedResponse *DeniedHttpResponse `protobuf:"bytes,2,opt,name=denied_response,json=deniedResponse,oneof"`
+	DeniedResponse *DeniedHttpResponse `protobuf:"bytes,2,opt,name=denied_response,json=deniedResponse,proto3,oneof"`
 }
 type CheckResponse_OkResponse struct {
-	OkResponse *OkHttpResponse `protobuf:"bytes,3,opt,name=ok_response,json=okResponse,oneof"`
+	OkResponse *OkHttpResponse `protobuf:"bytes,3,opt,name=ok_response,json=okResponse,proto3,oneof"`
 }
 
 func (*CheckResponse_DeniedResponse) isCheckResponse_HttpResponse() {}

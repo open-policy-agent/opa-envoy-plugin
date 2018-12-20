@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dchest/siphash"
+	"github.com/OneOfOne/xxhash"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/pkg/errors"
 )
@@ -635,7 +635,7 @@ func (num Number) Hash() int {
 	f, err := json.Number(num).Float64()
 	if err != nil {
 		bs := []byte(num)
-		h := siphash.Hash(hashSeed0, hashSeed1, bs)
+		h := xxhash.Checksum64(bs)
 		return int(h)
 	}
 	return int(f)
@@ -728,8 +728,7 @@ func (str String) String() string {
 
 // Hash returns the hash code for the Value.
 func (str String) Hash() int {
-	bs := []byte(str)
-	h := siphash.Hash(hashSeed0, hashSeed1, bs)
+	h := xxhash.ChecksumString64S(string(str), hashSeed0)
 	return int(h)
 }
 
@@ -768,8 +767,7 @@ func (v Var) Find(path Ref) (Value, error) {
 
 // Hash returns the hash code for the Value.
 func (v Var) Hash() int {
-	bs := []byte(v)
-	h := siphash.Hash(hashSeed0, hashSeed1, bs)
+	h := xxhash.ChecksumString64S(string(v), hashSeed0)
 	return int(h)
 }
 
@@ -1129,13 +1127,17 @@ type Set interface {
 
 // NewSet returns a new Set containing t.
 func NewSet(t ...*Term) Set {
-	s := &set{
-		elems: map[int]*setElem{},
-	}
+	s := newset(len(t))
 	for i := range t {
 		s.Add(t[i])
 	}
 	return s
+}
+
+func newset(n int) *set {
+	return &set{
+		elems: make(map[int]*Term, n),
+	}
 }
 
 // SetTerm returns a new Term representing a set containing terms t.
@@ -1147,21 +1149,8 @@ func SetTerm(t ...*Term) *Term {
 }
 
 type set struct {
-	elems map[int]*setElem
+	elems map[int]*Term
 	keys  []*Term
-}
-
-type setElem struct {
-	elem *Term
-	next *setElem
-}
-
-func (s *setElem) String() string {
-	buf := []string{}
-	for c := s; c != nil; c = c.next {
-		buf = append(buf, fmt.Sprint(c.elem))
-	}
-	return strings.Join(buf, "->")
 }
 
 // Copy returns a deep copy of s.
@@ -1195,7 +1184,7 @@ func (s *set) String() string {
 	}
 	buf := []string{}
 	s.Foreach(func(x *Term) {
-		buf = append(buf, x.String())
+		buf = append(buf, fmt.Sprint(x))
 	})
 	return "{" + strings.Join(buf, ", ") + "}"
 }
@@ -1237,9 +1226,15 @@ func (s *set) Diff(other Set) Set {
 
 // Intersect returns the set containing elements in both s and other.
 func (s *set) Intersect(other Set) Set {
-	r := NewSet()
+	o := other.(*set)
+	n, m := s.Len(), o.Len()
+	if m < n {
+		n = m
+	}
+
+	r := newset(n)
 	s.Foreach(func(x *Term) {
-		if other.Contains(x) {
+		if o.Contains(x) {
 			r.Add(x)
 		}
 	})
@@ -1357,25 +1352,28 @@ func (s *set) Sorted() Array {
 
 func (s *set) insert(x *Term) {
 	hash := x.Hash()
-	head := s.elems[hash]
-	for curr := head; curr != nil; curr = curr.next {
-		if Compare(curr.elem, x) == 0 {
+	for curr, ok := s.elems[hash]; ok; {
+		if Compare(curr, x) == 0 {
 			return
 		}
+
+		hash++
+		curr, ok = s.elems[hash]
 	}
-	s.elems[hash] = &setElem{
-		elem: x,
-		next: head,
-	}
+
+	s.elems[hash] = x
 	s.keys = append(s.keys, x)
 }
 
-func (s *set) get(x *Term) *setElem {
+func (s *set) get(x *Term) *Term {
 	hash := x.Hash()
-	for curr := s.elems[hash]; curr != nil; curr = curr.next {
-		if Compare(curr.elem, x) == 0 {
+	for curr, ok := s.elems[hash]; ok; {
+		if Compare(curr, x) == 0 {
 			return curr
 		}
+
+		hash++
+		curr, ok = s.elems[hash]
 	}
 	return nil
 }
