@@ -10,6 +10,7 @@ import (
 
 	"github.com/envoyproxy/data-plane-api/envoy/service/auth/v2alpha"
 	google_rpc "github.com/gogo/googleapis/google/rpc"
+	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
@@ -180,10 +181,17 @@ func testAuthzServer() *envoyExtAuthzGrpcServer {
 		panic(err)
 	}
 
+	query := "data.istio.authz.allow"
+	parsedQuery, err := ast.ParseBody(query)
+	if err != nil {
+		panic(err)
+	}
+
 	s := &envoyExtAuthzGrpcServer{
 		cfg: config{
-			Addr:  ":50052",
-			Query: "data.istio.authz.allow",
+			Addr:        ":50052",
+			Query:       query,
+			parsedQuery: parsedQuery,
 		},
 		manager: m,
 	}

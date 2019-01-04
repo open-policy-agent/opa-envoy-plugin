@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
 	ctx "golang.org/x/net/context"
 
@@ -39,6 +40,12 @@ func New(m *plugins.Manager, bs []byte) (plugins.Plugin, error) {
 		return nil, err
 	}
 
+	parsedQuery, err := ast.ParseBody(cfg.Query)
+	if err != nil {
+		return nil, err
+	}
+	cfg.parsedQuery = parsedQuery
+
 	plugin := &envoyExtAuthzGrpcServer{
 		manager: m,
 		cfg:     cfg,
@@ -51,8 +58,9 @@ func New(m *plugins.Manager, bs []byte) (plugins.Plugin, error) {
 }
 
 type config struct {
-	Addr  string `json:"addr"`
-	Query string `json:"decision"`
+	Addr        string `json:"addr"`
+	Query       string `json:"query"`
+	parsedQuery ast.Body
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -95,18 +103,26 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 }
 
 func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (*ext_authz.CheckResponse, error) {
+	start := time.Now()
 
 	bs, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
 
-	input, err := ast.ParseTerm(string(bs))
+	var input interface{}
+
+	err = util.UnmarshalJSON(bs, &input)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := p.eval(ctx, input)
+	inputValue, err := ast.InterfaceToValue(input)
+	if err != nil {
+		return nil, err
+	}
+
+	result, txnID, metrics, err := p.eval(ctx, inputValue)
 	if err != nil {
 		return nil, err
 	}
@@ -121,10 +137,19 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		Status: &google_rpc.Status{Code: status},
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"query":               p.cfg.Query,
+		"decision":            result,
+		"err":                 err,
+		"txn":                 txnID,
+		"metrics":             metrics.All(),
+		"total_decision_time": time.Since(start),
+	}).Info("Returning policy decision.")
+
 	return resp, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input *ast.Term, opts ...func(*rego.Rego)) (bool, error) {
+func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opts ...func(*rego.Rego)) (bool, uint64, metrics.Metrics, error) {
 
 	m := metrics.New()
 	var decision bool
@@ -142,8 +167,8 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input *ast.Term, opt
 
 		opts = append(opts,
 			rego.Metrics(m),
-			rego.Query(p.cfg.Query),
-			rego.ParsedInput(input.Value),
+			rego.ParsedQuery(p.cfg.parsedQuery),
+			rego.ParsedInput(input),
 			rego.Compiler(p.manager.GetCompiler()),
 			rego.Store(p.manager.Store),
 			rego.Transaction(txn))
@@ -163,13 +188,5 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input *ast.Term, opt
 		return nil
 	})
 
-	logrus.WithFields(logrus.Fields{
-		"query":    p.cfg.Query,
-		"decision": decision,
-		"err":      err,
-		"txn":      txnID,
-		"metrics":  m.All(),
-	}).Info("Returning policy decision.")
-
-	return decision, err
+	return decision, txnID, m, err
 }
