@@ -76,6 +76,7 @@ const (
 	MsgUnauthorizedError          = "request rejected by administrative policy"
 	MsgUndefinedError             = "document missing or undefined"
 	MsgDiagnosticsDisabled        = "diagnostics are not enabled"
+	MsgPluginConfigError          = "error(s) occurred while configuring plugin(s)"
 )
 
 // PatchV1 models a single patch operation against a document.
@@ -374,6 +375,11 @@ type CompileResponseV1 struct {
 type PartialEvaluationResultV1 struct {
 	Queries []ast.Body    `json:"queries,omitempty"`
 	Support []*ast.Module `json:"support,omitempty"`
+}
+
+// QueryRequestV1 models the request message for Query API operations.
+type QueryRequestV1 struct {
+	Query string `json:"query"`
 }
 
 const (

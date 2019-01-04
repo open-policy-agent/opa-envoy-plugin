@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net"
 
+	ctx "golang.org/x/net/context"
+
 	ext_authz "github.com/envoyproxy/data-plane-api/envoy/service/auth/v2alpha"
 	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
@@ -68,6 +70,10 @@ func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 	p.server.Stop()
 }
 
+func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
+	return
+}
+
 func (p *envoyExtAuthzGrpcServer) listen() {
 
 	// The listener is closed automatically by Serve when it returns.
@@ -88,7 +94,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	logrus.Info("Listener exited.")
 }
 
-func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.CheckRequest) (*ext_authz.CheckResponse, error) {
+func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (*ext_authz.CheckResponse, error) {
 
 	bs, err := json.Marshal(req)
 	if err != nil {

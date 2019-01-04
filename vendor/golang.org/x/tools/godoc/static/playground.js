@@ -40,11 +40,10 @@ here's a skeleton implementation of a playground transport.
         }
 */
 
-// HTTPTransport is the default transport.
-// enableVet enables running vet if a program was compiled and ran successfully.
-// If vet returned any errors, display them before the output of a program.
-function HTTPTransport(enableVet) {
+function HTTPTransport() {
 	'use strict';
+
+	// TODO(adg): support stderr
 
 	function playback(output, events) {
 		var timeout;
@@ -56,12 +55,12 @@ function HTTPTransport(enableVet) {
 			}
 			var e = events.shift();
 			if (e.Delay === 0) {
-				output({Kind: e.Kind, Body: e.Message});
+				output({Kind: 'stdout', Body: e.Message});
 				next();
 				return;
 			}
 			timeout = setTimeout(function() {
-				output({Kind: e.Kind, Body: e.Message});
+				output({Kind: 'stdout', Body: e.Message});
 				next();
 			}, e.Delay / 1000000);
 		}
@@ -70,7 +69,7 @@ function HTTPTransport(enableVet) {
 			Stop: function() {
 				clearTimeout(timeout);
 			}
-		};
+		}
 	}
 
 	function error(output, msg) {
@@ -97,31 +96,7 @@ function HTTPTransport(enableVet) {
 						error(output, data.Errors);
 						return;
 					}
-
-					if (!enableVet) {
-						playing = playback(output, data.Events);
-						return;
-					}
-
-					$.ajax("/vet", {
-						data: {"body": body},
-						type: "POST",
-						dataType: "json",
-						success: function(dataVet) {
-							if (dataVet.Errors) {
-								if (!data.Events) {
-									data.Events = [];
-								}
-								// inject errors from the vet as the first events in the output
-								data.Events.unshift({Message: 'Go vet exited.\n\n', Kind: 'system', Delay: 0});
-								data.Events.unshift({Message: dataVet.Errors, Kind: 'stderr', Delay: 0});
-							}
-							playing = playback(output, data.Events);
-						},
-						error: function() {
-							playing = playback(output, data.Events);
-						}
-					});
+					playing = playback(output, data.Events);
 				},
 				error: function() {
 					error(output, 'Error communicating with remote server.');
@@ -152,7 +127,7 @@ function SocketTransport() {
 
 	websocket.onclose = function() {
 		console.log('websocket connection closed');
-	};
+	}
 
 	websocket.onmessage = function(e) {
 		var m = JSON.parse(e.data);
@@ -164,7 +139,7 @@ function SocketTransport() {
 			started[m.Id] = true;
 		}
 		output({Kind: m.Kind, Body: m.Body});
-	};
+	}
 
 	function send(m) {
 		websocket.send(JSON.stringify(m));
@@ -232,7 +207,7 @@ function PlaygroundOutput(el) {
 
 		if (needScroll)
 			el.scrollTop = el.scrollHeight - el.offsetHeight;
-	};
+	}
 }
 
 (function() {
@@ -248,7 +223,7 @@ function PlaygroundOutput(el) {
     return function(write) {
       if (write.Body) lineHighlight(write.Body);
       wrappedOutput(write);
-    };
+    }
   }
   function lineClear() {
     $(".lineerror").removeClass("lineerror");
@@ -263,14 +238,14 @@ function PlaygroundOutput(el) {
   //  shareEl - share button element (optional)
   //  shareURLEl - share URL text input element (optional)
   //  shareRedirect - base URL to redirect to on share (optional)
+  //  vetEl - vet button element (optional)
   //  toysEl - toys select element (optional)
   //  enableHistory - enable using HTML5 history API (optional)
   //  transport - playground transport to use (default is HTTPTransport)
   //  enableShortcuts - whether to enable shortcuts (Ctrl+S/Cmd+S to save) (default is false)
-  //  enableVet - enable running vet and displaying its errors
   function playground(opts) {
     var code = $(opts.codeEl);
-    var transport = opts['transport'] || new HTTPTransport(opts['enableVet']);
+    var transport = opts['transport'] || new HTTPTransport();
     var running;
 
     // autoindent helpers.
@@ -394,6 +369,11 @@ function PlaygroundOutput(el) {
       if (running) running.Kill();
       output.removeClass("error").text('Waiting for remote server...');
     }
+    function noError() {
+      lineClear();
+      if (running) running.Kill();
+      output.removeClass("error").text('No errors.');
+    }
     function run() {
       loading();
       running = transport.Run(body(), highlightOutput(PlaygroundOutput(output[0])));
@@ -416,6 +396,26 @@ function PlaygroundOutput(el) {
             setBody(data.Body);
             setError("");
           }
+        }
+      });
+    }
+
+    function vet() {
+      loading();
+      var data = {"body": body()};
+      $.ajax("/vet", {
+        data: data,
+        type: "POST",
+        dataType: "json",
+        success: function(data) {
+          if (data.Errors) {
+            setError(data.Errors);
+          } else {
+            noError();
+          }
+        },
+        error: function() {
+          setError('Error communicating with remote server.');
         }
       });
     }
@@ -467,6 +467,7 @@ function PlaygroundOutput(el) {
 
     $(opts.runEl).click(run);
     $(opts.fmtEl).click(fmt);
+    $(opts.vetEl).click(vet);
 
     if (opts.shareEl !== null && (opts.shareURLEl !== null || opts.shareRedirect !== null)) {
       if (opts.shareURLEl) {

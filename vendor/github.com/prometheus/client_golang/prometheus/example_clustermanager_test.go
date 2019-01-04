@@ -17,18 +17,18 @@ import "github.com/prometheus/client_golang/prometheus"
 
 // ClusterManager is an example for a system that might have been built without
 // Prometheus in mind. It models a central manager of jobs running in a
-// cluster. Thus, we implement a custom Collector called
-// ClusterManagerCollector, which collects information from a ClusterManager
-// using its provided methods and turns them into Prometheus Metrics for
-// collection.
+// cluster. To turn it into something that collects Prometheus metrics, we
+// simply add the two methods required for the Collector interface.
 //
 // An additional challenge is that multiple instances of the ClusterManager are
 // run within the same binary, each in charge of a different zone. We need to
-// make use of wrapping Registerers to be able to register each
-// ClusterManagerCollector instance with Prometheus.
+// make use of ConstLabels to be able to register each ClusterManager instance
+// with Prometheus.
 type ClusterManager struct {
-	Zone string
-	// Contains many more fields not listed in this example.
+	Zone         string
+	OOMCountDesc *prometheus.Desc
+	RAMUsageDesc *prometheus.Desc
+	// ... many more fields
 }
 
 // ReallyExpensiveAssessmentOfTheSystemState is a mock for the data gathering a
@@ -50,30 +50,10 @@ func (c *ClusterManager) ReallyExpensiveAssessmentOfTheSystemState() (
 	return
 }
 
-// ClusterManagerCollector implements the Collector interface.
-type ClusterManagerCollector struct {
-	ClusterManager *ClusterManager
-}
-
-// Descriptors used by the ClusterManagerCollector below.
-var (
-	oomCountDesc = prometheus.NewDesc(
-		"clustermanager_oom_crashes_total",
-		"Number of OOM crashes.",
-		[]string{"host"}, nil,
-	)
-	ramUsageDesc = prometheus.NewDesc(
-		"clustermanager_ram_usage_bytes",
-		"RAM usage as reported to the cluster manager.",
-		[]string{"host"}, nil,
-	)
-)
-
-// Describe is implemented with DescribeByCollect. That's possible because the
-// Collect method will always return the same two metrics with the same two
-// descriptors.
-func (cc ClusterManagerCollector) Describe(ch chan<- *prometheus.Desc) {
-	prometheus.DescribeByCollect(cc, ch)
+// Describe simply sends the two Descs in the struct to the channel.
+func (c *ClusterManager) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.OOMCountDesc
+	ch <- c.RAMUsageDesc
 }
 
 // Collect first triggers the ReallyExpensiveAssessmentOfTheSystemState. Then it
@@ -81,11 +61,11 @@ func (cc ClusterManagerCollector) Describe(ch chan<- *prometheus.Desc) {
 //
 // Note that Collect could be called concurrently, so we depend on
 // ReallyExpensiveAssessmentOfTheSystemState to be concurrency-safe.
-func (cc ClusterManagerCollector) Collect(ch chan<- prometheus.Metric) {
-	oomCountByHost, ramUsageByHost := cc.ClusterManager.ReallyExpensiveAssessmentOfTheSystemState()
+func (c *ClusterManager) Collect(ch chan<- prometheus.Metric) {
+	oomCountByHost, ramUsageByHost := c.ReallyExpensiveAssessmentOfTheSystemState()
 	for host, oomCount := range oomCountByHost {
 		ch <- prometheus.MustNewConstMetric(
-			oomCountDesc,
+			c.OOMCountDesc,
 			prometheus.CounterValue,
 			float64(oomCount),
 			host,
@@ -93,7 +73,7 @@ func (cc ClusterManagerCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	for host, ramUsage := range ramUsageByHost {
 		ch <- prometheus.MustNewConstMetric(
-			ramUsageDesc,
+			c.RAMUsageDesc,
 			prometheus.GaugeValue,
 			ramUsage,
 			host,
@@ -101,27 +81,38 @@ func (cc ClusterManagerCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-// NewClusterManager first creates a Prometheus-ignorant ClusterManager
-// instance. Then, it creates a ClusterManagerCollector for the just created
-// ClusterManager. Finally, it registers the ClusterManagerCollector with a
-// wrapping Registerer that adds the zone as a label. In this way, the metrics
-// collected by different ClusterManagerCollectors do not collide.
-func NewClusterManager(zone string, reg prometheus.Registerer) *ClusterManager {
-	c := &ClusterManager{
+// NewClusterManager creates the two Descs OOMCountDesc and RAMUsageDesc. Note
+// that the zone is set as a ConstLabel. (It's different in each instance of the
+// ClusterManager, but constant over the lifetime of an instance.) Then there is
+// a variable label "host", since we want to partition the collected metrics by
+// host. Since all Descs created in this way are consistent across instances,
+// with a guaranteed distinction by the "zone" label, we can register different
+// ClusterManager instances with the same registry.
+func NewClusterManager(zone string) *ClusterManager {
+	return &ClusterManager{
 		Zone: zone,
+		OOMCountDesc: prometheus.NewDesc(
+			"clustermanager_oom_crashes_total",
+			"Number of OOM crashes.",
+			[]string{"host"},
+			prometheus.Labels{"zone": zone},
+		),
+		RAMUsageDesc: prometheus.NewDesc(
+			"clustermanager_ram_usage_bytes",
+			"RAM usage as reported to the cluster manager.",
+			[]string{"host"},
+			prometheus.Labels{"zone": zone},
+		),
 	}
-	cc := ClusterManagerCollector{ClusterManager: c}
-	prometheus.WrapRegistererWith(prometheus.Labels{"zone": zone}, reg).MustRegister(cc)
-	return c
 }
 
 func ExampleCollector() {
+	workerDB := NewClusterManager("db")
+	workerCA := NewClusterManager("ca")
+
 	// Since we are dealing with custom Collector implementations, it might
 	// be a good idea to try it out with a pedantic registry.
 	reg := prometheus.NewPedanticRegistry()
-
-	// Construct cluster managers. In real code, we would assign them to
-	// variables to then do something with them.
-	NewClusterManager("db", reg)
-	NewClusterManager("ca", reg)
+	reg.MustRegister(workerDB)
+	reg.MustRegister(workerCA)
 }

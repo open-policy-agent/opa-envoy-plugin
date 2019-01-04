@@ -47,7 +47,7 @@ const (
 // Event contains state associated with a tracing event.
 type Event struct {
 	Op       Op            // Identifies type of event.
-	Node     interface{}   // Contains AST node relevant to the event.
+	Node     ast.Node      // Contains AST node relevant to the event.
 	QueryID  uint64        // Identifies the query this event belongs to.
 	ParentID uint64        // Identifies the parent query this event belongs to.
 	Locals   *ast.ValueMap // Contains local variable bindings from the query context.
@@ -204,7 +204,7 @@ func builtinTrace(bctx BuiltinContext, args []*ast.Term, iter func(*ast.Term) er
 		return handleBuiltinErr(ast.Trace.Name, bctx.Location, err)
 	}
 
-	if bctx.Tracer == nil || !bctx.Tracer.Enabled() {
+	if !traceIsEnabled(bctx.Tracers) {
 		return iter(ast.BooleanTerm(true))
 	}
 
@@ -214,9 +214,21 @@ func builtinTrace(bctx BuiltinContext, args []*ast.Term, iter func(*ast.Term) er
 		ParentID: bctx.ParentID,
 		Message:  string(str),
 	}
-	bctx.Tracer.Trace(evt)
+
+	for i := range bctx.Tracers {
+		bctx.Tracers[i].Trace(evt)
+	}
 
 	return iter(ast.BooleanTerm(true))
+}
+
+func traceIsEnabled(tracers []Tracer) bool {
+	for i := range tracers {
+		if tracers[i].Enabled() {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {

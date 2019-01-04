@@ -1,7 +1,10 @@
 URL="https://raw.githubusercontent.com/googleapis/googleapis/master/"
 
+test:
+	go test ./...
+
 regenerate:
-	go install ./protoc-gen-gogogoogleapis
+	go install github.com/gogo/googleapis/protoc-gen-gogogoogleapis
 
 	protoc \
 	--gogogoogleapis_out=\
@@ -22,7 +25,7 @@ regenerate:
 	google/api/annotations.proto
 
 update:
-	go install ./vendor/github.com/gogo/protobuf/gogoreplace
+	go install github.com/gogo/protobuf/gogoreplace
 
 	(cd ./google/rpc && rm status.proto; wget ${URL}/google/rpc/status.proto)
 	gogoreplace \
