@@ -206,7 +206,7 @@ package main
 		p:       p,
 		c:       c,
 		pattern: "/cmd/",
-		fsRoot:  "/src",
+		fsRoot:  "/src/cmd",
 	}
 	p.pkgHandler = handlerServer{
 		p:       p,

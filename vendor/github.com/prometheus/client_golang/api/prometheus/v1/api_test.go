@@ -606,20 +606,7 @@ func TestAPIClientDo(t *testing.T) {
 			response: "bad json",
 			err: &Error{
 				Type: ErrBadResponse,
-				Msg:  "bad response code 500",
-			},
-			code: http.StatusInternalServerError,
-		},
-		{
-			response: &apiResponse{
-				Status:    "error",
-				Data:      json.RawMessage(`null`),
-				ErrorType: ErrBadData,
-				Error:     "end timestamp must not be before start time",
-			},
-			err: &Error{
-				Type: ErrBadData,
-				Msg:  "end timestamp must not be before start time",
+				Msg:  "bad response code 400",
 			},
 			code: http.StatusBadRequest,
 		},
