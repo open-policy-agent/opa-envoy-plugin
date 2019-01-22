@@ -1104,7 +1104,7 @@ func TestComments(t *testing.T) {
 
     import input.xyz.abc
 
-    q # interruptting
+    q # interrupting
 
 	[a] # the head of a rule
 
@@ -1140,6 +1140,48 @@ func TestComments(t *testing.T) {
 			MustParseStatement(`r[x] { x = [a | a = z[i]; b[i].a = a]; y = {a |  a = z[i]; b[i].a = a}; z = {a: i | a = z[i]; b[i].a = a} }`).(*Rule),
 		},
 	})
+
+	module, err := ParseModule("test.rego", testModule)
+	if err != nil {
+		t.Fatal("Unexpected error:", err)
+	}
+
+	exp := []struct {
+		text string
+		row  int
+		col  int
+	}{
+		{text: "end of line", row: 3, col: 28},
+		{text: "by itself", row: 6, col: 5},
+		{text: "inside a rule", row: 9, col: 9},
+		{text: "interrupting", row: 17, col: 7},
+		{text: "the head of a rule", row: 19, col: 6},
+		{text: "inside comprehension", row: 27, col: 19},
+		{text: "inside set comprehension", row: 31, col: 13},
+		{text: "inside object comprehension", row: 35, col: 15},
+	}
+
+	if len(module.Comments) != len(exp) {
+		t.Fatalf("Expected %v comments but got %v", len(exp), len(module.Comments))
+	}
+
+	for i := range exp {
+
+		expc := &Comment{
+			Text: []byte(" " + exp[i].text),
+			Location: &Location{
+				File: "test.rego",
+				Text: []byte("# " + exp[i].text),
+				Row:  exp[i].row,
+				Col:  exp[i].col,
+			},
+		}
+
+		if !expc.Equal(module.Comments[i]) {
+			t.Errorf("Expected %v for %vith comment but got: %v", expc, i, module.Comments[i])
+		}
+	}
+
 }
 
 func TestExample(t *testing.T) {
@@ -1417,6 +1459,7 @@ func TestParseErrorDetails(t *testing.T) {
 	tests := []struct {
 		note  string
 		exp   *parserErrorDetail
+		err   string
 		input string
 	}{
 		{
@@ -1474,6 +1517,32 @@ p { }`},
 			input: `
 package test
 p = "foo`},
+		{
+			note: "rule with error begins with one tab",
+			exp: &parserErrorDetail{
+				line: "\tas",
+				idx:  2,
+			},
+			input: `
+package test
+	as`,
+			err: `1 error occurred: test.rego:3: rego_parse_error: no match found
+	as
+	 ^`},
+		{
+			note: "rule term with error begins with two tabs",
+			exp: &parserErrorDetail{
+				line: "\t\tas",
+				idx:  3,
+			},
+			input: `
+package test
+p = true {
+		as
+}`,
+			err: `1 error occurred: test.rego:5: rego_parse_error: no match found
+	as
+	 ^`},
 	}
 
 	for _, tc := range tests {
@@ -1484,6 +1553,9 @@ p = "foo`},
 		detail := err.(Errors)[0].Details
 		if !reflect.DeepEqual(detail, tc.exp) {
 			t.Fatalf("Expected %v but got: %v", tc.exp, detail)
+		}
+		if tc.err != "" && tc.err != err.Error() {
+			t.Fatalf("Expected error string %q but got: %q", tc.err, err.Error())
 		}
 	}
 }

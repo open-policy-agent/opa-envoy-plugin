@@ -54,14 +54,47 @@ func TestSummaryWithoutObjectives(t *testing.T) {
 	if err := reg.Register(summaryWithEmptyObjectives); err != nil {
 		t.Error(err)
 	}
+	summaryWithEmptyObjectives.Observe(3)
+	summaryWithEmptyObjectives.Observe(0.14)
 
 	m := &dto.Metric{}
 	if err := summaryWithEmptyObjectives.Write(m); err != nil {
 		t.Error(err)
 	}
+	if got, want := m.GetSummary().GetSampleSum(), 3.14; got != want {
+		t.Errorf("got sample sum %f, want %f", got, want)
+	}
+	if got, want := m.GetSummary().GetSampleCount(), uint64(2); got != want {
+		t.Errorf("got sample sum %d, want %d", got, want)
+	}
 	if len(m.GetSummary().Quantile) != 0 {
 		t.Error("expected no objectives in summary")
 	}
+}
+
+func TestSummaryWithQuantileLabel(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Attempt to create Summary with 'quantile' label did not panic.")
+		}
+	}()
+	_ = NewSummary(SummaryOpts{
+		Name:        "test_summary",
+		Help:        "less",
+		ConstLabels: Labels{"quantile": "test"},
+	})
+}
+
+func TestSummaryVecWithQuantileLabel(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Attempt to create SummaryVec with 'quantile' label did not panic.")
+		}
+	}()
+	_ = NewSummaryVec(SummaryOpts{
+		Name: "test_summary",
+		Help: "less",
+	}, []string{"quantile"})
 }
 
 func benchmarkSummaryObserve(w int, b *testing.B) {

@@ -1106,6 +1106,36 @@ func TestCompilerRewriteLocalAssignments(t *testing.T) {
 	head_array_comprehensions = [[x] | x := 1]
 	head_set_comprehensions = {[x] | x := 1}
 	head_object_comprehensions = {k: [x] | k := "foo"; x := 1}
+
+	rewritten_object_key {
+		k := "foo"
+		{k: 1}
+	}
+
+	rewritten_object_key_head[[{k: 1}]] {
+		k := "foo"
+	}
+
+	rewritten_object_key_head_value = [{k: 1}] {
+		k := "foo"
+	}
+
+	skip_with_target_in_assignment {
+		input := 1
+		a := [true | true with input as 2; true with input as 3]
+	}
+
+	rewrite_value_in_assignment {
+		a := 1
+		b := 1 with input as [a]
+	}
+
+	global = {}
+
+	ref_shadowed {
+		global := {"a": 1}
+		global.a > 0
+	}
 	`)
 
 	c.Modules["test2"] = MustParseModule(`package test
@@ -1163,6 +1193,24 @@ func TestCompilerRewriteLocalAssignments(t *testing.T) {
 	head_array_comprehensions = [[__local21__] | __local21__ = 1]
 	head_set_comprehensions = {[__local22__] | __local22__ = 1}
 	head_object_comprehensions = {__local23__: [__local24__] | __local23__ = "foo"; __local24__ = 1}
+
+	rewritten_object_key = true { __local25__ = "foo"; {__local25__: 1} }
+	rewritten_object_key_head[[{__local26__: 1}]] { __local26__ = "foo" }
+	rewritten_object_key_head_value = [{__local27__: 1}] { __local27__ = "foo" }
+
+	skip_with_target_in_assignment {
+		__local28__ = 1
+		__local29__ = [true | true with input as 2; true with input as 3]
+	}
+
+	rewrite_value_in_assignment {
+		__local30__ = 1
+		__local31__ = 1 with input as [__local30__]
+	}
+
+	global = {}
+
+	ref_shadowed { __local32__ = {"a": 1}; __local32__.a > 0 }
 	`)
 
 	if len(module1.Rules) != len(expectedModule.Rules) {
@@ -1201,6 +1249,7 @@ func TestRewriteLocalVarDeclarationErrors(t *testing.T) {
 		[b, r2] := [1, 2]
 		input.path == 1
 		input := "foo"
+		_ := [1 | nested := 1; nested := 2]
 	}
 
 	negation {
@@ -1227,6 +1276,7 @@ func TestRewriteLocalVarDeclarationErrors(t *testing.T) {
 		"var r1 assigned or referenced above",
 		"var r2 assigned or referenced above",
 		"var input assigned or referenced above",
+		"var nested assigned or referenced above",
 		"cannot assign vars inside negated expression",
 		"cannot assign to ref",
 		"cannot assign to arraycomprehension",
@@ -2209,6 +2259,7 @@ func TestQueryCompilerRewrittenVars(t *testing.T) {
 		vars map[string]string
 	}{
 		{"assign", "a := 1", map[string]string{"__local0__": "a"}},
+		{"suppress only seen", "b = 1; a := b", map[string]string{"__local0__": "a"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.note, func(t *testing.T) {

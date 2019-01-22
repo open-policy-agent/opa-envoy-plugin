@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -48,8 +49,9 @@ type AuthenticationScheme int
 
 // Set of supported authentication schemes.
 const (
-	AuthenticationOff   AuthenticationScheme = iota
-	AuthenticationToken                      = iota
+	AuthenticationOff AuthenticationScheme = iota
+	AuthenticationToken
+	AuthenticationTLS
 )
 
 // AuthorizationScheme enumerates the supported authorization schemes. The authorization
@@ -58,8 +60,8 @@ type AuthorizationScheme int
 
 // Set of supported authorization schemes.
 const (
-	AuthorizationOff   AuthorizationScheme = iota
-	AuthorizationBasic                     = iota
+	AuthorizationOff AuthorizationScheme = iota
+	AuthorizationBasic
 )
 
 // Set of handlers for use in the "handler" dimension of the duration metric.
@@ -71,6 +73,7 @@ const (
 	PromHandlerV1Compile  = "v1/compile"
 	PromHandlerIndex      = "index"
 	PromHandlerCatch      = "catchall"
+	PromHandlerHealth     = "health"
 )
 
 // map of unsafe buitins
@@ -86,6 +89,7 @@ type Server struct {
 	authentication    AuthenticationScheme
 	authorization     AuthorizationScheme
 	cert              *tls.Certificate
+	certPool          *x509.CertPool
 	mtx               sync.RWMutex
 	partials          map[string]rego.PartialResult
 	store             storage.Store
@@ -128,6 +132,8 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 	switch s.authentication {
 	case AuthenticationToken:
 		s.Handler = identifier.NewTokenBased(s.Handler)
+	case AuthenticationTLS:
+		s.Handler = identifier.NewTLSBased(s.Handler)
 	}
 
 	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
@@ -184,6 +190,12 @@ func (s *Server) WithAuthorization(scheme AuthorizationScheme) *Server {
 // WithCertificate sets the server-side certificate that the server will use.
 func (s *Server) WithCertificate(cert *tls.Certificate) *Server {
 	s.cert = cert
+	return s
+}
+
+// WithCertPool sets the server-side cert pool that the server will use.
+func (s *Server) WithCertPool(pool *x509.CertPool) *Server {
+	s.certPool = pool
 	return s
 }
 
@@ -283,9 +295,7 @@ func (s *Server) getListenerForHTTPServer(u *url.URL) (Loop, error) {
 		Handler: s.Handler,
 	}
 
-	httpLoop := func() error { return httpServer.ListenAndServe() }
-
-	return httpLoop, nil
+	return httpServer.ListenAndServe, nil
 }
 
 func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
@@ -299,7 +309,11 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
 		Handler: s.Handler,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{*s.cert},
+			ClientCAs:    s.certPool,
 		},
+	}
+	if s.authentication == AuthenticationTLS {
+		httpsServer.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
 	httpsLoop := func() error { return httpsServer.ListenAndServeTLS("", "") }
@@ -340,6 +354,7 @@ func (s *Server) initRouter() {
 	v1CompileDur := duration.MustCurryWith(prometheus.Labels{"handler": PromHandlerV1Compile})
 	indexDur := duration.MustCurryWith(prometheus.Labels{"handler": PromHandlerIndex})
 	catchAllDur := duration.MustCurryWith(prometheus.Labels{"handler": PromHandlerCatch})
+	GetHealthDur := duration.MustCurryWith(prometheus.Labels{"handler": PromHandlerHealth})
 	promRegistry.MustRegister(duration)
 
 	router := s.router
@@ -351,6 +366,7 @@ func (s *Server) initRouter() {
 	router.UseEncodedPath()
 	router.StrictSlash(true)
 	router.Handle("/metrics", promhttp.HandlerFor(promRegistry, promhttp.HandlerOpts{})).Methods(http.MethodGet)
+	router.Handle("/health", promhttp.InstrumentHandlerDuration(GetHealthDur, http.HandlerFunc(s.unversionedGetHealth))).Methods(http.MethodGet)
 	s.registerHandler(router, 0, "/data/{path:.+}", http.MethodPost, promhttp.InstrumentHandlerDuration(v0DataDur, http.HandlerFunc(s.v0DataPost)))
 	s.registerHandler(router, 0, "/data", http.MethodPost, promhttp.InstrumentHandlerDuration(v0DataDur, http.HandlerFunc(s.v0DataPost)))
 	s.registerHandler(router, 1, "/data/system/version", http.MethodGet, promhttp.InstrumentHandlerDuration(v1DataDur, http.HandlerFunc(s.v1VersionGet)))
@@ -396,11 +412,10 @@ func (s *Server) initRouter() {
 		http.MethodConnect, http.MethodDelete, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
 	router.HandleFunc("/v1/query", promhttp.InstrumentHandlerDuration(catchAllDur, http.HandlerFunc(writer.HTTPStatus(405)))).Methods(http.MethodHead,
 		http.MethodConnect, http.MethodDelete, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
-
 	s.Handler = router
 }
 
-func (s *Server) execQuery(ctx context.Context, r *http.Request, query string, input ast.Value, explainMode types.ExplainModeV1, includeMetrics, includeInstrumentation, pretty bool) (results types.QueryResponseV1, err error) {
+func (s *Server) execQuery(ctx context.Context, r *http.Request, decisionID string, parsedQuery ast.Body, input ast.Value, m metrics.Metrics, explainMode types.ExplainModeV1, includeMetrics, includeInstrumentation, pretty bool) (results types.QueryResponseV1, err error) {
 
 	diagLogger := s.evalDiagnosticPolicy(r)
 
@@ -415,13 +430,21 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, query string, i
 		instrument = true
 	}
 
-	m := metrics.New()
+	var rawInput *interface{}
+	if input != nil {
+		x, err := ast.JSON(input)
+		if err != nil {
+			return results, err
+		}
+		rawInput = &x
+	}
 
 	compiler := s.getCompiler()
+
 	rego := rego.New(
 		rego.Store(s.store),
 		rego.Compiler(compiler),
-		rego.Query(query),
+		rego.ParsedQuery(parsedQuery),
 		rego.ParsedInput(input),
 		rego.Metrics(m),
 		rego.Instrument(instrument),
@@ -431,7 +454,7 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, query string, i
 
 	output, err := rego.Eval(ctx)
 	if err != nil {
-		diagLogger.Log(ctx, "", r.RemoteAddr, query, input, nil, err, m, buf)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, nil, err, m, buf)
 		return results, err
 	}
 
@@ -448,11 +471,14 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, query string, i
 	}
 
 	var x interface{} = results.Result
-	diagLogger.Log(ctx, "", r.RemoteAddr, query, input, &x, nil, m, buf)
+	diagLogger.Log(ctx, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, &x, nil, m, buf)
+
 	return results, nil
 }
 
 func (s *Server) indexGet(w http.ResponseWriter, r *http.Request) {
+
+	decisionID := s.generateDecisionID()
 
 	renderHeader(w)
 	renderBanner(w)
@@ -485,7 +511,9 @@ func (s *Server) indexGet(w http.ResponseWriter, r *http.Request) {
 		input = t.Value
 	}
 
-	results, err := s.execQuery(ctx, r, qStr, input, explainMode, false, false, true)
+	_, parsedQuery, _ := validateQuery(qStr)
+
+	results, err := s.execQuery(ctx, r, decisionID, parsedQuery, input, nil, explainMode, false, false, true)
 	if err != nil {
 		renderQueryResult(w, nil, err, t0)
 		return
@@ -539,8 +567,12 @@ func (s *Server) v0DataPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Ref) {
-	ctx := r.Context()
 	m := metrics.New()
+	m.Timer(metrics.ServerHandler).Start()
+
+	decisionID := s.generateDecisionID()
+
+	ctx := r.Context()
 	diagLogger := s.evalDiagnosticPolicy(r)
 	input, err := readInputV0(r)
 	if err != nil {
@@ -548,12 +580,14 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Re
 		return
 	}
 
-	var goInput interface{}
+	var goInput *interface{}
 	if input != nil {
-		if goInput, err = ast.JSON(input); err != nil {
+		x, err := ast.JSON(input)
+		if err != nil {
 			writer.ErrorString(w, http.StatusInternalServerError, types.CodeInvalidParameter, errors.Wrapf(err, "could not marshal input"))
 			return
 		}
+		goInput = &x
 	}
 
 	// Prepare for query.
@@ -575,7 +609,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Re
 		rego.Compiler(s.getCompiler()),
 		rego.Store(s.store),
 		rego.Transaction(txn),
-		rego.Input(goInput),
+		rego.ParsedInput(input),
 		rego.Query(path.String()),
 		rego.Metrics(m),
 		rego.Instrument(diagLogger.Instrument()),
@@ -585,9 +619,11 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Re
 
 	rs, err := rego.Eval(ctx)
 
+	m.Timer(metrics.ServerHandler).Stop()
+
 	// Handle results.
 	if err != nil {
-		diagLogger.Log(ctx, "", r.RemoteAddr, path.String(), goInput, nil, err, m, buf)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -597,7 +633,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Re
 		return
 	}
 
-	diagLogger.Log(ctx, "", r.RemoteAddr, path.String(), goInput, &rs[0].Expressions[0].Value, nil, m, buf)
+	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, &rs[0].Expressions[0].Value, nil, m, buf)
 	writer.JSON(w, 200, rs[0].Expressions[0].Value, false)
 }
 
@@ -618,6 +654,7 @@ func (s *Server) v1DiagnosticsGet(w http.ResponseWriter, r *http.Request) {
 			RemoteAddr: i.RemoteAddr,
 			Timestamp:  i.Timestamp.UTC().Format(time.RFC3339Nano),
 			Query:      i.Query,
+			Path:       i.Path,
 			Input:      i.Input,
 			Metrics:    i.Metrics.All(),
 		}
@@ -632,6 +669,29 @@ func (s *Server) v1DiagnosticsGet(w http.ResponseWriter, r *http.Request) {
 		resp.Result = append(resp.Result, item)
 	})
 	writer.JSON(w, 200, resp, pretty)
+}
+
+func (s *Server) unversionedGetHealth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	// Create very simple query that binds a single variable.
+	eval := rego.New(rego.Compiler(s.getCompiler()),
+		rego.Store(s.store), rego.Query("x = 1"))
+	// Run evaluation.
+	rs, err := eval.Eval(ctx)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+	type emptyObject struct{}
+	v, ok := rs[0].Bindings["x"]
+	if ok {
+		jsonNumber, ok := v.(json.Number)
+		if ok && jsonNumber.String() == "1" {
+			writer.JSON(w, http.StatusOK, emptyObject{}, false)
+			return
+		}
+	}
+	writer.JSON(w, http.StatusInternalServerError, emptyObject{}, false)
 }
 
 func (s *Server) v1VersionGet(w http.ResponseWriter, r *http.Request) {
@@ -760,6 +820,12 @@ func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
+	m := metrics.New()
+
+	m.Timer(metrics.ServerHandler).Start()
+
+	decisionID := s.generateDecisionID()
+
 	ctx := r.Context()
 	vars := mux.Vars(r)
 	path := stringPathToDataRef(vars["path"])
@@ -776,12 +842,12 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 	includeMetrics := getBoolParam(r.URL, types.ParamMetricsV1, true)
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
 
-	m := metrics.New()
 	m.Timer(metrics.RegoQueryParse).Start()
 
 	inputs := r.URL.Query()[types.ParamInputV1]
 
 	var input ast.Value
+
 	if len(inputs) > 0 {
 		var err error
 		input, err = readInputGetV1(inputs[len(inputs)-1])
@@ -793,13 +859,14 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 	m.Timer(metrics.RegoQueryParse).Stop()
 
-	var goInput interface{}
+	var goInput *interface{}
 	if input != nil {
-		var err error
-		if goInput, err = ast.JSON(input); err != nil {
+		x, err := ast.JSON(input)
+		if err != nil {
 			writer.ErrorString(w, http.StatusInternalServerError, types.CodeInvalidParameter, errors.Wrapf(err, "could not marshal input"))
 			return
 		}
+		goInput = &x
 	}
 
 	// Prepare for query.
@@ -827,7 +894,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		rego.Compiler(s.getCompiler()),
 		rego.Store(s.store),
 		rego.Transaction(txn),
-		rego.Input(goInput),
+		rego.ParsedInput(input),
 		rego.Query(path.String()),
 		rego.Metrics(m),
 		rego.Tracer(buf),
@@ -839,16 +906,16 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 	// Handle results.
 	if err != nil {
-		diagLogger.Log(ctx, "", r.RemoteAddr, path.String(), goInput, nil, err, m, buf)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
 		writer.ErrorAuto(w, err)
 		return
 	}
 
-	decisionID := s.generateDecisionID()
-
 	result := types.DataResponseV1{
 		DecisionID: decisionID,
 	}
+
+	m.Timer(metrics.ServerHandler).Stop()
 
 	if includeMetrics || includeInstrumentation {
 		result.Metrics = m.All()
@@ -861,7 +928,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 				writer.ErrorAuto(w, err)
 			}
 		}
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), goInput, nil, nil, m, buf)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, nil, m, buf)
 		writer.JSON(w, 200, result, pretty)
 		return
 	}
@@ -872,7 +939,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty)
 	}
 
-	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), goInput, result.Result, nil, m, buf)
+	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, result.Result, nil, m, buf)
 	writer.JSON(w, 200, result, pretty)
 }
 
@@ -914,6 +981,11 @@ func (s *Server) v1DataPatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
+	m := metrics.New()
+	m.Timer(metrics.ServerHandler).Start()
+
+	decisionID := s.generateDecisionID()
+
 	ctx := r.Context()
 	vars := mux.Vars(r)
 	path := stringPathToDataRef(vars["path"])
@@ -931,8 +1003,6 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
 	partial := getBoolParam(r.URL, types.ParamPartialV1, true)
 
-	m := metrics.New()
-
 	m.Timer(metrics.RegoQueryParse).Start()
 
 	input, err := readInputPostV1(r)
@@ -941,12 +1011,14 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var goInput interface{}
+	var goInput *interface{}
 	if input != nil {
-		if goInput, err = ast.JSON(input); err != nil {
+		x, err := ast.JSON(input)
+		if err != nil {
 			writer.ErrorString(w, http.StatusInternalServerError, types.CodeInvalidParameter, errors.Wrapf(err, "could not marshal input"))
 			return
 		}
+		goInput = &x
 	}
 
 	m.Timer(metrics.RegoQueryParse).Stop()
@@ -976,24 +1048,24 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		instrument = true
 	}
 
-	rego, err := s.makeRego(ctx, partial, txn, goInput, path.String(), m, instrument, buf, opts)
+	rego, err := s.makeRego(ctx, partial, txn, input, path.String(), m, instrument, buf, opts)
 
 	if err != nil {
-		diagLogger.Log(ctx, "", r.RemoteAddr, path.String(), goInput, nil, err, m, nil)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, nil)
 		writer.ErrorAuto(w, err)
 		return
 	}
 
 	rs, err := rego.Eval(ctx)
 
+	m.Timer(metrics.ServerHandler).Stop()
+
 	// Handle results.
 	if err != nil {
-		diagLogger.Log(ctx, "", r.RemoteAddr, path.String(), goInput, nil, err, m, buf)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
 		writer.ErrorAuto(w, err)
 		return
 	}
-
-	decisionID := s.generateDecisionID()
 
 	result := types.DataResponseV1{
 		DecisionID: decisionID,
@@ -1010,7 +1082,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 				writer.ErrorAuto(w, err)
 			}
 		}
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), goInput, nil, nil, m, buf)
+		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, nil, m, buf)
 		writer.JSON(w, 200, result, pretty)
 		return
 	}
@@ -1021,7 +1093,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty)
 	}
 
-	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), goInput, result.Result, nil, m, buf)
+	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, result.Result, nil, m, buf)
 	writer.JSON(w, 200, result, pretty)
 }
 
@@ -1320,6 +1392,10 @@ func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v1QueryGet(w http.ResponseWriter, r *http.Request) {
+	m := metrics.New()
+
+	decisionID := s.generateDecisionID()
+
 	ctx := r.Context()
 	values := r.URL.Query()
 
@@ -1330,10 +1406,16 @@ func (s *Server) v1QueryGet(w http.ResponseWriter, r *http.Request) {
 	}
 	qStr := qStrs[len(qStrs)-1]
 
-	unsafeBuiltins, err := validateQuery(qStr)
+	unsafeBuiltins, parsedQuery, err := validateQuery(qStr)
 	if err != nil {
-		writer.ErrorAuto(w, err)
-		return
+		switch err := err.(type) {
+		case ast.Errors:
+			writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, types.MsgParseQueryError).WithASTErrors(err))
+			return
+		default:
+			writer.ErrorAuto(w, err)
+			return
+		}
 	} else if len(unsafeBuiltins) > 0 {
 		writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, "unsafe built-in function calls in query: %v", strings.Join(unsafeBuiltins, ",")))
 		return
@@ -1350,7 +1432,7 @@ func (s *Server) v1QueryGet(w http.ResponseWriter, r *http.Request) {
 	includeMetrics := getBoolParam(r.URL, types.ParamMetricsV1, true)
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
 
-	results, err := s.execQuery(ctx, r, qStr, nil, explainMode, includeMetrics, includeInstrumentation, pretty)
+	results, err := s.execQuery(ctx, r, decisionID, parsedQuery, nil, m, explainMode, includeMetrics, includeInstrumentation, pretty)
 	if err != nil {
 		switch err := err.(type) {
 		case ast.Errors:
@@ -1365,6 +1447,10 @@ func (s *Server) v1QueryGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
+	m := metrics.New()
+
+	decisionID := s.generateDecisionID()
+
 	ctx := r.Context()
 
 	var request types.QueryRequestV1
@@ -1374,10 +1460,16 @@ func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	qStr := request.Query
-	unsafeBuiltins, err := validateQuery(qStr)
+	unsafeBuiltins, parsedQuery, err := validateQuery(qStr)
 	if err != nil {
-		writer.ErrorAuto(w, err)
-		return
+		switch err := err.(type) {
+		case ast.Errors:
+			writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, types.MsgParseQueryError).WithASTErrors(err))
+			return
+		default:
+			writer.ErrorAuto(w, err)
+			return
+		}
 	} else if len(unsafeBuiltins) > 0 {
 		writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, "unsafe built-in function calls in query: %v", strings.Join(unsafeBuiltins, ",")))
 		return
@@ -1394,7 +1486,7 @@ func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
 	includeMetrics := getBoolParam(r.URL, types.ParamMetricsV1, true)
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
 
-	results, err := s.execQuery(ctx, r, qStr, nil, explainMode, includeMetrics, includeInstrumentation, pretty)
+	results, err := s.execQuery(ctx, r, decisionID, parsedQuery, nil, m, explainMode, includeMetrics, includeInstrumentation, pretty)
 	if err != nil {
 		switch err := err.(type) {
 		case ast.Errors:
@@ -1591,7 +1683,7 @@ func (s *Server) getCompiler() *ast.Compiler {
 	return s.manager.GetCompiler()
 }
 
-func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transaction, input interface{}, path string, m metrics.Metrics, instrument bool, tracer topdown.Tracer, opts []func(*rego.Rego)) (*rego.Rego, error) {
+func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transaction, input ast.Value, path string, m metrics.Metrics, instrument bool, tracer topdown.Tracer, opts []func(*rego.Rego)) (*rego.Rego, error) {
 
 	if partial {
 		s.mtx.Lock()
@@ -1608,7 +1700,7 @@ func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transac
 			s.partials[path] = pr
 		}
 		opts := []func(*rego.Rego){
-			rego.Input(input),
+			rego.ParsedInput(input),
 			rego.Transaction(txn),
 			rego.Metrics(m),
 			rego.Instrument(instrument),
@@ -1617,7 +1709,7 @@ func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transac
 		return pr.Rego(opts...), nil
 	}
 
-	opts = append(opts, rego.Transaction(txn), rego.Query(path), rego.Input(input), rego.Metrics(m), rego.Tracer(tracer), rego.Instrument(instrument), rego.Runtime(s.runtime))
+	opts = append(opts, rego.Transaction(txn), rego.Query(path), rego.ParsedInput(input), rego.Metrics(m), rego.Tracer(tracer), rego.Instrument(instrument), rego.Runtime(s.runtime))
 	return rego.New(opts...), nil
 }
 
@@ -1702,15 +1794,16 @@ func stringPathToRef(s string) (r ast.Ref) {
 	return r
 }
 
-func validateQuery(query string) ([]string, error) {
+func validateQuery(query string) ([]string, ast.Body, error) {
 
 	var body ast.Body
 	body, err := ast.ParseBody(query)
 	if err != nil {
-		return []string{}, err
+		return []string{}, nil, err
 	}
 
-	return validateParsedQuery(body)
+	unsafeOperators, nil := validateParsedQuery(body)
+	return unsafeOperators, body, nil
 }
 
 func validateParsedQuery(body ast.Body) ([]string, error) {
@@ -2022,13 +2115,14 @@ func (l diagnosticsLogger) Instrument() bool {
 	return l.instrument
 }
 
-func (l diagnosticsLogger) Log(ctx context.Context, decisionID, remoteAddr, query string, input interface{}, results *interface{}, err error, m metrics.Metrics, tracer *topdown.BufferTracer) {
+func (l diagnosticsLogger) Log(ctx context.Context, decisionID, remoteAddr, path string, query string, input *interface{}, results *interface{}, err error, m metrics.Metrics, tracer *topdown.BufferTracer) {
 
 	info := &Info{
 		Revision:   l.revision,
 		Timestamp:  time.Now().UTC(),
 		DecisionID: decisionID,
 		RemoteAddr: remoteAddr,
+		Path:       path,
 		Query:      query,
 		Input:      input,
 		Results:    results,
