@@ -137,25 +137,56 @@ type DotStmt struct {
 	Target Local
 }
 
-// LoopStmt represents a loop operation on a composite value. The source of a
-// LoopStmt may be a scalar in which case the statement will be undefined.
-type LoopStmt struct {
+// LenStmt represents a length() operation on a local variable. The
+// result is stored in the target local variable.
+type LenStmt struct {
+	Source Local
+	Target Local
+}
+
+// ScanStmt represents a linear scan over a composite value. The
+// source may be a scalar in which case the block will never execute.
+type ScanStmt struct {
 	Source Local
 	Key    Local
 	Value  Local
-	Cond   Local
 	Block  Block
 }
 
-// AssignStmt represents an assignment of a local variable.
-type AssignStmt struct {
-	Value  Const
+// NotStmt represents a negated statement. The last statement in the negation
+// block will set the condition to false.
+type NotStmt struct {
+	Cond  Local
+	Block Block
+}
+
+// AssignBooleanStmt represents an assignment of a boolean value to a local variable.
+type AssignBooleanStmt struct {
+	Value  bool
+	Target Local
+}
+
+// AssignIntStmt represents an assignment of an integer value to a
+// local variable.
+type AssignIntStmt struct {
+	Value  int64
+	Target Local
+}
+
+// AssignVarStmt represents an assignment of one local variable to another.
+type AssignVarStmt struct {
+	Source Local
 	Target Local
 }
 
 // MakeStringStmt constructs a local variable that refers to a string constant.
 type MakeStringStmt struct {
 	Index  int
+	Target Local
+}
+
+// MakeNullStmt constructs a local variable that refers to a null value.
+type MakeNullStmt struct {
 	Target Local
 }
 
@@ -168,6 +199,17 @@ type MakeBooleanStmt struct {
 // MakeNumberIntStmt constructs a local variable that refers to an integer value.
 type MakeNumberIntStmt struct {
 	Value  int64
+	Target Local
+}
+
+// MakeArrayStmt constructs a local variable that refers to an array value.
+type MakeArrayStmt struct {
+	Capacity int32
+	Target   Local
+}
+
+// MakeObjectStmt constructs a local variable that refers to an object value.
+type MakeObjectStmt struct {
 	Target Local
 }
 
@@ -205,4 +247,29 @@ type GreaterThanEqualStmt struct {
 type NotEqualStmt struct {
 	A Local
 	B Local
+}
+
+// IsArrayStmt represents a dynamic type check on a local variable.
+type IsArrayStmt struct {
+	Source Local
+}
+
+// IsObjectStmt represents a dynamic type check on a local variable.
+type IsObjectStmt struct {
+	Source Local
+}
+
+// ArrayAppendStmt represents a dynamic append operation of a value
+// onto an array.
+type ArrayAppendStmt struct {
+	Value Local
+	Array Local
+}
+
+// ObjectInsertStmt represents a dynamic insert operation of a
+// key/value pair into an object.
+type ObjectInsertStmt struct {
+	Key    Local
+	Value  Local
+	Object Local
 }

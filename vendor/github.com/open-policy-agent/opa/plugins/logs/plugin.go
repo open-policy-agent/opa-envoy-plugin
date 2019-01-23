@@ -19,20 +19,31 @@ import (
 	"github.com/open-policy-agent/opa/plugins/rest"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/version"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
+// Logger defines the interface for decision logging plugins.
+type Logger interface {
+	plugins.Plugin
+	Log(context.Context, EventV1)
+}
+
 // EventV1 represents a decision log event.
 type EventV1 struct {
-	Labels      map[string]string `json:"labels"`
-	DecisionID  string            `json:"decision_id"`
-	Revision    string            `json:"revision,omitempty"`
-	Path        string            `json:"path"`
-	Input       *interface{}      `json:"input,omitempty"`
-	Result      *interface{}      `json:"result,omitempty"`
-	RequestedBy string            `json:"requested_by"`
-	Timestamp   time.Time         `json:"timestamp"`
+	Labels      map[string]string      `json:"labels"`
+	DecisionID  string                 `json:"decision_id"`
+	Revision    string                 `json:"revision,omitempty"`
+	Path        string                 `json:"path,omitempty"`
+	Query       string                 `json:"query,omitempty"`
+	Input       *interface{}           `json:"input,omitempty"`
+	Result      *interface{}           `json:"result,omitempty"`
+	Error       error                  `json:"error,omitempty"`
+	RequestedBy string                 `json:"requested_by"`
+	Timestamp   time.Time              `json:"timestamp"`
+	Version     string                 `json:"version"`
+	Metrics     map[string]interface{} `json:"metrics,omitempty"`
 }
 
 const (
@@ -54,14 +65,26 @@ type ReportingConfig struct {
 
 // Config represents the plugin configuration.
 type Config struct {
+	Plugin        *string         `json:"plugin"`
 	Service       string          `json:"service"`
 	PartitionName string          `json:"partition_name,omitempty"`
 	Reporting     ReportingConfig `json:"reporting"`
 }
 
-func (c *Config) validateAndInjectDefaults(services []string) error {
+func (c *Config) validateAndInjectDefaults(services []string, plugins []string) error {
 
-	if c.Service == "" && len(services) != 0 {
+	if c.Plugin != nil {
+		var found bool
+		for _, other := range plugins {
+			if other == *c.Plugin {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("invalid plugin name %q in decision_logs", *c.Plugin)
+		}
+	} else if c.Service == "" && len(services) != 0 {
 		c.Service = services[0]
 	} else {
 		found := false
@@ -132,8 +155,7 @@ type Plugin struct {
 }
 
 // ParseConfig validates the config and injects default values.
-func ParseConfig(config []byte, services []string) (*Config, error) {
-
+func ParseConfig(config []byte, services []string, plugins []string) (*Config, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -144,7 +166,7 @@ func ParseConfig(config []byte, services []string) (*Config, error) {
 		return nil, err
 	}
 
-	if err := parsedConfig.validateAndInjectDefaults(services); err != nil {
+	if err := parsedConfig.validateAndInjectDefaults(services, plugins); err != nil {
 		return nil, err
 	}
 
@@ -194,17 +216,38 @@ func (p *Plugin) Stop(ctx context.Context) {
 
 // Log appends a decision log event to the buffer for uploading.
 func (p *Plugin) Log(ctx context.Context, decision *server.Info) {
-	path := strings.Replace(strings.TrimPrefix(decision.Query, "data."), ".", "/", -1)
+
+	path := strings.Replace(strings.TrimPrefix(decision.Path, "data."), ".", "/", -1)
 
 	event := EventV1{
 		Labels:      p.manager.Labels(),
 		DecisionID:  decision.DecisionID,
 		Revision:    decision.Revision,
 		Path:        path,
-		Input:       &decision.Input,
+		Query:       decision.Query,
+		Input:       decision.Input,
 		Result:      decision.Results,
 		RequestedBy: decision.RemoteAddr,
 		Timestamp:   decision.Timestamp,
+		Version:     version.Version,
+	}
+
+	if decision.Metrics != nil {
+		event.Metrics = decision.Metrics.All()
+	}
+
+	if decision.Error != nil {
+		event.Error = decision.Error
+	}
+
+	if p.config.Plugin != nil {
+		proxy, ok := p.manager.Plugin(*p.config.Plugin).(Logger)
+		if !ok {
+			p.logError("Plugin does not implement Logger interface. Dropping event.")
+			return
+		}
+		proxy.Log(ctx, event)
+		return
 	}
 
 	p.mtx.Lock()
@@ -233,14 +276,19 @@ func (p *Plugin) loop() {
 	var retry int
 
 	for {
-		uploaded, err := p.oneShot(ctx)
+		var err error
 
-		if err != nil {
-			p.logError("%v.", err)
-		} else if uploaded {
-			p.logInfo("Logs uploaded successfully.")
-		} else {
-			p.logInfo("Log upload skipped.")
+		if p.config.Plugin == nil {
+			var uploaded bool
+			uploaded, err = p.oneShot(ctx)
+
+			if err != nil {
+				p.logError("%v.", err)
+			} else if uploaded {
+				p.logInfo("Logs uploaded successfully.")
+			} else {
+				p.logInfo("Log upload skipped.")
+			}
 		}
 
 		var delay time.Duration
@@ -253,7 +301,10 @@ func (p *Plugin) loop() {
 			delay = util.DefaultBackoff(float64(minRetryDelay), float64(*p.config.Reporting.MaxDelaySeconds), retry)
 		}
 
-		p.logDebug("Waiting %v before next upload/retry.", delay)
+		if p.config.Plugin == nil {
+			p.logDebug("Waiting %v before next upload/retry.", delay)
+		}
+
 		timer := time.NewTimer(delay)
 
 		select {

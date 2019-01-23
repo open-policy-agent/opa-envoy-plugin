@@ -841,15 +841,32 @@ func (c *Compiler) rewriteLocalAssignments() {
 
 			// Rewrite vars in head that refer to locally declared vars in the body.
 			vis := NewGenericVisitor(func(x interface{}) bool {
-				switch x := x.(type) {
-				case *Term:
-					if v, ok := x.Value.(Var); ok {
-						if gv, ok := declared[v]; ok {
-							x.Value = gv
-							return true
+
+				term, ok := x.(*Term)
+				if !ok {
+					return false
+				}
+
+				switch v := term.Value.(type) {
+				case Object:
+					// Make a copy of the object because the keys may be mutated.
+					cpy, _ := v.Map(func(k, v *Term) (*Term, *Term, error) {
+						if vark, ok := k.Value.(Var); ok {
+							if gv, ok := declared[vark]; ok {
+								k = k.Copy()
+								k.Value = gv
+							}
 						}
+						return k, v, nil
+					})
+					term.Value = cpy
+				case Var:
+					if gv, ok := declared[v]; ok {
+						term.Value = gv
+						return true
 					}
 				}
+
 				return false
 			})
 
@@ -1029,7 +1046,12 @@ func (qc *queryCompiler) rewriteLocalAssignments(_ *QueryContext, body Body) (Bo
 	}
 	qc.rewritten = make(map[Var]Var, len(declared))
 	for k, v := range declared {
-		qc.rewritten[v] = k
+		// The vars returned during the rewrite will include all seen vars,
+		// even if they're not declared with an assignment operation. We don't
+		// want to include these inside the rewritten set though.
+		if Compare(k, v) != 0 {
+			qc.rewritten[v] = k
+		}
 	}
 	return body, nil
 }
@@ -1834,7 +1856,7 @@ func resolveRef(globals map[Var]Ref, ignore *assignedVarStack, ref Ref) Ref {
 	for i, x := range ref {
 		switch v := x.Value.(type) {
 		case Var:
-			if g, ok := globals[v]; ok {
+			if g, ok := globals[v]; ok && !ignore.Assigned(v) {
 				cpy := g.Copy()
 				for i := range cpy {
 					cpy[i].SetLocation(x.Location)
@@ -2491,8 +2513,13 @@ func rewriteDeclaredAssignment(g *localVarGenerator, stack *localDeclaredVars, e
 	}
 
 	// Rewrite terms on right hand side capture seen vars and recursively
-	// process comprehensions before left hand side is processed.
-	rewriteDeclaredVarsInTermRecursive(g, stack, expr.Operand(1), errs)
+	// process comprehensions before left hand side is processed. Also
+	// rewrite with modifier.
+	errs = rewriteDeclaredVarsInTermRecursive(g, stack, expr.Operand(1), errs)
+
+	for _, w := range expr.With {
+		errs = rewriteDeclaredVarsInTermRecursive(g, stack, w.Value, errs)
+	}
 
 	// Rewrite vars on right hand side with unique names. Catch redeclaration
 	// and invalid term types here.
@@ -2554,6 +2581,14 @@ func rewriteDeclaredVarsInTerm(g *localVarGenerator, stack *localDeclaredVars, t
 			return true, errs
 		}
 		return false, errs
+	case Object:
+		cpy, _ := v.Map(func(k, v *Term) (*Term, *Term, error) {
+			kcpy := k.Copy()
+			_, errs = rewriteDeclaredVarsInTerm(g, stack, kcpy, errs)
+			_, errs = rewriteDeclaredVarsInTerm(g, stack, v, errs)
+			return kcpy, v, nil
+		})
+		term.Value = cpy
 	case *ArrayComprehension:
 		errs = rewriteDeclaredVarsInArrayComprehension(g, stack, v, errs)
 	case *SetComprehension:
@@ -2567,8 +2602,15 @@ func rewriteDeclaredVarsInTerm(g *localVarGenerator, stack *localDeclaredVars, t
 }
 
 func rewriteDeclaredVarsInTermRecursive(g *localVarGenerator, stack *localDeclaredVars, term *Term, errs Errors) Errors {
-	WalkTerms(term, func(term *Term) bool {
-		_, errs = rewriteDeclaredVarsInTerm(g, stack, term, errs)
+	WalkNodes(term, func(n Node) bool {
+		switch n := n.(type) {
+		case *With:
+			_, errs = rewriteDeclaredVarsInTerm(g, stack, n.Value, errs)
+			return true
+		case *Term:
+			_, errs = rewriteDeclaredVarsInTerm(g, stack, n, errs)
+			return false
+		}
 		return false
 	})
 	return errs

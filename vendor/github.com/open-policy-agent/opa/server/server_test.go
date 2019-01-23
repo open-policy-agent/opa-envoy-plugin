@@ -8,12 +8,16 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -21,6 +25,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/server/identifier"
 	"github.com/open-policy-agent/opa/server/types"
@@ -42,6 +47,16 @@ type tr struct {
 type trw struct {
 	tr   tr
 	wait chan struct{}
+}
+
+func TestUnversionedGetHealth(t *testing.T) {
+
+	f := newFixture(t)
+
+	req := newReqUnversioned(http.MethodGet, "/health", "")
+	if err := f.executeRequest(req, 200, `{}`); err != nil {
+		t.Fatalf("Unexpected error while health check: %v", err)
+	}
 }
 
 func TestDataV0(t *testing.T) {
@@ -1178,6 +1193,7 @@ func TestDataMetrics(t *testing.T) {
 		"timer_rego_query_parse_ns",
 		"timer_rego_query_compile_ns",
 		"timer_rego_query_eval_ns",
+		"timer_server_handler_ns",
 	}
 
 	for _, key := range expected {
@@ -1202,6 +1218,7 @@ func TestDataMetrics(t *testing.T) {
 		"timer_rego_query_compile_ns",
 		"timer_rego_query_eval_ns",
 		"timer_rego_partial_eval_ns",
+		"timer_server_handler_ns",
 	}
 
 	for _, key := range expected {
@@ -1885,6 +1902,7 @@ func TestDiagnostics(t *testing.T) {
 	exp := []struct {
 		remoteAddr string
 		query      string
+		path       string
 		input      interface{}
 		result     *interface{}
 		metrics    bool
@@ -1893,48 +1911,48 @@ func TestDiagnostics(t *testing.T) {
 	}{
 		{
 			remoteAddr: "testaddr",
-			query:      "data.x",
+			path:       "data.x",
 			result:     &expList,
 			metrics:    true,
 		},
 		{
-			query:   "data.x",
+			path:    "data.x",
 			input:   map[string]interface{}{"test": "foo"},
 			result:  &expList,
 			metrics: true,
 		},
 		{
-			query:   "a=data.x",
+			query:   "a = data.x",
 			result:  &expMap1,
 			metrics: true,
 		},
 		{
-			query:      "data.x",
+			path:       "data.x",
 			result:     &expList,
 			metrics:    true,
 			instrument: true,
 			explainLen: 5,
 		},
 		{
-			query:      "data.z",
+			path:       "data.z",
 			result:     nil,
 			metrics:    true,
 			instrument: true,
 			explainLen: 3,
 		},
 		{
-			query:      "a=data.x",
+			query:      "a = data.x",
 			result:     &expMap1,
 			metrics:    true,
 			instrument: true,
 			explainLen: 5,
 		},
 		{
-			query:  "a=data.y",
+			query:  "a = data.y",
 			result: &expMap2,
 		},
 		{
-			query:  "data.system.main",
+			path:   "data.system.main",
 			result: &expStr,
 		},
 	}
@@ -1957,6 +1975,8 @@ func TestDiagnostics(t *testing.T) {
 		test.Subtest(t, fmt.Sprint(i), func(t *testing.T) {
 			e := exp[i]
 			if e.query != d.Query {
+				t.Fatalf("Expected query to be %v, got %v", e.query, d.Query)
+			} else if e.path != d.Path {
 				t.Fatalf("Expected query to be %v, got %v", e.query, d.Query)
 			}
 
@@ -2094,42 +2114,163 @@ func TestDecisionIDs(t *testing.T) {
 	}
 }
 
-func TestDecisonLogging(t *testing.T) {
+func TestDecisionLogging(t *testing.T) {
 	f := newFixture(t)
+
 	decisions := []*Info{}
-	f.server = f.server.WithDecisionLogger(func(_ context.Context, info *Info) {
+
+	var nextID int
+
+	f.server = f.server.WithDecisionIDFactory(func() string {
+		nextID++
+		return fmt.Sprint(nextID)
+	}).WithDecisionLogger(func(_ context.Context, info *Info) {
 		decisions = append(decisions, info)
 	})
 
-	if err := f.v1("PUT", "/policies/test", "package system\nmain=true", 200, "{}"); err != nil {
-		t.Fatal(err)
+	reqs := []struct {
+		raw      *http.Request
+		v0       bool
+		method   string
+		path     string
+		body     string
+		code     int
+		response string
+	}{
+		{
+			method:   "PUT",
+			path:     "/policies/test",
+			body:     "package system\nmain=true",
+			response: "{}",
+		},
+		{
+			method:   "POST",
+			path:     "/data",
+			response: `{"result": {}, "decision_id": "1"}`,
+		},
+		{
+			method:   "GET",
+			path:     "/data",
+			response: `{"result": {}, "decision_id": "2"}`,
+		},
+		{
+			method:   "POST",
+			path:     "/data/nonexistent",
+			body:     `{"input": {"foo": 1}}`,
+			response: `{"decision_id": "3"}`,
+		},
+		{
+			method:   "POST",
+			v0:       true,
+			path:     "/data",
+			response: `{}`,
+		},
+		{
+			raw:      newReqUnversioned("POST", "/", ""),
+			response: "true",
+		},
+		{
+			method:   "GET",
+			path:     "/query?q=data=x",
+			response: `{"result": [{"x": {}}]}`,
+		},
+		{
+			method:   "POST",
+			path:     "/query",
+			body:     `{"query": "data=x"}`,
+			response: `{"result": [{"x": {}}]}`,
+		},
+		{
+			method:   "PUT",
+			path:     "/policies/test2",
+			body:     "package foo\np { 1/0 }",
+			response: `{}`,
+		},
+		{
+			method:   "PUT",
+			path:     "/policies/test",
+			body:     "package system\nmain { data.foo.p }",
+			response: `{}`,
+		},
+		{
+			method: "POST",
+			path:   "/data",
+			code:   500,
+		},
+		{
+			method: "GET",
+			path:   "/data",
+			code:   500,
+		},
+		{
+			raw:  newReqUnversioned("POST", "/", ""),
+			code: 500,
+		},
 	}
 
-	if err := f.v1("POST", "/data", "", 200, `{"result": {}}`); err != nil {
-		t.Fatal(err)
+	for _, r := range reqs {
+		code := r.code
+		if code == 0 {
+			code = http.StatusOK
+		}
+		if r.raw != nil {
+			if err := f.executeRequest(r.raw, code, r.response); err != nil {
+				t.Fatal(err)
+			}
+		} else if r.v0 {
+			if err := f.v0(r.method, r.path, r.body, code, r.response); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := f.v1(r.method, r.path, r.body, code, r.response); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
-	if err := f.v1("GET", "/data", "", 200, `{"result": {}}`); err != nil {
-		t.Fatal(err)
+	exp := []struct {
+		input   string
+		path    string
+		query   string
+		wantErr bool
+	}{
+		{path: "data"},
+		{path: "data"},
+		{path: "data.nonexistent", input: `{"foo": 1}`},
+		{path: "data"},
+		{path: "data.system.main"},
+		{query: "data = x"},
+		{query: "data = x"},
+		{path: "data", wantErr: true},
+		{path: "data", wantErr: true},
+		{path: "data.system.main", wantErr: true},
 	}
 
-	if err := f.v0("POST", "/data", "", 200, `{}`); err != nil {
-		t.Fatal(err)
+	if len(decisions) != len(exp) {
+		t.Fatalf("Expected exactly %d decisions but got: %d", len(exp), len(decisions))
 	}
 
-	req := newReqUnversioned("POST", "/", "")
-
-	if err := f.executeRequest(req, 200, "true"); err != nil {
-		t.Fatal(err)
+	for i, d := range decisions {
+		if d.DecisionID == "" {
+			t.Fatalf("Expected decision ID on decision %d but got: %v", i, d)
+		}
+		if d.Metrics.Timer(metrics.ServerHandler).Value() == 0 {
+			t.Fatalf("Expected server handler timer to be started on decision %d but got %v", i, d)
+		}
+		if exp[i].path != d.Path || exp[i].query != d.Query {
+			t.Fatalf("Unexpected path or query on %d, want: %v but got: %v", i, exp[i], d)
+		}
+		if exp[i].wantErr && d.Error == nil || !exp[i].wantErr && d.Error != nil {
+			t.Fatalf("Unexpected error on %d, wantErr: %v, got: %v", i, exp[i].wantErr, d)
+		}
+		if exp[i].input != "" {
+			input := util.MustUnmarshalJSON([]byte(exp[i].input))
+			if d.Input == nil || !reflect.DeepEqual(input, *d.Input) {
+				t.Fatalf("Unexpected input on %d, want: %v, but got: %v", i, exp[i], d)
+			}
+		}
 	}
 
-	if err := f.v1("GET", "/query?q=data=x", "", 200, `{"result": [{"x": {}}]}`); err != nil {
-		t.Fatal(err)
-	}
-
-	if len(decisions) != 5 {
-		t.Fatalf("Expected exactly 5 decisions but got: %d", len(decisions))
-	}
 }
 
 func TestWatchParams(t *testing.T) {
@@ -2332,6 +2473,39 @@ func TestQueryV1(t *testing.T) {
 
 	if !reflect.DeepEqual(result, expected) {
 		t.Fatalf("Expected %v but got: %v", expected, result)
+	}
+}
+
+func TestBadQueryV1(t *testing.T) {
+	f := newFixture(t)
+	get := newReqV1(http.MethodGet, `/query?q=^ -i`, "")
+	f.server.Handler.ServeHTTP(f.recorder, get)
+
+	if f.recorder.Code != 400 {
+		t.Fatalf("Expected success but got %v", f.recorder)
+	}
+
+	expectedErr := `{
+  "code": "invalid_parameter",
+  "message": "error(s) occurred while parsing query",
+  "errors": [
+    {
+      "code": "rego_parse_error",
+      "message": "no match found",
+      "location": {
+        "file": "",
+        "row": 1,
+        "col": 1
+      },
+      "details": {}
+    }
+  ]
+}`
+
+	recvErr := f.recorder.Body.String()
+
+	if recvErr != expectedErr {
+		t.Fatalf(`Expected %v but got: %v`, expectedErr, recvErr)
 	}
 }
 
@@ -2874,4 +3048,126 @@ func (m *mockResponseWriterConn) consumeQueryResultStream() ([]queryResultStream
 		}
 	}
 	return result, nil
+}
+
+func TestAuthenticationTLS(t *testing.T) {
+	ctx := context.Background()
+	store := inmem.New()
+	m, err := plugins.New([]byte{}, "test", store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
+
+	authzPolicy := `package system.authz
+import input.identity
+default allow = false
+allow {
+	identity = "CN=my-client"
+}`
+
+	if err := store.UpsertPolicy(ctx, txn, "test", []byte(authzPolicy)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Commit(ctx, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	caCertPEM, err := ioutil.ReadFile("testdata/ca.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	if ok := pool.AppendCertsFromPEM(caCertPEM); !ok {
+		t.Fatal("failed to parse CA cert")
+	}
+	cert, err := tls.LoadX509KeyPair("testdata/server-cert.pem", "testdata/server-key.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := New().
+		WithAddresses([]string{"https://127.0.0.1:8182"}).
+		WithStore(store).
+		WithManager(m).
+		WithCertificate(&cert).
+		WithCertPool(pool).
+		WithAuthentication(AuthenticationTLS).
+		WithAuthorization(AuthorizationBasic).
+		Init(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Replicating some of what happens in the server's HTTPS listener
+	s := httptest.NewUnstartedServer(server.Handler)
+	s.TLS = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    pool,
+	}
+	s.StartTLS()
+	defer s.Close()
+	endpoint := s.URL + "/v1/data/foo"
+
+	t.Run("happy path", func(t *testing.T) {
+		c := newClient(t, pool, "testdata/client-cert.pem", "testdata/client-key.pem")
+		resp, err := c.Get(endpoint)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %s", resp.Status)
+		}
+	})
+
+	t.Run("authn successful, authz failed", func(t *testing.T) {
+		c := newClient(t, pool, "testdata/client-cert-2.pem", "testdata/client-key-2.pem")
+		resp, err := c.Get(endpoint)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected status 401, got %s", resp.Status)
+		}
+	})
+
+	t.Run("client trusts server, but doesn't provide client cert", func(t *testing.T) {
+		c := newClient(t, pool)
+		_, err := c.Get(endpoint)
+		if _, ok := err.(*url.Error); !ok {
+			t.Errorf("expected *url.Error, got %T: %v", err, err)
+		}
+	})
+}
+
+func newClient(t *testing.T, pool *x509.CertPool, clientKeyPair ...string) *http.Client {
+	t.Helper()
+	c := *http.DefaultClient
+	// Note: zero-values in http.Transport are bad settings -- they let the client
+	// leak connections -- but it's good enough for these tests. Don't instantiate
+	// http.Transport without providing non-zero values in non-test code, please.
+	// See https://github.com/golang/go/issues/19620 for details.
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			RootCAs: pool,
+		},
+	}
+	if len(clientKeyPair) == 2 {
+		clientCert, err := tls.LoadX509KeyPair(clientKeyPair[0], clientKeyPair[1])
+		if err != nil {
+			t.Fatalf("read test client cert/key: %v", err)
+		}
+		tr.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
+	}
+	c.Transport = tr
+	return &c
 }

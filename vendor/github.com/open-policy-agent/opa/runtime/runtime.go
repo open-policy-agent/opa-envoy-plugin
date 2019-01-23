@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -33,13 +34,15 @@ import (
 )
 
 var (
-	registeredPlugins    map[string]plugins.PluginInitFunc
+	registeredPlugins    map[string]plugins.Factory
 	registeredPluginsMux sync.Mutex
 )
 
-// RegisterPlugin registers a plugin with the plugins package. When a Runtime
-// is created, the factory functions will be called. This function is idempotent.
-func RegisterPlugin(name string, factory plugins.PluginInitFunc) {
+// RegisterPlugin registers a plugin factory with the runtime
+// package. When the runtime is created, the factories are used to parse
+// plugin configuration and instantiate plugins. If no configuration is
+// provided, plugins are not instantiated. This function is idempotent.
+func RegisterPlugin(name string, factory plugins.Factory) {
 	registeredPluginsMux.Lock()
 	defer registeredPluginsMux.Unlock()
 	registeredPlugins[name] = factory
@@ -68,6 +71,9 @@ type Params struct {
 	// Certificate is the certificate to use in server-mode. If the certificate
 	// is nil, the server will NOT use TLS.
 	Certificate *tls.Certificate
+
+	// CertPool holds the CA certs trusted by the OPA server.
+	CertPool *x509.CertPool
 
 	// HistoryPath is the filename to store the interactive shell user
 	// input history.
@@ -193,7 +199,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, errors.Wrapf(err, "config error")
 	}
 
-	disco, err := discovery.New(manager, discovery.CustomPlugins(registeredPlugins))
+	disco, err := discovery.New(manager, discovery.Factories(registeredPlugins))
 	if err != nil {
 		return nil, errors.Wrapf(err, "config error")
 	}
@@ -233,6 +239,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 		WithAddresses(*rt.Params.Addrs).
 		WithInsecureAddress(rt.Params.InsecureAddr).
 		WithCertificate(rt.Params.Certificate).
+		WithCertPool(rt.Params.CertPool).
 		WithAuthentication(rt.Params.Authentication).
 		WithAuthorization(rt.Params.Authorization).
 		WithDiagnosticsBuffer(rt.Params.DiagnosticsBuffer).
@@ -532,5 +539,5 @@ func uuid4() (string, error) {
 }
 
 func init() {
-	registeredPlugins = make(map[string]plugins.PluginInitFunc)
+	registeredPlugins = make(map[string]plugins.Factory)
 }
