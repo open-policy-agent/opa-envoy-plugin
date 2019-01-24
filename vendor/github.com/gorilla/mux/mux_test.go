@@ -104,7 +104,15 @@ func TestHost(t *testing.T) {
 			path:        "",
 			shouldMatch: false,
 		},
-		// BUG {new(Route).Host("aaa.bbb.ccc:1234"), newRequestHost("GET", "/111/222/333", "aaa.bbb.ccc:1234"), map[string]string{}, "aaa.bbb.ccc:1234", "", true},
+		{
+			title:       "Host route with port, match with request header",
+			route:       new(Route).Host("aaa.bbb.ccc:1234"),
+			request:     newRequestHost("GET", "/111/222/333", "aaa.bbb.ccc:1234"),
+			vars:        map[string]string{},
+			host:        "aaa.bbb.ccc:1234",
+			path:        "",
+			shouldMatch: true,
+		},
 		{
 			title:       "Host route with port, wrong host in request header",
 			route:       new(Route).Host("aaa.bbb.ccc:1234"),
@@ -113,6 +121,16 @@ func TestHost(t *testing.T) {
 			host:        "aaa.bbb.ccc:1234",
 			path:        "",
 			shouldMatch: false,
+		},
+		{
+			title:        "Host route with pattern, match with request header",
+			route:        new(Route).Host("aaa.{v1:[a-z]{3}}.ccc:1{v2:(?:23|4)}"),
+			request:      newRequestHost("GET", "/111/222/333", "aaa.bbb.ccc:123"),
+			vars:         map[string]string{"v1": "bbb", "v2": "23"},
+			host:         "aaa.bbb.ccc:123",
+			path:         "",
+			hostTemplate: `aaa.{v1:[a-z]{3}}.ccc:1{v2:(?:23|4)}`,
+			shouldMatch:  true,
 		},
 		{
 			title:        "Host route with pattern, match",
@@ -2694,6 +2712,38 @@ func Test_copyRouteConf(t *testing.T) {
 				t.Errorf("route confs unequal: %v %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMethodNotAllowed(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }
+	router := NewRouter()
+	router.HandleFunc("/thing", handler).Methods(http.MethodGet)
+	router.HandleFunc("/something", handler).Methods(http.MethodGet)
+
+	w := NewRecorder()
+	req := newRequest(http.MethodPut, "/thing")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != 405 {
+		t.Fatalf("Expected status code 405 (got %d)", w.Code)
+	}
+}
+
+func TestSubrouterNotFound(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }
+	router := NewRouter()
+	router.Path("/a").Subrouter().HandleFunc("/thing", handler).Methods(http.MethodGet)
+	router.Path("/b").Subrouter().HandleFunc("/something", handler).Methods(http.MethodGet)
+
+	w := NewRecorder()
+	req := newRequest(http.MethodPut, "/not-present")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("Expected status code 404 (got %d)", w.Code)
 	}
 }
 

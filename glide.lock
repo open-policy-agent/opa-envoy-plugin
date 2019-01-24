@@ -1,5 +1,5 @@
-hash: c00a686ae4137e0d19767e7c7dc5ab0434de4140701b1329011aa79508668fa4
-updated: 2019-01-03T16:24:38.806381-08:00
+hash: 9517d85eeaffd666652ae488314ed038d321d30561c2baaaac70dff0800d9e88
+updated: 2019-01-24T01:43:02.606303-08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
@@ -34,7 +34,7 @@ imports:
 - name: github.com/golang/lint
   version: 85993ffd0a6cd043291f3f63d45d656d97b165bd
 - name: github.com/golang/protobuf
-  version: 1d3f30b51784bec5aad268e59fd3c2fc1c2fe73f
+  version: 347cf4a86c1cb8d262994d8ef5924d4576c5b331
   subpackages:
   - proto
   - ptypes
@@ -42,7 +42,7 @@ imports:
   - ptypes/duration
   - ptypes/timestamp
 - name: github.com/gorilla/mux
-  version: ef912dd76ebe9d9848c6e0fd80eaebccc9a11631
+  version: 08e7f807d38d6a870193019bb439056118661505
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/lyft/protoc-gen-validate
@@ -58,7 +58,7 @@ imports:
 - name: github.com/OneOfOne/xxhash
   version: 84bd68eb036df97d139c0ca2cf33b0cf671dcc1b
 - name: github.com/open-policy-agent/opa
-  version: 6af8da83ad7d5170715ece38d0034ec3984c2786
+  version: a8526712721f1f4acd19a1b7ad844db79f1ccfed
   subpackages:
   - ast
   - bundle
@@ -128,7 +128,7 @@ imports:
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 14fa7590c24d4615893b68e22fce3b3489689f65
+  version: bf6a532e95b1f7a62adf0ab5050a5bb2237ad2f4
   subpackages:
   - internal/util
   - nfs
@@ -144,7 +144,7 @@ imports:
 - name: github.com/yashtewari/glob-intersection
   version: 7af743e8ec8480fee1932a737a406f7ec817f910
 - name: golang.org/x/crypto
-  version: ff983b9c42bc9fbf91556e191cc8efb585c16908
+  version: 057139ce5d2bdbe6fe73c53679e24e9cf007f637
   subpackages:
   - ssh/terminal
 - name: golang.org/x/lint
@@ -162,7 +162,7 @@ imports:
   - lex/httplex
   - trace
 - name: golang.org/x/sys
-  version: 82a175fd1598e8a172e58ebdf5ed262bb29129e5
+  version: c6b37f3e92850b723493d63fd35aad34e19e048d
   subpackages:
   - unix
   - windows
