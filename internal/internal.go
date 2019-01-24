@@ -28,10 +28,12 @@ import (
 const defaultAddr = ":9191"
 const defaultQuery = "data.istio.authz.allow"
 
-// New returns a Plugin that implements the Envoy ext_authz API.
-func New(m *plugins.Manager, bs []byte) (plugins.Plugin, error) {
+// Validate receives a slice of bytes representing the plugin's
+// configuration and returns a configuration value that can be used to
+// instantiate the plugin.
+func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
-	cfg := config{
+	cfg := Config{
 		Addr:  defaultAddr,
 		Query: defaultQuery,
 	}
@@ -46,25 +48,32 @@ func New(m *plugins.Manager, bs []byte) (plugins.Plugin, error) {
 	}
 	cfg.parsedQuery = parsedQuery
 
+	return &cfg, nil
+}
+
+// New returns a Plugin that implements the Envoy ext_authz API.
+func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
+
 	plugin := &envoyExtAuthzGrpcServer{
 		manager: m,
-		cfg:     cfg,
+		cfg:     *cfg,
 		server:  grpc.NewServer(),
 	}
 
 	ext_authz.RegisterAuthorizationServer(plugin.server, plugin)
 
-	return plugin, nil
+	return plugin
 }
 
-type config struct {
+// Config represents the plugin configuration.
+type Config struct {
 	Addr        string `json:"addr"`
 	Query       string `json:"query"`
 	parsedQuery ast.Body
 }
 
 type envoyExtAuthzGrpcServer struct {
-	cfg     config
+	cfg     Config
 	server  *grpc.Server
 	manager *plugins.Manager
 }

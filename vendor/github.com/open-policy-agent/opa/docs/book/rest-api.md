@@ -1400,11 +1400,24 @@ If the default decision (defaulting to `/system/main`) is undefined, the server 
 
 ### Execute an Ad-hoc Query
 
+Execute an ad-hoc query and return bindings for variables found in the query.
+
 ```
 GET /v1/query
 ```
 
-Execute an ad-hoc query and return bindings for variables found in the query.
+For queries that have large JSON values it is recommended to use the `POST` method with the query included as the `POST` body
+
+```
+POST /v1/query HTTP/1.1
+Content-Type: application/json
+```
+
+```json
+{
+  "query": "data.servers[i].ports[_] = \"p2\"; data.servers[i].name = name"
+}
+```
 
 #### Example Request
 
@@ -1436,7 +1449,7 @@ Content-Type: application/json
 
 #### Query Parameters
 
-- **q** - The ad-hoc query to execute. OPA will parse, compile, and execute the query represented by the parameter value. The value MUST be URL encoded.
+- **q** - The ad-hoc query to execute. OPA will parse, compile, and execute the query represented by the parameter value. The value MUST be URL encoded. Only used in GET method. For POST method the query is sent as part of the request body and this parameter is not used. 
 - **pretty** - If parameter is `true`, response will formatted for humans.
 - **explain** - Return query explanation in addition to result. Values: **full**.
 - **metrics** - Return query performance metrics in addition to result. See [Performance Metrics](#performance-metrics) for more detail.
@@ -1846,6 +1859,7 @@ OPA currently supports the following query performance metrics:
 - **timer_rego_query_eval_ns**: time taken (in nanonseconds) to evaluate the query.
 - **timer_rego_module_parse_ns**: time taken (in nanoseconds) to parse the input policy module.
 - **timer_rego_module_compile_ns**: time taken (in nanoseconds) to compile the loaded policy modules.
+- **timer_server_handler_ns**: time take (in nanoseconds) to handle the API request.
 
 OPA also supports query instrumentation. To enable query instrumentation,
 specify the `instrument=true` query parameter when executing the API call.

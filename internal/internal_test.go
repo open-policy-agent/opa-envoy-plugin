@@ -188,7 +188,7 @@ func testAuthzServer() *envoyExtAuthzGrpcServer {
 	}
 
 	s := &envoyExtAuthzGrpcServer{
-		cfg: config{
+		cfg: Config{
 			Addr:        ":50052",
 			Query:       query,
 			parsedQuery: parsedQuery,

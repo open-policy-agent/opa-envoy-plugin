@@ -76,8 +76,9 @@ type Info struct {
 	DecisionID string
 	RemoteAddr string
 	Query      string
+	Path       string
 	Timestamp  time.Time
-	Input      interface{}
+	Input      *interface{}
 	Results    *interface{}
 	Error      error
 	Metrics    metrics.Metrics

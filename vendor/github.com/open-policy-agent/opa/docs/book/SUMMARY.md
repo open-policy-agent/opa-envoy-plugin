@@ -121,9 +121,12 @@
   * [Prometheus](monitoring.md#prometheus)
 * [Discovery](discovery.md)
   * [Service API](discovery.md#discovery-service-api)
+  * [Example](discovery.md#example)
+  * [Limitations](discovery.md#limitations)
 * [Security](security.md)
   * [TLS and HTTPS](security.md#tls-and-https)
   * [Authentication and Authorization](security.md#authentication-and-authorization)
+* [Plugins](plugins.md)
 * [FAQ](faq.md)
 * [Comparison to Other Systems](comparison-to-other-systems.md)
   * [RBAC](comparison-to-other-systems.md#role-based-access-control-rbac)
@@ -140,6 +143,7 @@
   * [Kafka Authorization](kafka-authorization.md)
   * [Kubernetes Admission Control](kubernetes-admission-control.md)
   * [Terraform Testing](terraform.md)
+  * [Ceph Authorization](ceph-authorization.md)
 
 ## Best Practices
 
