@@ -264,6 +264,10 @@ The `input` value defined for your policy will resemble the JSON below:
 }
 ```
 
+## Limitations
+
+The OPA-Istio plugin does not support reporting [Decision Logs](https://www.openpolicyagent.org/docs/decision_logs.html) to remote HTTP servers.
+
 ## Dependencies
 
 Dependencies are managed with [Glide](https://github.com/Masterminds/glide).
