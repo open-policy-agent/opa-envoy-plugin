@@ -12,6 +12,7 @@ import (
 	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
+	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
@@ -90,7 +91,7 @@ func TestCheckAllow(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer()
+	server := testAuthzServer(&testPlugin{})
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -98,6 +99,40 @@ func TestCheckAllow(t *testing.T) {
 	}
 	if output.Status.Code != int32(google_rpc.OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
+func TestCheckAllowWithLogger(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req v2alpha.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || *event.Result == false {
+		t.Fatal("Unexpected events:", customLogger.events)
 	}
 }
 
@@ -110,7 +145,8 @@ func TestCheckDeny(t *testing.T) {
 	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
 		panic(err)
 	}
-	server := testAuthzServer()
+
+	server := testAuthzServer(&testPlugin{})
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -121,7 +157,41 @@ func TestCheckDeny(t *testing.T) {
 	}
 }
 
-func testAuthzServer() *envoyExtAuthzGrpcServer {
+func TestCheckDenyWithLogger(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req v2alpha.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+		t.Fatal("Expected request to be denied but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || *event.Result == true {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+}
+
+func testAuthzServer(customLogger *testPlugin) *envoyExtAuthzGrpcServer {
 	ctx := context.Background()
 
 	// Define a RBAC policy to allow or deny requests based on user roles
@@ -177,6 +247,12 @@ func testAuthzServer() *envoyExtAuthzGrpcServer {
 		panic(err)
 	}
 
+	m.Register("test_plugin", customLogger)
+	config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin"}`), nil, []string{"test_plugin"})
+
+	plugin := logs.New(config, m)
+	m.Register(logs.Name, plugin)
+
 	if err := m.Start(ctx); err != nil {
 		panic(err)
 	}
@@ -197,4 +273,22 @@ func testAuthzServer() *envoyExtAuthzGrpcServer {
 	}
 
 	return s
+}
+
+type testPlugin struct {
+	events []logs.EventV1
+}
+
+func (p *testPlugin) Start(context.Context) error {
+	return nil
+}
+
+func (p *testPlugin) Stop(context.Context) {
+}
+
+func (p *testPlugin) Reconfigure(context.Context, interface{}) {
+}
+
+func (p *testPlugin) Log(_ context.Context, event logs.EventV1) {
+	p.events = append(p.events, event)
 }

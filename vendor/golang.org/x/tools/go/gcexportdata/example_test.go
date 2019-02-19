@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // +build go1.7
+// +build gc
 
 package gcexportdata_test
 
@@ -69,15 +70,15 @@ func ExampleRead() {
 // ExampleNewImporter demonstrates usage of NewImporter to provide type
 // information for dependencies when type-checking Go source code.
 func ExampleNewImporter() {
-	const src = `package myscanner
+	const src = `package myrpc
 
-// choosing a package that is unlikely to change across releases
-import "text/scanner"
+// choosing a package that doesn't change across releases
+import "net/rpc"
 
-const eof = scanner.EOF
+const defaultRPCPath = rpc.DefaultRPCPath
 `
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "myscanner.go", src, 0)
+	f, err := parser.ParseFile(fset, "myrpc.go", src, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,13 +86,13 @@ const eof = scanner.EOF
 	packages := make(map[string]*types.Package)
 	imp := gcexportdata.NewImporter(fset, packages)
 	conf := types.Config{Importer: imp}
-	pkg, err := conf.Check("myscanner", fset, []*ast.File{f}, nil)
+	pkg, err := conf.Check("myrpc", fset, []*ast.File{f}, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// object from imported package
-	pi := packages["text/scanner"].Scope().Lookup("EOF")
+	pi := packages["net/rpc"].Scope().Lookup("DefaultRPCPath")
 	fmt.Printf("const %s.%s %s = %s // %s\n",
 		pi.Pkg().Path(),
 		pi.Name(),
@@ -101,7 +102,7 @@ const eof = scanner.EOF
 	)
 
 	// object in source package
-	twopi := pkg.Scope().Lookup("eof")
+	twopi := pkg.Scope().Lookup("defaultRPCPath")
 	fmt.Printf("const %s %s = %s // %s\n",
 		twopi.Name(),
 		twopi.Type(),
@@ -111,8 +112,8 @@ const eof = scanner.EOF
 
 	// Output:
 	//
-	// const text/scanner.EOF untyped int = -1 // $GOROOT/src/text/scanner/scanner.go:75:1
-	// const eof untyped int = -1 // myscanner.go:6:7
+	// const net/rpc.DefaultRPCPath untyped string = "/_goRPC_" // $GOROOT/src/net/rpc/server.go:146:1
+	// const defaultRPCPath untyped string = "/_goRPC_" // myrpc.go:6:7
 }
 
 func slashify(posn token.Position) token.Position {
