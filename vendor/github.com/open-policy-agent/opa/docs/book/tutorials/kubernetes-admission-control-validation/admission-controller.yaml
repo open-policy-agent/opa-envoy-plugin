@@ -1,4 +1,4 @@
-# Grant OPA/kube-mgmt read-only access to resources. This let's kube-mgmt
+# Grant OPA/kube-mgmt read-only access to resources. This lets kube-mgmt
 # replicate resources into OPA so they can be used in policies.
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -78,7 +78,7 @@ spec:
         # authentication and authorization on the daemon. See the Security page for
         # details: https://www.openpolicyagent.org/docs/security.html.
         - name: opa
-          image: openpolicyagent/opa:0.10.3
+          image: openpolicyagent/opa:0.10.4
           args:
             - "run"
             - "--server"
