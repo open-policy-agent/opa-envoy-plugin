@@ -6,8 +6,10 @@ package internal
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -18,7 +20,9 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
+	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/sirupsen/logrus"
@@ -27,6 +31,16 @@ import (
 
 const defaultAddr = ":9191"
 const defaultQuery = "data.istio.authz.allow"
+
+var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
+
+type evalResult struct {
+	revision   string
+	decisionID string
+	txnID      uint64
+	decision   bool
+	metrics    metrics.Metrics
+}
 
 // Validate receives a slice of bytes representing the plugin's
 // configuration and returns a configuration value that can be used to
@@ -131,14 +145,14 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		return nil, err
 	}
 
-	result, txnID, metrics, err := p.eval(ctx, inputValue)
+	result, err := p.eval(ctx, inputValue)
 	if err != nil {
 		return nil, err
 	}
 
 	status := int32(google_rpc.PERMISSION_DENIED)
 
-	if result {
+	if result.decision {
 		status = int32(google_rpc.OK)
 	}
 
@@ -148,34 +162,46 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	logrus.WithFields(logrus.Fields{
 		"query":               p.cfg.Query,
-		"decision":            result,
+		"decision":            result.decision,
 		"err":                 err,
-		"txn":                 txnID,
-		"metrics":             metrics.All(),
+		"txn":                 result.txnID,
+		"metrics":             result.metrics.All(),
 		"total_decision_time": time.Since(start),
 	}).Info("Returning policy decision.")
+
+	defer p.log(ctx, input, result, err)
 
 	return resp, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opts ...func(*rego.Rego)) (bool, uint64, metrics.Metrics, error) {
-
-	m := metrics.New()
-	var decision bool
-	var txnID uint64
+func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opts ...func(*rego.Rego)) (*evalResult, error) {
+	result := &evalResult{}
+	result.metrics = metrics.New()
 
 	err := storage.Txn(ctx, p.manager.Store, storage.TransactionParams{}, func(txn storage.Transaction) error {
 
-		txnID = txn.ID()
+		var err error
+
+		result.revision, err = getRevision(ctx, p.manager.Store, txn)
+		if err != nil {
+			return err
+		}
+
+		result.decisionID, err = uuid4()
+		if err != nil {
+			return err
+		}
+
+		result.txnID = txn.ID()
 
 		logrus.WithFields(logrus.Fields{
 			"input": input,
 			"query": p.cfg.Query,
-			"txn":   txnID,
+			"txn":   result.txnID,
 		}).Infof("Executing policy query.")
 
 		opts = append(opts,
-			rego.Metrics(m),
+			rego.Metrics(result.metrics),
 			rego.ParsedQuery(p.cfg.parsedQuery),
 			rego.ParsedInput(input),
 			rego.Compiler(p.manager.GetCompiler()),
@@ -191,11 +217,61 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 		} else if b, ok := rs[0].Expressions[0].Value.(bool); !ok || len(rs) > 1 {
 			return fmt.Errorf("non-boolean decision")
 		} else {
-			decision = b
+			result.decision = b
 		}
 
 		return nil
 	})
 
-	return decision, txnID, m, err
+	return result, err
+}
+
+func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, result *evalResult, err error) {
+	plugin := logs.Lookup(p.manager)
+	if plugin == nil {
+		return
+	}
+
+	info := &server.Info{
+		Revision:   result.revision,
+		DecisionID: result.decisionID,
+		Timestamp:  time.Now(),
+		Query:      p.cfg.Query,
+		Input:      &input,
+		Error:      err,
+		Metrics:    result.metrics,
+	}
+
+	if err == nil {
+		var x interface{} = result.decision
+		info.Results = &x
+	}
+
+	plugin.Log(ctx, info)
+}
+
+func uuid4() (string, error) {
+	bs := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, bs)
+	if n != len(bs) || err != nil {
+		return "", err
+	}
+	bs[8] = bs[8]&^0xc0 | 0x80
+	bs[6] = bs[6]&^0xf0 | 0x40
+	return fmt.Sprintf("%x-%x-%x-%x-%x", bs[0:4], bs[4:6], bs[6:8], bs[8:10], bs[10:]), nil
+}
+
+func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction) (string, error) {
+	value, err := store.Read(ctx, txn, revisionPath)
+	if err != nil {
+		if storage.IsNotFound(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	revision, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("bad revision")
+	}
+	return revision, nil
 }

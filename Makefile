@@ -51,7 +51,7 @@ generate:
 	$(GO) generate
 
 build: generate
-	$(DISABLE_CGO) $(GO) build -o $(BIN) -ldflags $(LDFLAGS)
+	$(GO) build -o $(BIN) -ldflags $(LDFLAGS)
 
 build-mac:
 	@$(MAKE) build GOOS=darwin
@@ -59,8 +59,12 @@ build-mac:
 build-linux:
 	@$(MAKE) build GOOS=linux
 
+build-plugin:
+	$(GO) build -buildmode=plugin -o=opa_istio_plugin.so
+
 image:
 	@$(MAKE) build-linux
+	@$(MAKE) build-plugin
 	@$(MAKE) image-quick
 
 image-quick:
@@ -79,6 +83,7 @@ test: generate
 clean:
 	rm -f .Dockerfile_*
 	rm -f opa_*_*
+	rm -f *.so
 
 check: check-fmt check-vet check-lint
 

@@ -27,8 +27,10 @@ func (Factory) Validate(m *plugins.Manager, config []byte) (interface{}, error) 
 	return internal.Validate(m, config)
 }
 
-func init() {
+// Init register plugin factory with OPA.
+func Init() error {
 	runtime.RegisterPlugin("envoy.ext_authz.grpc", Factory{})
+	return nil
 }
 
 func main() {

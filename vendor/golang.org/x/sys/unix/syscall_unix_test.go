@@ -426,6 +426,7 @@ func TestPoll(t *testing.T) {
 		t.Skip("mkfifo syscall is not available on android and iOS, skipping test")
 	}
 
+	defer chtmpdir(t)()
 	f, cleanup := mktmpfifo(t)
 	defer cleanup()
 
@@ -642,7 +643,7 @@ func TestRenameat(t *testing.T) {
 
 	_, err = os.Stat(from)
 	if err == nil {
-		t.Errorf("Renameat: stat of renamed file %q unexpectedly suceeded", from)
+		t.Errorf("Renameat: stat of renamed file %q unexpectedly succeeded", from)
 	}
 }
 

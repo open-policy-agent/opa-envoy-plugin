@@ -10,7 +10,7 @@
 // modified to make the identifiers exported. It's provided here
 // for developers who want to write tools with similar semantics.
 // It needs to be manually kept in sync with upstream when changes are
-// made to cmd/go/internal/get; see https://golang.org/issues/11490.
+// made to cmd/go/internal/get; see https://golang.org/issue/11490.
 //
 package vcs // import "golang.org/x/tools/go/vcs"
 
@@ -603,15 +603,28 @@ type metaImport struct {
 // errNoMatch is returned from matchGoImport when there's no applicable match.
 var errNoMatch = errors.New("no import match")
 
+// pathPrefix reports whether sub is a prefix of s,
+// only considering entire path components.
+func pathPrefix(s, sub string) bool {
+	// strings.HasPrefix is necessary but not sufficient.
+	if !strings.HasPrefix(s, sub) {
+		return false
+	}
+	// The remainder after the prefix must either be empty or start with a slash.
+	rem := s[len(sub):]
+	return rem == "" || rem[0] == '/'
+}
+
 // matchGoImport returns the metaImport from imports matching importPath.
 // An error is returned if there are multiple matches.
 // errNoMatch is returned if none match.
 func matchGoImport(imports []metaImport, importPath string) (_ metaImport, err error) {
 	match := -1
 	for i, im := range imports {
-		if !strings.HasPrefix(importPath, im.Prefix) {
+		if !pathPrefix(importPath, im.Prefix) {
 			continue
 		}
+
 		if match != -1 {
 			err = fmt.Errorf("multiple meta tags match import path %q", importPath)
 			return
@@ -635,15 +648,6 @@ func expand(match map[string]string, s string) string {
 
 // vcsPaths lists the known vcs paths.
 var vcsPaths = []*vcsPath{
-	// go.googlesource.com
-	{
-		prefix: "go.googlesource.com",
-		re:     `^(?P<root>go\.googlesource\.com/[A-Za-z0-9_.\-]+/?)$`,
-		vcs:    "git",
-		repo:   "https://{root}",
-		check:  noVCSSuffix,
-	},
-
 	// Github
 	{
 		prefix: "github.com/",
@@ -718,7 +722,7 @@ func bitbucketVCS(match map[string]string) error {
 	var resp struct {
 		SCM string `json:"scm"`
 	}
-	url := expand(match, "https://api.bitbucket.org/1.0/repositories/{bitname}")
+	url := expand(match, "https://api.bitbucket.org/2.0/repositories/{bitname}?fields=scm")
 	data, err := httpGET(url)
 	if err != nil {
 		return err

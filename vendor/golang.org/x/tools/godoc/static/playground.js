@@ -40,27 +40,52 @@ here's a skeleton implementation of a playground transport.
         }
 */
 
-function HTTPTransport() {
+// HTTPTransport is the default transport.
+// enableVet enables running vet if a program was compiled and ran successfully.
+// If vet returned any errors, display them before the output of a program.
+function HTTPTransport(enableVet) {
 	'use strict';
 
-	// TODO(adg): support stderr
+	function playback(output, data) {
+		// Backwards compatibility: default values do not affect the output.
+		var events = data.Events || [];
+		var errors = data.Errors || "";
+		var status = data.Status || 0;
+		var isTest = data.IsTest || false;
+		var testsFailed = data.TestsFailed || 0;
 
-	function playback(output, events) {
 		var timeout;
 		output({Kind: 'start'});
 		function next() {
 			if (!events || events.length === 0) {
-				output({Kind: 'end'});
+				if (isTest) {
+					if (testsFailed > 0) {
+						output({Kind: 'system', Body: '\n'+testsFailed+' test'+(testsFailed>1?'s':'')+' failed.'});
+					} else {
+						output({Kind: 'system', Body: '\nAll tests passed.'});
+					}
+				} else {
+					if (status > 0) {
+						output({Kind: 'end', Body: 'status ' + status + '.'});
+					} else {
+						if (errors !== "") {
+							// errors are displayed only in the case of timeout.
+							output({Kind: 'end', Body: errors + '.'});
+						} else {
+							output({Kind: 'end'});
+						}
+					}
+				}
 				return;
 			}
 			var e = events.shift();
 			if (e.Delay === 0) {
-				output({Kind: 'stdout', Body: e.Message});
+				output({Kind: e.Kind, Body: e.Message});
 				next();
 				return;
 			}
 			timeout = setTimeout(function() {
-				output({Kind: 'stdout', Body: e.Message});
+				output({Kind: e.Kind, Body: e.Message});
 				next();
 			}, e.Delay / 1000000);
 		}
@@ -69,13 +94,19 @@ function HTTPTransport() {
 			Stop: function() {
 				clearTimeout(timeout);
 			}
-		}
+		};
 	}
 
 	function error(output, msg) {
 		output({Kind: 'start'});
 		output({Kind: 'stderr', Body: msg});
 		output({Kind: 'end'});
+	}
+
+	function buildFailed(output, msg) {
+		output({Kind: 'start'});
+		output({Kind: 'stderr', Body: msg});
+		output({Kind: 'system', Body: '\nGo build failed.'});
 	}
 
 	var seq = 0;
@@ -93,10 +124,39 @@ function HTTPTransport() {
 					if (!data) return;
 					if (playing != null) playing.Stop();
 					if (data.Errors) {
-						error(output, data.Errors);
+						if (data.Errors === 'process took too long') {
+							// Playback the output that was captured before the timeout.
+							playing = playback(output, data);
+						} else {
+							buildFailed(output, data.Errors);
+						}
 						return;
 					}
-					playing = playback(output, data.Events);
+
+					if (!enableVet) {
+						playing = playback(output, data);
+						return;
+					}
+
+					$.ajax("/vet", {
+						data: {"body": body},
+						type: "POST",
+						dataType: "json",
+						success: function(dataVet) {
+							if (dataVet.Errors) {
+								if (!data.Events) {
+									data.Events = [];
+								}
+								// inject errors from the vet as the first events in the output
+								data.Events.unshift({Message: 'Go vet exited.\n\n', Kind: 'system', Delay: 0});
+								data.Events.unshift({Message: dataVet.Errors, Kind: 'stderr', Delay: 0});
+							}
+							playing = playback(output, data);
+						},
+						error: function() {
+							playing = playback(output, data);
+						}
+					});
 				},
 				error: function() {
 					error(output, 'Error communicating with remote server.');
@@ -127,7 +187,7 @@ function SocketTransport() {
 
 	websocket.onclose = function() {
 		console.log('websocket connection closed');
-	}
+	};
 
 	websocket.onmessage = function(e) {
 		var m = JSON.parse(e.data);
@@ -139,7 +199,7 @@ function SocketTransport() {
 			started[m.Id] = true;
 		}
 		output({Kind: m.Kind, Body: m.Body});
-	}
+	};
 
 	function send(m) {
 		websocket.send(JSON.stringify(m));
@@ -207,7 +267,7 @@ function PlaygroundOutput(el) {
 
 		if (needScroll)
 			el.scrollTop = el.scrollHeight - el.offsetHeight;
-	}
+	};
 }
 
 (function() {
@@ -223,7 +283,7 @@ function PlaygroundOutput(el) {
     return function(write) {
       if (write.Body) lineHighlight(write.Body);
       wrappedOutput(write);
-    }
+    };
   }
   function lineClear() {
     $(".lineerror").removeClass("lineerror");
@@ -238,14 +298,14 @@ function PlaygroundOutput(el) {
   //  shareEl - share button element (optional)
   //  shareURLEl - share URL text input element (optional)
   //  shareRedirect - base URL to redirect to on share (optional)
-  //  vetEl - vet button element (optional)
   //  toysEl - toys select element (optional)
   //  enableHistory - enable using HTML5 history API (optional)
   //  transport - playground transport to use (default is HTTPTransport)
   //  enableShortcuts - whether to enable shortcuts (Ctrl+S/Cmd+S to save) (default is false)
+  //  enableVet - enable running vet and displaying its errors
   function playground(opts) {
     var code = $(opts.codeEl);
-    var transport = opts['transport'] || new HTTPTransport();
+    var transport = opts['transport'] || new HTTPTransport(opts['enableVet']);
     var running;
 
     // autoindent helpers.
@@ -369,11 +429,6 @@ function PlaygroundOutput(el) {
       if (running) running.Kill();
       output.removeClass("error").text('Waiting for remote server...');
     }
-    function noError() {
-      lineClear();
-      if (running) running.Kill();
-      output.removeClass("error").text('No errors.');
-    }
     function run() {
       loading();
       running = transport.Run(body(), highlightOutput(PlaygroundOutput(output[0])));
@@ -396,26 +451,6 @@ function PlaygroundOutput(el) {
             setBody(data.Body);
             setError("");
           }
-        }
-      });
-    }
-
-    function vet() {
-      loading();
-      var data = {"body": body()};
-      $.ajax("/vet", {
-        data: data,
-        type: "POST",
-        dataType: "json",
-        success: function(data) {
-          if (data.Errors) {
-            setError(data.Errors);
-          } else {
-            noError();
-          }
-        },
-        error: function() {
-          setError('Error communicating with remote server.');
         }
       });
     }
@@ -467,7 +502,6 @@ function PlaygroundOutput(el) {
 
     $(opts.runEl).click(run);
     $(opts.fmtEl).click(fmt);
-    $(opts.vetEl).click(vet);
 
     if (opts.shareEl !== null && (opts.shareURLEl !== null || opts.shareRedirect !== null)) {
       if (opts.shareURLEl) {
