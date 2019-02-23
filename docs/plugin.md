@@ -28,8 +28,6 @@
 5. Create a configuration file.
 
     ```yaml
-    decision_logs:
-        plugin: envoy.ext_authz.grpc
     plugins:
         envoy.ext_authz.grpc:
             addr: :9191
