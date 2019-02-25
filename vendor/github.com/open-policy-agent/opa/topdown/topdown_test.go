@@ -1312,6 +1312,9 @@ func TestTopDownStrings(t *testing.T) {
 		{"substring", []string{`p = x { substring("abcdefgh", 2, 3, x) }`}, `"cde"`},
 		{"substring: remainder", []string{`p = x { substring("abcdefgh", 2, -1, x) }`}, `"cdefgh"`},
 		{"substring: too long", []string{`p = x { substring("abcdefgh", 2, 10000, x) }`}, `"cdefgh"`},
+		{"substring: offset negative", []string{`p = x { substring("aaa", -1, -1, x) }`}, fmt.Errorf("negative offset")},
+		{"substring: offset too long", []string{`p = x { substring("aaa", 3, -1, x) }`}, `""`},
+		{"substring: offset too long 2", []string{`p = x { substring("aaa", 4, -1, x) }`}, `""`},
 		{"contains", []string{`p = true { contains("abcdefgh", "defg") }`}, "true"},
 		{"contains: undefined", []string{`p = true { contains("abcdefgh", "ac") }`}, ""},
 		{"startswith", []string{`p = true { startswith("abcdefgh", "abcd") }`}, "true"},
@@ -3185,6 +3188,16 @@ func assertTopDownWithPath(t *testing.T, compiler *ast.Compiler, store storage.S
 
 	testutil.Subtest(t, note, func(t *testing.T) {
 		switch e := expected.(type) {
+		case Error:
+			result, err := query.Run(ctx)
+			if err == nil {
+				t.Errorf("Expected error but got: %v", result)
+				return
+			}
+			errString := err.Error()
+			if !strings.Contains(errString, e.Code) || !strings.Contains(errString, e.Message) {
+				t.Errorf("Expected error %v but got: %v", e, err)
+			}
 		case error:
 			result, err := query.Run(ctx)
 			if err == nil {

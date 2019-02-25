@@ -19,6 +19,7 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/runtime"
+	storedversion "github.com/open-policy-agent/opa/internal/version"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/discovery"
@@ -101,6 +102,9 @@ type Params struct {
 	// exiting early.
 	ErrorLimit int
 
+	// PprofEnabled flag controls whether pprof endpoints are enabled
+	PprofEnabled bool
+
 	// DecisionIDFactory generates decision IDs to include in API responses
 	// sent by the server (in response to Data API queries.)
 	DecisionIDFactory func() string
@@ -171,6 +175,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, errors.Wrapf(err, "storage error")
 	}
 
+	if err := storedversion.Write(ctx, store, txn); err != nil {
+		store.Abort(ctx, txn)
+		return nil, errors.Wrapf(err, "storage error")
+	}
+
 	if err := compileAndStoreInputs(ctx, store, txn, loaded.Modules, params.ErrorLimit); err != nil {
 		store.Abort(ctx, txn)
 		return nil, errors.Wrapf(err, "compile error")
@@ -236,6 +245,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 		WithStore(rt.Store).
 		WithManager(rt.Manager).
 		WithCompilerErrorLimit(rt.Params.ErrorLimit).
+		WithPprofEnabled(rt.Params.PprofEnabled).
 		WithAddresses(*rt.Params.Addrs).
 		WithInsecureAddress(rt.Params.InsecureAddr).
 		WithCertificate(rt.Params.Certificate).
@@ -244,7 +254,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 		WithAuthorization(rt.Params.Authorization).
 		WithDiagnosticsBuffer(rt.Params.DiagnosticsBuffer).
 		WithDecisionIDFactory(rt.decisionIDFactory).
-		WithDecisionLogger(rt.decisionLogger).
+		WithDecisionLoggerWithErr(rt.decisionLogger).
 		WithRuntime(rt.info).
 		Init(ctx)
 
@@ -312,12 +322,12 @@ func (rt *Runtime) decisionIDFactory() string {
 	return ""
 }
 
-func (rt *Runtime) decisionLogger(ctx context.Context, event *server.Info) {
+func (rt *Runtime) decisionLogger(ctx context.Context, event *server.Info) error {
 	plugin := logs.Lookup(rt.Manager)
 	if plugin == nil {
-		return
+		return nil
 	}
-	plugin.Log(ctx, event)
+	return plugin.Log(ctx, event)
 }
 
 func (rt *Runtime) startWatcher(ctx context.Context, paths []string, onReload func(time.Duration, error)) error {
@@ -413,7 +423,7 @@ func compileAndStoreInputs(ctx context.Context, store storage.Store, txn storage
 		policies[id] = parsed.Parsed
 	}
 
-	c := ast.NewCompiler().SetErrorLimit(errorLimit)
+	c := ast.NewCompiler().SetErrorLimit(errorLimit).WithPathConflictsCheck(storage.NonEmpty(ctx, store, txn))
 
 	if c.Compile(policies); c.Failed() {
 		return c.Errors

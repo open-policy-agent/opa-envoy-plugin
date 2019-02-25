@@ -19,12 +19,13 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/bundle"
+	"github.com/open-policy-agent/opa/internal/manifest"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/server/identifier"
@@ -356,20 +357,15 @@ func TestCompileV1Observability(t *testing.T) {
 
 func TestCompileV1UnsafeBuiltin(t *testing.T) {
 	f := newFixture(t)
-	get := newReqV1(http.MethodPost, `/compile`, `{"query": "http.send({\"method\": \"get\", \"url\": \"foo.com\"}, x)"}`)
-	f.server.Handler.ServeHTTP(f.recorder, get)
 
-	if f.recorder.Code != 400 {
-		t.Fatalf("Expected bad request but got %v", f.recorder)
-	}
-
-	expected := `{
+	query := `{"query": "http.send({\"method\": \"get\", \"url\": \"foo.com\"}, x)"}`
+	expResp := `{
   "code": "invalid_parameter",
   "message": "unsafe built-in function calls in query: http.send"
 }`
 
-	if f.recorder.Body.String() != expected {
-		t.Fatalf(`Expected %v but got: %v`, expected, f.recorder.Body.String())
+	if err := f.v1(http.MethodPost, `/compile`, query, 400, expResp); err != nil {
+		t.Fatalf("Expected bad request but got %v", f.recorder)
 	}
 }
 
@@ -548,6 +544,33 @@ p = true { false }`
 				"code": "resource_conflict",
 				"message": "storage_write_conflict_error: /a/b"
 			}`},
+		}},
+		{"put base/virtual conflict", []tr{
+			{http.MethodPut, "/policies/testmod", "package x.y\np = 1\nq = 2", 200, ""},
+			{http.MethodPut, "/data/x", `{"y": {"p": "xxx"}}`, 400, `{
+              "code": "invalid_parameter",
+              "message": "1 error occurred: testmod:2: rego_compile_error: conflicting rule for data path x/y/p found"
+            }`},
+			{http.MethodPut, "/data/x/y", `{"p": "xxx"}`, 400, ``},
+			{http.MethodPut, "/data/x/y/p", `"xxx"`, 400, ``},
+			{http.MethodPut, "/data/x/y/p/a", `1`, 400, ``},
+			{http.MethodDelete, "/policies/testmod", "", 200, ""},
+			{http.MethodPut, "/data/x/y/p/a", `1`, 204, ``},
+			{http.MethodPut, "/policies/testmod", "package x.y\np = 1\nq = 2", 400, `{
+              "code": "invalid_parameter",
+              "message": "error(s) occurred while compiling module(s)",
+              "errors": [
+                {
+                  "code": "rego_compile_error",
+                  "message": "conflicting rule for data path x/y/p found",
+                  "location": {
+                    "file": "testmod",
+                    "row": 2,
+                    "col": 5
+                  }
+                }
+              ]
+            }`},
 		}},
 		{"get virtual", []tr{
 			{http.MethodPut, "/policies/test", testMod1, 200, ""},
@@ -763,6 +786,90 @@ func TestDataPutV1IfNoneMatch(t *testing.T) {
 	req.Header.Set("If-None-Match", "*")
 	if err := f.executeRequest(req, 304, ""); err != nil {
 		t.Fatalf("Unexpected error from PUT with If-None-Match=*: %v", err)
+	}
+}
+
+func TestBundleScope(t *testing.T) {
+
+	ctx := context.Background()
+
+	f := newFixture(t)
+
+	txn := storage.NewTransactionOrDie(ctx, f.server.store, storage.WriteParams)
+
+	if err := manifest.Write(ctx, f.server.store, txn, bundle.Manifest{
+		Revision: "AAAAA",
+		Roots:    &[]string{"a/b/c", "x/y"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.server.store.UpsertPolicy(ctx, txn, "someid", []byte(`package x.y.z`)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.server.store.Commit(ctx, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []tr{
+		{
+			method: "PUT",
+			path:   "/data/a/b",
+			body:   "1",
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path a/b is owned by bundle"}`,
+		},
+		{
+			method: "PUT",
+			path:   "/data/a/b/c",
+			body:   "1",
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path a/b/c is owned by bundle"}`,
+		},
+		{
+			method: "PUT",
+			path:   "/data/a/b/c/d",
+			body:   "1",
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path a/b/c/d is owned by bundle"}`,
+		},
+		{
+			method: "PATCH",
+			path:   "/data/a",
+			body:   `[{"path": "/b/c", "op": "add", "value": 1}]`,
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path a/b/c is owned by bundle"}`,
+		},
+		{
+			method: "DELETE",
+			path:   "/data/a",
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path a is owned by bundle"}`,
+		},
+		{
+			method: "PUT",
+			path:   "/policies/test1",
+			body:   `package a.b`,
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path a/b is owned by bundle"}`,
+		},
+		{
+			method: "DELETE",
+			path:   "/policies/someid",
+			code:   http.StatusBadRequest,
+			resp:   `{"code": "invalid_parameter", "message": "path x/y/z is owned by bundle"}`,
+		},
+		{
+			method: "PUT",
+			path:   "/data/foo/bar",
+			body:   "1",
+			code:   http.StatusNoContent,
+		},
+	}
+
+	if err := f.v1TestRequests(cases); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1239,7 +1346,7 @@ func TestV1Pretty(t *testing.T) {
 	f.server.Handler.ServeHTTP(f.recorder, req)
 
 	lines := strings.Split(f.recorder.Body.String(), "\n")
-	if len(lines) != 8 {
+	if len(lines) != 9 {
 		t.Errorf("Expected 8 lines in output but got %d:\n%v", len(lines), lines)
 	}
 
@@ -1248,7 +1355,7 @@ func TestV1Pretty(t *testing.T) {
 	f.server.Handler.ServeHTTP(f.recorder, req)
 
 	lines = strings.Split(f.recorder.Body.String(), "\n")
-	if len(lines) != 16 {
+	if len(lines) != 17 {
 		t.Errorf("Expected 16 lines of output but got %d:\n%v", len(lines), lines)
 	}
 }
@@ -1305,25 +1412,6 @@ func TestIndexGetCompileError(t *testing.T) {
 	page := f.recorder.Body.String()
 	if !strings.Contains(page, "foo is unsafe") {
 		t.Errorf("Expected page to contain 'foo is unsafe' but got: %v", page)
-		return
-	}
-}
-
-func TestVersionGet(t *testing.T) {
-
-	f := newFixture(t)
-
-	get := newReqV1(http.MethodGet, "/data/system/version", "")
-	f.server.Handler.ServeHTTP(f.recorder, get)
-	if f.recorder.Code != 200 {
-		t.Fatalf("Expected 200 OK but got %v", f.recorder)
-		return
-	}
-
-	page := f.recorder.Body.String()
-	var re = regexp.MustCompile(`[\s\S]*Version\b[\s\S]*BuildCommit\b[\s\S]*BuildTimestamp\b[\s\S]*BuildHostname\b`)
-	if !re.MatchString(page) {
-		t.Errorf("Expected page to contain 'version' but got: %v", page)
 		return
 	}
 }
@@ -2124,8 +2212,12 @@ func TestDecisionLogging(t *testing.T) {
 	f.server = f.server.WithDecisionIDFactory(func() string {
 		nextID++
 		return fmt.Sprint(nextID)
-	}).WithDecisionLogger(func(_ context.Context, info *Info) {
+	}).WithDecisionLoggerWithErr(func(_ context.Context, info *Info) error {
+		if info.Path == "data.fail_closed.decision_logger_err" {
+			return fmt.Errorf("some error")
+		}
 		decisions = append(decisions, info)
+		return nil
 	})
 
 	reqs := []struct {
@@ -2205,6 +2297,11 @@ func TestDecisionLogging(t *testing.T) {
 		{
 			raw:  newReqUnversioned("POST", "/", ""),
 			code: 500,
+		},
+		{
+			method: "POST",
+			path:   "/data/fail_closed/decision_logger_err",
+			code:   500,
 		},
 	}
 
@@ -2478,12 +2575,6 @@ func TestQueryV1(t *testing.T) {
 
 func TestBadQueryV1(t *testing.T) {
 	f := newFixture(t)
-	get := newReqV1(http.MethodGet, `/query?q=^ -i`, "")
-	f.server.Handler.ServeHTTP(f.recorder, get)
-
-	if f.recorder.Code != 400 {
-		t.Fatalf("Expected success but got %v", f.recorder)
-	}
 
 	expectedErr := `{
   "code": "invalid_parameter",
@@ -2502,28 +2593,23 @@ func TestBadQueryV1(t *testing.T) {
   ]
 }`
 
-	recvErr := f.recorder.Body.String()
-
-	if recvErr != expectedErr {
+	if err := f.v1(http.MethodGet, `/query?q=^ -i`, "", 400, expectedErr); err != nil {
+		recvErr := f.recorder.Body.String()
 		t.Fatalf(`Expected %v but got: %v`, expectedErr, recvErr)
 	}
 }
 
 func TestQueryV1UnsafeBuiltin(t *testing.T) {
 	f := newFixture(t)
-	get := newReqV1(http.MethodGet, `/query?q=http.send({"method": "get", "url": "foo.com"}, x)`, "")
-	f.server.Handler.ServeHTTP(f.recorder, get)
 
-	if f.recorder.Code != 400 {
-		t.Fatalf("Expected bad request but got %v", f.recorder)
-	}
+	query := `/query?q=http.send({"method": "get", "url": "foo.com"}, x)`
 
 	expected := `{
   "code": "invalid_parameter",
   "message": "unsafe built-in function calls in query: http.send"
 }`
 
-	if f.recorder.Body.String() != expected {
+	if err := f.v1(http.MethodGet, query, "", 400, expected); err != nil {
 		t.Fatalf(`Expected %v but got: %v`, expected, f.recorder.Body.String())
 	}
 }

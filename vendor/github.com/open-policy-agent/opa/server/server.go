@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/internal/manifest"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/rego"
@@ -98,8 +100,9 @@ type Server struct {
 	decisionIDFactory func() string
 	diagnostics       Buffer
 	revision          string
-	logger            func(context.Context, *Info)
+	logger            func(context.Context, *Info) error
 	errLimit          int
+	pprofEnabled      bool
 	runtime           *ast.Term
 }
 
@@ -218,14 +221,30 @@ func (s *Server) WithCompilerErrorLimit(limit int) *Server {
 	return s
 }
 
+// WithPprofEnabled sets whether pprof endpoints are enabled
+func (s *Server) WithPprofEnabled(pprofEnabled bool) *Server {
+	s.pprofEnabled = pprofEnabled
+	return s
+}
+
 // WithDiagnosticsBuffer sets the diagnostics buffer used by the server. DEPRECATED.
 func (s *Server) WithDiagnosticsBuffer(buf Buffer) *Server {
 	s.diagnostics = buf
 	return s
 }
 
-// WithDecisionLogger sets the decision logger used by the server.
+// WithDecisionLogger sets the decision logger used by the
+// server. DEPRECATED. Use WithDecisionLoggerWithErr instead.
 func (s *Server) WithDecisionLogger(logger func(context.Context, *Info)) *Server {
+	s.logger = func(ctx context.Context, info *Info) error {
+		logger(ctx, info)
+		return nil
+	}
+	return s
+}
+
+// WithDecisionLoggerWithErr sets the decision logger used by the server.
+func (s *Server) WithDecisionLoggerWithErr(logger func(context.Context, *Info) error) *Server {
 	s.logger = logger
 	return s
 }
@@ -356,6 +375,7 @@ func (s *Server) initRouter() {
 	catchAllDur := duration.MustCurryWith(prometheus.Labels{"handler": PromHandlerCatch})
 	GetHealthDur := duration.MustCurryWith(prometheus.Labels{"handler": PromHandlerHealth})
 	promRegistry.MustRegister(duration)
+	promRegistry.MustRegister(prometheus.NewGoCollector())
 
 	router := s.router
 
@@ -367,9 +387,19 @@ func (s *Server) initRouter() {
 	router.StrictSlash(true)
 	router.Handle("/metrics", promhttp.HandlerFor(promRegistry, promhttp.HandlerOpts{})).Methods(http.MethodGet)
 	router.Handle("/health", promhttp.InstrumentHandlerDuration(GetHealthDur, http.HandlerFunc(s.unversionedGetHealth))).Methods(http.MethodGet)
+	if s.pprofEnabled {
+		router.HandleFunc("/debug/pprof/", pprof.Index)
+		router.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
+		router.Handle("/debug/pprof/block", pprof.Handler("block"))
+		router.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+		router.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+		router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	}
 	s.registerHandler(router, 0, "/data/{path:.+}", http.MethodPost, promhttp.InstrumentHandlerDuration(v0DataDur, http.HandlerFunc(s.v0DataPost)))
 	s.registerHandler(router, 0, "/data", http.MethodPost, promhttp.InstrumentHandlerDuration(v0DataDur, http.HandlerFunc(s.v0DataPost)))
-	s.registerHandler(router, 1, "/data/system/version", http.MethodGet, promhttp.InstrumentHandlerDuration(v1DataDur, http.HandlerFunc(s.v1VersionGet)))
 	s.registerHandler(router, 1, "/data/system/diagnostics", http.MethodGet, promhttp.InstrumentHandlerDuration(v1DataDur, http.HandlerFunc(s.v1DiagnosticsGet)))
 	s.registerHandler(router, 1, "/data/{path:.+}", http.MethodDelete, promhttp.InstrumentHandlerDuration(v1DataDur, http.HandlerFunc(s.v1DataDelete)))
 	s.registerHandler(router, 1, "/data/{path:.+}", http.MethodPut, promhttp.InstrumentHandlerDuration(v1DataDur, http.HandlerFunc(s.v1DataPut)))
@@ -454,7 +484,7 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, decisionID stri
 
 	output, err := rego.Eval(ctx)
 	if err != nil {
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, nil, err, m, buf)
+		_ = diagLogger.Log(ctx, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, nil, err, m, buf)
 		return results, err
 	}
 
@@ -471,9 +501,8 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, decisionID stri
 	}
 
 	var x interface{} = results.Result
-	diagLogger.Log(ctx, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, &x, nil, m, buf)
-
-	return results, nil
+	err = diagLogger.Log(ctx, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, &x, nil, m, buf)
+	return results, err
 }
 
 func (s *Server) indexGet(w http.ResponseWriter, r *http.Request) {
@@ -529,17 +558,12 @@ func (s *Server) registerHandler(router *mux.Router, version int, path string, m
 
 func (s *Server) reload(ctx context.Context, txn storage.Transaction, event storage.TriggerEvent) {
 
-	value, err := s.store.Read(ctx, txn, storage.MustParsePath("/system/bundle/manifest/revision"))
-	if err == nil {
-		revision, ok := value.(string)
-		if !ok {
-			panic("bad revision value")
-		}
-		s.revision = revision
-	} else if err != nil {
+	if revision, err := manifest.ReadBundleRevision(ctx, s.store, txn); err != nil {
 		if !storage.IsNotFound(err) {
 			panic(err)
 		}
+	} else {
+		s.revision = revision
 	}
 
 	s.partials = map[string]rego.PartialResult{}
@@ -623,7 +647,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Re
 
 	// Handle results.
 	if err != nil {
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
+		_ = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -633,7 +657,12 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, path ast.Re
 		return
 	}
 
-	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, &rs[0].Expressions[0].Value, nil, m, buf)
+	err = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, &rs[0].Expressions[0].Value, nil, m, buf)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
 	writer.JSON(w, 200, rs[0].Expressions[0].Value, false)
 }
 
@@ -692,46 +721,6 @@ func (s *Server) unversionedGetHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writer.JSON(w, http.StatusInternalServerError, emptyObject{}, false)
-}
-
-func (s *Server) v1VersionGet(w http.ResponseWriter, r *http.Request) {
-
-	code := 200
-
-	opaVersion := `
-{
-  "result": {
-    "Version": "{{.Version}}",
-    "BuildCommit": "{{.BuildCommit}}",
-    "BuildTimestamp": "{{.BuildTimestamp}}",
-    "BuildHostname": "{{.BuildHostname}}"
-  }
-}
-	`
-	tmpl, err := template.New("").Parse(opaVersion)
-	if err != nil {
-		panic(err)
-	}
-
-	var buf bytes.Buffer
-
-	err = tmpl.Execute(&buf, struct {
-		Version        string
-		BuildCommit    string
-		BuildTimestamp string
-		BuildHostname  string
-	}{
-		Version:        version.Version,
-		BuildCommit:    version.Vcs,
-		BuildTimestamp: version.Timestamp,
-		BuildHostname:  version.Hostname,
-	})
-
-	jsonBytes := buf.Bytes()
-
-	headers := w.Header()
-	headers.Add("Content-Type", "application/json")
-	writer.Bytes(w, code, jsonBytes)
 }
 
 func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
@@ -906,7 +895,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 	// Handle results.
 	if err != nil {
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
+		_ = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -928,7 +917,11 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 				writer.ErrorAuto(w, err)
 			}
 		}
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, nil, m, buf)
+		err = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, nil, m, buf)
+		if err != nil {
+			writer.ErrorAuto(w, err)
+			return
+		}
 		writer.JSON(w, 200, result, pretty)
 		return
 	}
@@ -939,7 +932,11 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty)
 	}
 
-	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, result.Result, nil, m, buf)
+	err = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, result.Result, nil, m, buf)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
 	writer.JSON(w, 200, result, pretty)
 }
 
@@ -967,10 +964,21 @@ func (s *Server) v1DataPatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, patch := range patches {
+		if err := s.checkPathScope(ctx, txn, patch.path); err != nil {
+			s.abortAuto(ctx, txn, w, err)
+			return
+		}
+
 		if err := s.store.Write(ctx, txn, patch.op, patch.path, patch.value); err != nil {
 			s.abortAuto(ctx, txn, w, err)
 			return
 		}
+	}
+
+	if err := ast.CheckPathConflicts(s.getCompiler(), storage.NonEmpty(ctx, s.store, txn)); len(err) > 0 {
+		s.store.Abort(ctx, txn)
+		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
+		return
 	}
 
 	if err := s.store.Commit(ctx, txn); err != nil {
@@ -1051,7 +1059,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 	rego, err := s.makeRego(ctx, partial, txn, input, path.String(), m, instrument, buf, opts)
 
 	if err != nil {
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, nil)
+		_ = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, nil)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1062,7 +1070,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 
 	// Handle results.
 	if err != nil {
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
+		_ = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, err, m, buf)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1082,7 +1090,11 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 				writer.ErrorAuto(w, err)
 			}
 		}
-		diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, nil, m, buf)
+		err = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, nil, nil, m, buf)
+		if err != nil {
+			writer.ErrorAuto(w, err)
+			return
+		}
 		writer.JSON(w, 200, result, pretty)
 		return
 	}
@@ -1093,7 +1105,11 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty)
 	}
 
-	diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, result.Result, nil, m, buf)
+	err = diagLogger.Log(ctx, decisionID, r.RemoteAddr, path.String(), "", goInput, result.Result, nil, m, buf)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
 	writer.JSON(w, 200, result, pretty)
 }
 
@@ -1119,6 +1135,11 @@ func (s *Server) v1DataPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.checkPathScope(ctx, txn, path); err != nil {
+		s.abortAuto(ctx, txn, w, err)
+		return
+	}
+
 	_, err = s.store.Read(ctx, txn, path)
 
 	if err != nil {
@@ -1138,6 +1159,12 @@ func (s *Server) v1DataPut(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.store.Write(ctx, txn, storage.AddOp, path, value); err != nil {
 		s.abortAuto(ctx, txn, w, err)
+		return
+	}
+
+	if err := ast.CheckPathConflicts(s.getCompiler(), storage.NonEmpty(ctx, s.store, txn)); len(err) > 0 {
+		s.store.Abort(ctx, txn)
+		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
 		return
 	}
 
@@ -1161,6 +1188,11 @@ func (s *Server) v1DataDelete(w http.ResponseWriter, r *http.Request) {
 	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
 	if err != nil {
 		writer.ErrorAuto(w, err)
+		return
+	}
+
+	if err := s.checkPathScope(ctx, txn, path); err != nil {
+		s.abortAuto(ctx, txn, w, err)
 		return
 	}
 
@@ -1193,6 +1225,11 @@ func (s *Server) v1PoliciesDelete(w http.ResponseWriter, r *http.Request) {
 	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
 	if err != nil {
 		writer.ErrorAuto(w, err)
+		return
+	}
+
+	if err := s.checkPolicyIDScope(ctx, txn, id); err != nil {
+		s.abortAuto(ctx, txn, w, err)
 		return
 	}
 
@@ -1351,6 +1388,11 @@ func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.checkPolicyPackageScope(ctx, txn, parsedMod.Package); err != nil {
+		s.abortAuto(ctx, txn, w, err)
+		return
+	}
+
 	modules, err := s.loadModules(ctx, txn)
 	if err != nil {
 		s.abortAuto(ctx, txn, w, err)
@@ -1359,7 +1401,7 @@ func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 
 	modules[path] = parsedMod
 
-	c := ast.NewCompiler().SetErrorLimit(s.errLimit)
+	c := ast.NewCompiler().SetErrorLimit(s.errLimit).WithPathConflictsCheck(storage.NonEmpty(ctx, s.store, txn))
 
 	m.Timer(metrics.RegoModuleCompile).Start()
 
@@ -1575,6 +1617,57 @@ func (s *Server) watchQuery(query string, w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+}
+
+func (s *Server) checkPolicyIDScope(ctx context.Context, txn storage.Transaction, id string) error {
+
+	bs, err := s.store.GetPolicy(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+
+	module, err := ast.ParseModule(id, string(bs))
+	if err != nil {
+		return err
+	}
+
+	return s.checkPolicyPackageScope(ctx, txn, module.Package)
+}
+
+func (s *Server) checkPolicyPackageScope(ctx context.Context, txn storage.Transaction, pkg *ast.Package) error {
+
+	path, err := pkg.Path.Ptr()
+	if err != nil {
+		return err
+	}
+
+	spath, ok := storage.ParsePathEscaped("/" + path)
+	if !ok {
+		return types.BadRequestErr("invalid package path: cannot determine scope")
+	}
+
+	return s.checkPathScope(ctx, txn, spath)
+}
+
+func (s *Server) checkPathScope(ctx context.Context, txn storage.Transaction, path storage.Path) error {
+
+	roots, err := manifest.ReadBundleRoots(ctx, s.store, txn)
+	if err != nil {
+		if !storage.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}
+
+	spath := strings.Trim(path.String(), "/")
+
+	for i := range roots {
+		if strings.HasPrefix(spath, roots[i]) || strings.HasPrefix(roots[i], spath) {
+			return types.BadRequestErr(fmt.Sprintf("path %v is owned by bundle", spath))
+		}
+	}
+
+	return nil
 }
 
 func (s *Server) evalDiagnosticPolicy(r *http.Request) (logger diagnosticsLogger) {
@@ -2100,7 +2193,7 @@ func renderVersion(w http.ResponseWriter) {
 }
 
 type diagnosticsLogger struct {
-	logger     func(context.Context, *Info)
+	logger     func(context.Context, *Info) error
 	revision   string
 	explain    bool
 	instrument bool
@@ -2115,7 +2208,7 @@ func (l diagnosticsLogger) Instrument() bool {
 	return l.instrument
 }
 
-func (l diagnosticsLogger) Log(ctx context.Context, decisionID, remoteAddr, path string, query string, input *interface{}, results *interface{}, err error, m metrics.Metrics, tracer *topdown.BufferTracer) {
+func (l diagnosticsLogger) Log(ctx context.Context, decisionID, remoteAddr, path string, query string, input *interface{}, results *interface{}, err error, m metrics.Metrics, tracer *topdown.BufferTracer) error {
 
 	info := &Info{
 		Revision:   l.revision,
@@ -2135,14 +2228,17 @@ func (l diagnosticsLogger) Log(ctx context.Context, decisionID, remoteAddr, path
 	}
 
 	if l.logger != nil {
-		l.logger(ctx, info)
+		if err := l.logger(ctx, info); err != nil {
+			return err
+		}
 	}
 
 	if l.buffer == nil {
-		return
+		return nil
 	}
 
 	l.buffer.Push(info)
+	return nil
 }
 
 type patchImpl struct {
