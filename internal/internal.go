@@ -160,6 +160,17 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		Status: &google_rpc.Status{Code: status},
 	}
 
+	err = p.log(ctx, input, result, err)
+	if err != nil {
+		resp := &ext_authz.CheckResponse{
+			Status: &google_rpc.Status{
+				Code:    int32(google_rpc.UNKNOWN),
+				Message: err.Error(),
+			},
+		}
+		return resp, nil
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"query":               p.cfg.Query,
 		"decision":            result.decision,
@@ -168,11 +179,6 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		"metrics":             result.metrics.All(),
 		"total_decision_time": time.Since(start),
 	}).Info("Returning policy decision.")
-
-	err = p.log(ctx, input, result, err)
-	if err != nil {
-		return nil, err
-	}
 
 	return resp, nil
 }

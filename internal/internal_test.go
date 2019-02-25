@@ -6,6 +6,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/envoyproxy/data-plane-api/envoy/service/auth/v2alpha"
@@ -191,7 +192,36 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	}
 }
 
-func testAuthzServer(customLogger *testPlugin) *envoyExtAuthzGrpcServer {
+func TestCheckWithLoggerError(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req v2alpha.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPluginError{}
+
+	server := testAuthzServer(customLogger)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.UNKNOWN) {
+		t.Fatalf("Expected logger error code UNKNOWN but got %v", output.Status.Code)
+	}
+
+	expectedMsg := "Bad Logger Error"
+	if output.Status.Message != expectedMsg {
+		t.Fatalf("Expected error message %v, but got %v", expectedMsg, output.Status.Message)
+	}
+}
+
+func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 	ctx := context.Background()
 
 	// Define a RBAC policy to allow or deny requests based on user roles
@@ -292,4 +322,23 @@ func (p *testPlugin) Reconfigure(context.Context, interface{}) {
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
 	p.events = append(p.events, event)
 	return nil
+}
+
+type testPluginError struct {
+	events []logs.EventV1
+}
+
+func (p *testPluginError) Start(context.Context) error {
+	return nil
+}
+
+func (p *testPluginError) Stop(context.Context) {
+}
+
+func (p *testPluginError) Reconfigure(context.Context, interface{}) {
+}
+
+func (p *testPluginError) Log(_ context.Context, event logs.EventV1) error {
+	p.events = append(p.events, event)
+	return fmt.Errorf("Bad Logger Error")
 }
