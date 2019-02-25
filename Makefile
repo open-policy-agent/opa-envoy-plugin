@@ -39,7 +39,7 @@ export GO15VENDOREXPERIMENT
 #
 ######################################################
 
-all: deps build test check
+all: deps build build-plugin test check
 
 version:
 	@echo $(VERSION)
