@@ -1,5 +1,5 @@
-hash: 9517d85eeaffd666652ae488314ed038d321d30561c2baaaac70dff0800d9e88
-updated: 2019-02-22T00:51:01.576102-08:00
+hash: 659e694c9f0e56304d4e14f4e4c271be966d1fa99c88d06ff1af835d91b16a01
+updated: 2019-02-25T10:14:44.534438-08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
@@ -58,7 +58,7 @@ imports:
 - name: github.com/OneOfOne/xxhash
   version: 456a93f5dffea9f90d34d67b03b144f12a8125cc
 - name: github.com/open-policy-agent/opa
-  version: a8526712721f1f4acd19a1b7ad844db79f1ccfed
+  version: 8b08af7f8aa407f4c8f371c97dc861df58ed04b1
   subpackages:
   - ast
   - bundle
@@ -72,9 +72,11 @@ imports:
   - internal/compiler/wasm/opa
   - internal/ir
   - internal/leb128
+  - internal/manifest
   - internal/planner
   - internal/presentation
   - internal/runtime
+  - internal/version
   - internal/wasm/constant
   - internal/wasm/encoding
   - internal/wasm/instruction
@@ -113,7 +115,7 @@ imports:
 - name: github.com/pkg/errors
   version: 856c240a51a2bf8fb8269ea7f3f9b046aadde36e
 - name: github.com/prometheus/client_golang
-  version: 4c99dd66303a54cbf8559dd6110d5c30b1819e4c
+  version: 2daed26f633ce23fab5efc02fb3f2e803b3526c3
   subpackages:
   - prometheus
   - prometheus/internal
@@ -146,7 +148,7 @@ imports:
 - name: github.com/yashtewari/glob-intersection
   version: 5c77d914dd0ba7bedca923f97232d37137e038f3
 - name: golang.org/x/crypto
-  version: a4c6cb3142f211c99e4bf4cd769535b29a9b616f
+  version: 7f87c0fbb88b590338857bcb720678c2583d4dea
   subpackages:
   - ssh/terminal
 - name: golang.org/x/lint
@@ -154,7 +156,7 @@ imports:
   subpackages:
   - golint
 - name: golang.org/x/net
-  version: 3a22650c66bd7f4fb6d1e8072ffd7b75c8a27898
+  version: fe579d43d83210096a79b46dcca0e3721058393a
   subpackages:
   - context
   - http/httpguts
@@ -164,7 +166,7 @@ imports:
   - internal/timeseries
   - trace
 - name: golang.org/x/sys
-  version: a9d3bda3a223baa6bba6ef412cb273f0fd163c05
+  version: cc5685c2db1239775905f3911f0067c0fa74762f
   subpackages:
   - unix
   - windows
