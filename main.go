@@ -33,6 +33,8 @@ func Init() error {
 	return nil
 }
 
+// Currently the main function is required to build the plugin
+// which uses vendored OPA.
 func main() {
 	if err := cmd.RootCommand.Execute(); err != nil {
 		fmt.Println(err)
