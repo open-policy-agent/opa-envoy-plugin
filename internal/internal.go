@@ -169,7 +169,10 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		"total_decision_time": time.Since(start),
 	}).Info("Returning policy decision.")
 
-	defer p.log(ctx, input, result, err)
+	err = p.log(ctx, input, result, err)
+	if err != nil {
+		return nil, err
+	}
 
 	return resp, nil
 }
@@ -226,10 +229,10 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 	return result, err
 }
 
-func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, result *evalResult, err error) {
+func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, result *evalResult, err error) error {
 	plugin := logs.Lookup(p.manager)
 	if plugin == nil {
-		return
+		return nil
 	}
 
 	info := &server.Info{
@@ -247,7 +250,7 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 		info.Results = &x
 	}
 
-	plugin.Log(ctx, info)
+	return plugin.Log(ctx, info)
 }
 
 func uuid4() (string, error) {
