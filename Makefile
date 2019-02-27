@@ -51,7 +51,7 @@ generate:
 	$(GO) generate
 
 build: generate
-	$(GO) build -o $(BIN) -ldflags $(LDFLAGS)
+	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./internal/cmd/...
 
 build-mac:
 	@$(MAKE) build GOOS=darwin
