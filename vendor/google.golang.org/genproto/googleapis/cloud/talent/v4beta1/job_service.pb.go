@@ -29,7 +29,9 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 // An enum that specifies the job attributes that are returned in the
-// [MatchingJob.Job][] in [SearchJobsResponse][google.cloud.talent.v4beta1.SearchJobsResponse] or [Job][google.cloud.talent.v4beta1.Job] objects in
+// [MatchingJob.Job][] in
+// [SearchJobsResponse][google.cloud.talent.v4beta1.SearchJobsResponse] or
+// [Job][google.cloud.talent.v4beta1.Job] objects in
 // [ListJobsResponse][google.cloud.talent.v4beta1.ListJobsResponse].
 type JobView int32
 
@@ -37,16 +39,27 @@ const (
 	// Default value.
 	JobView_JOB_VIEW_UNSPECIFIED JobView = 0
 	// A ID only view of job, with following attributes:
-	// [Job.name][google.cloud.talent.v4beta1.Job.name], [Job.requisition_id][google.cloud.talent.v4beta1.Job.requisition_id], [Job.language_code][google.cloud.talent.v4beta1.Job.language_code].
+	// [Job.name][google.cloud.talent.v4beta1.Job.name],
+	// [Job.requisition_id][google.cloud.talent.v4beta1.Job.requisition_id],
+	// [Job.language_code][google.cloud.talent.v4beta1.Job.language_code].
 	JobView_JOB_VIEW_ID_ONLY JobView = 1
 	// A minimal view of the job, with the following attributes:
-	// [Job.name][google.cloud.talent.v4beta1.Job.name], [Job.requisition_id][google.cloud.talent.v4beta1.Job.requisition_id], [Job.job_title][],
-	// [Job.company_name][google.cloud.talent.v4beta1.Job.company_name], [Job.DerivedInfo.locations][google.cloud.talent.v4beta1.Job.DerivedInfo.locations], [Job.language_code][google.cloud.talent.v4beta1.Job.language_code].
+	// [Job.name][google.cloud.talent.v4beta1.Job.name],
+	// [Job.requisition_id][google.cloud.talent.v4beta1.Job.requisition_id],
+	// [Job.job_title][],
+	// [Job.company_name][google.cloud.talent.v4beta1.Job.company_name],
+	// [Job.DerivedInfo.locations][google.cloud.talent.v4beta1.Job.DerivedInfo.locations],
+	// [Job.language_code][google.cloud.talent.v4beta1.Job.language_code].
 	JobView_JOB_VIEW_MINIMAL JobView = 2
 	// A small view of the job, with the following attributes in the search
-	// results: [Job.name][google.cloud.talent.v4beta1.Job.name], [Job.requisition_id][google.cloud.talent.v4beta1.Job.requisition_id], [Job.job_title][],
-	// [Job.company_name][google.cloud.talent.v4beta1.Job.company_name], [Job.DerivedInfo.locations][google.cloud.talent.v4beta1.Job.DerivedInfo.locations], [Job.visibility][google.cloud.talent.v4beta1.Job.visibility],
-	// [Job.language_code][google.cloud.talent.v4beta1.Job.language_code], [Job.description][google.cloud.talent.v4beta1.Job.description].
+	// results: [Job.name][google.cloud.talent.v4beta1.Job.name],
+	// [Job.requisition_id][google.cloud.talent.v4beta1.Job.requisition_id],
+	// [Job.job_title][],
+	// [Job.company_name][google.cloud.talent.v4beta1.Job.company_name],
+	// [Job.DerivedInfo.locations][google.cloud.talent.v4beta1.Job.DerivedInfo.locations],
+	// [Job.visibility][google.cloud.talent.v4beta1.Job.visibility],
+	// [Job.language_code][google.cloud.talent.v4beta1.Job.language_code],
+	// [Job.description][google.cloud.talent.v4beta1.Job.description].
 	JobView_JOB_VIEW_SMALL JobView = 3
 	// All available attributes are included in the search results.
 	JobView_JOB_VIEW_FULL JobView = 4
@@ -71,7 +84,7 @@ func (x JobView) String() string {
 	return proto.EnumName(JobView_name, int32(x))
 }
 func (JobView) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{0}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{0}
 }
 
 // A string-represented enumeration of the job search mode. The service
@@ -107,7 +120,7 @@ func (x SearchJobsRequest_SearchMode) String() string {
 	return proto.EnumName(SearchJobsRequest_SearchMode_name, int32(x))
 }
 func (SearchJobsRequest_SearchMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{7, 0}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{7, 0}
 }
 
 // Controls whether highly similar jobs are returned next to each other in
@@ -146,10 +159,11 @@ func (x SearchJobsRequest_DiversificationLevel) String() string {
 	return proto.EnumName(SearchJobsRequest_DiversificationLevel_name, int32(x))
 }
 func (SearchJobsRequest_DiversificationLevel) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{7, 1}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{7, 1}
 }
 
-// The importance level for [CustomRankingInfo.ranking_expression][google.cloud.talent.v4beta1.SearchJobsRequest.CustomRankingInfo.ranking_expression].
+// The importance level for
+// [CustomRankingInfo.ranking_expression][google.cloud.talent.v4beta1.SearchJobsRequest.CustomRankingInfo.ranking_expression].
 type SearchJobsRequest_CustomRankingInfo_ImportanceLevel int32
 
 const (
@@ -204,7 +218,7 @@ func (x SearchJobsRequest_CustomRankingInfo_ImportanceLevel) String() string {
 	return proto.EnumName(SearchJobsRequest_CustomRankingInfo_ImportanceLevel_name, int32(x))
 }
 func (SearchJobsRequest_CustomRankingInfo_ImportanceLevel) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{7, 0, 0}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{7, 0, 0}
 }
 
 // Input only.
@@ -231,7 +245,7 @@ func (m *CreateJobRequest) Reset()         { *m = CreateJobRequest{} }
 func (m *CreateJobRequest) String() string { return proto.CompactTextString(m) }
 func (*CreateJobRequest) ProtoMessage()    {}
 func (*CreateJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{0}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{0}
 }
 func (m *CreateJobRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CreateJobRequest.Unmarshal(m, b)
@@ -285,7 +299,7 @@ func (m *GetJobRequest) Reset()         { *m = GetJobRequest{} }
 func (m *GetJobRequest) String() string { return proto.CompactTextString(m) }
 func (*GetJobRequest) ProtoMessage()    {}
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{1}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{1}
 }
 func (m *GetJobRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_GetJobRequest.Unmarshal(m, b)
@@ -323,8 +337,10 @@ type UpdateJobRequest struct {
 	// Optional but strongly recommended to be provided for the best service
 	// experience.
 	//
-	// If [update_mask][google.cloud.talent.v4beta1.UpdateJobRequest.update_mask] is provided, only the specified fields in
-	// [job][google.cloud.talent.v4beta1.UpdateJobRequest.job] are updated. Otherwise all the fields are updated.
+	// If [update_mask][google.cloud.talent.v4beta1.UpdateJobRequest.update_mask]
+	// is provided, only the specified fields in
+	// [job][google.cloud.talent.v4beta1.UpdateJobRequest.job] are updated.
+	// Otherwise all the fields are updated.
 	//
 	// A field mask to restrict the fields that are updated. Only
 	// top level fields of [Job][google.cloud.talent.v4beta1.Job] are supported.
@@ -338,7 +354,7 @@ func (m *UpdateJobRequest) Reset()         { *m = UpdateJobRequest{} }
 func (m *UpdateJobRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdateJobRequest) ProtoMessage()    {}
 func (*UpdateJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{2}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{2}
 }
 func (m *UpdateJobRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_UpdateJobRequest.Unmarshal(m, b)
@@ -392,7 +408,7 @@ func (m *DeleteJobRequest) Reset()         { *m = DeleteJobRequest{} }
 func (m *DeleteJobRequest) String() string { return proto.CompactTextString(m) }
 func (*DeleteJobRequest) ProtoMessage()    {}
 func (*DeleteJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{3}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{3}
 }
 func (m *DeleteJobRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DeleteJobRequest.Unmarshal(m, b)
@@ -453,7 +469,7 @@ func (m *BatchDeleteJobsRequest) Reset()         { *m = BatchDeleteJobsRequest{}
 func (m *BatchDeleteJobsRequest) String() string { return proto.CompactTextString(m) }
 func (*BatchDeleteJobsRequest) ProtoMessage()    {}
 func (*BatchDeleteJobsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{4}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{4}
 }
 func (m *BatchDeleteJobsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BatchDeleteJobsRequest.Unmarshal(m, b)
@@ -508,12 +524,16 @@ type ListJobsRequest struct {
 	//
 	// * `companyName` (Required)
 	// * `requisitionId` (Optional)
+	// * `status` (Optional) Available values: OPEN, EXPIRED, ALL. Defaults to
+	// OPEN if no value is specified.
 	//
 	// Sample Query:
 	//
 	// * companyName = "projects/api-test-project/companies/123"
 	// * companyName = "projects/api-test-project/companies/123" AND requisitionId
 	// = "req-1"
+	// * companyName = "projects/api-test-project/companies/123" AND status =
+	// "EXPIRED"
 	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
 	// Optional.
 	//
@@ -523,16 +543,20 @@ type ListJobsRequest struct {
 	//
 	// The maximum number of jobs to be returned per page of results.
 	//
-	// If [job_view][google.cloud.talent.v4beta1.ListJobsRequest.job_view] is set to [JobView.JOB_VIEW_ID_ONLY][google.cloud.talent.v4beta1.JobView.JOB_VIEW_ID_ONLY], the maximum allowed
-	// page size is 1000. Otherwise, the maximum allowed page size is 100.
+	// If [job_view][google.cloud.talent.v4beta1.ListJobsRequest.job_view] is set
+	// to
+	// [JobView.JOB_VIEW_ID_ONLY][google.cloud.talent.v4beta1.JobView.JOB_VIEW_ID_ONLY],
+	// the maximum allowed page size is 1000. Otherwise, the maximum allowed page
+	// size is 100.
 	//
 	// Default is 100 if empty or a number < 1 is specified.
 	PageSize int32 `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// Optional.
 	//
 	// The desired job attributes returned for jobs in the
-	// search response. Defaults to [JobView.JOB_VIEW_FULL][google.cloud.talent.v4beta1.JobView.JOB_VIEW_FULL] if no value is
-	// specified.
+	// search response. Defaults to
+	// [JobView.JOB_VIEW_FULL][google.cloud.talent.v4beta1.JobView.JOB_VIEW_FULL]
+	// if no value is specified.
 	JobView              JobView  `protobuf:"varint,5,opt,name=job_view,json=jobView,proto3,enum=google.cloud.talent.v4beta1.JobView" json:"job_view,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -543,7 +567,7 @@ func (m *ListJobsRequest) Reset()         { *m = ListJobsRequest{} }
 func (m *ListJobsRequest) String() string { return proto.CompactTextString(m) }
 func (*ListJobsRequest) ProtoMessage()    {}
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{5}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{5}
 }
 func (m *ListJobsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ListJobsRequest.Unmarshal(m, b)
@@ -621,7 +645,7 @@ func (m *ListJobsResponse) Reset()         { *m = ListJobsResponse{} }
 func (m *ListJobsResponse) String() string { return proto.CompactTextString(m) }
 func (*ListJobsResponse) ProtoMessage()    {}
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{6}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{6}
 }
 func (m *ListJobsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ListJobsResponse.Unmarshal(m, b)
@@ -677,7 +701,8 @@ type SearchJobsRequest struct {
 	//
 	// Mode of a search.
 	//
-	// Defaults to [SearchMode.JOB_SEARCH][google.cloud.talent.v4beta1.SearchJobsRequest.SearchMode.JOB_SEARCH].
+	// Defaults to
+	// [SearchMode.JOB_SEARCH][google.cloud.talent.v4beta1.SearchJobsRequest.SearchMode.JOB_SEARCH].
 	SearchMode SearchJobsRequest_SearchMode `protobuf:"varint,2,opt,name=search_mode,json=searchMode,proto3,enum=google.cloud.talent.v4beta1.SearchJobsRequest_SearchMode" json:"search_mode,omitempty"`
 	// Required.
 	//
@@ -744,19 +769,23 @@ type SearchJobsRequest struct {
 	// Job histogram facets:
 	//
 	// * company_id: histogram by [Job.distributor_company_id][].
-	// * company_display_name: histogram by [Job.company_display_name][google.cloud.talent.v4beta1.Job.company_display_name].
-	// * employment_type: histogram by [Job.employment_types][google.cloud.talent.v4beta1.Job.employment_types], for example,
-	// "FULL_TIME", "PART_TIME".
-	// * company_size: histogram by [CompanySize][google.cloud.talent.v4beta1.CompanySize], for example, "SMALL",
-	// "MEDIUM", "BIG".
+	// * company_display_name: histogram by
+	// [Job.company_display_name][google.cloud.talent.v4beta1.Job.company_display_name].
+	// * employment_type: histogram by
+	// [Job.employment_types][google.cloud.talent.v4beta1.Job.employment_types],
+	// for example, "FULL_TIME", "PART_TIME".
+	// * company_size: histogram by
+	// [CompanySize][google.cloud.talent.v4beta1.CompanySize], for example,
+	// "SMALL", "MEDIUM", "BIG".
 	// * publish_time_in_month: histogram by the [Job.publish_time][] in months.
 	// Must specify list of numeric buckets in spec.
 	// * publish_time_in_year: histogram by the [Job.publish_time][] in years.
 	// Must specify list of numeric buckets in spec.
 	// * degree_type: histogram by the [Job.degree_type][], for example,
 	// "Bachelors", "Masters".
-	// * job_level: histogram by the [Job.job_level][google.cloud.talent.v4beta1.Job.job_level], for example, "Entry
-	// Level".
+	// * job_level: histogram by the
+	// [Job.job_level][google.cloud.talent.v4beta1.Job.job_level], for example,
+	// "Entry Level".
 	// * country: histogram by the country code of jobs, for example, "US", "FR".
 	// * admin1: histogram by the admin1 code of jobs, which is a global
 	// placeholder referring to the state, province, or the particular term a
@@ -770,11 +799,14 @@ type SearchJobsRequest struct {
 	// and longitude), for example, 37.4038522,-122.0987765. Since the coordinates
 	// of a city center can change, customers may need to refresh them
 	// periodically.
-	// * locale: histogram by the [Job.language_code][google.cloud.talent.v4beta1.Job.language_code], for example, "en-US",
-	// "fr-FR".
-	// * language: histogram by the language subtag of the [Job.language_code][google.cloud.talent.v4beta1.Job.language_code],
-	// for example, "en", "fr".
-	// * category: histogram by the [JobCategory][google.cloud.talent.v4beta1.JobCategory], for example,
+	// * locale: histogram by the
+	// [Job.language_code][google.cloud.talent.v4beta1.Job.language_code], for
+	// example, "en-US", "fr-FR".
+	// * language: histogram by the language subtag of the
+	// [Job.language_code][google.cloud.talent.v4beta1.Job.language_code], for
+	// example, "en", "fr".
+	// * category: histogram by the
+	// [JobCategory][google.cloud.talent.v4beta1.JobCategory], for example,
 	// "COMPUTER_AND_IT", "HEALTHCARE".
 	// * base_compensation_unit: histogram by the [CompensationUnit][] of base
 	// salary, for example, "WEEKLY", "MONTHLY".
@@ -784,10 +816,12 @@ type SearchJobsRequest struct {
 	// Must specify list of numeric buckets to group results by.
 	// * annualized_total_compensation: histogram by the total annualized salary.
 	// Must specify list of numeric buckets to group results by.
-	// * string_custom_attribute: histogram by string [Job.custom_attributes][google.cloud.talent.v4beta1.Job.custom_attributes].
+	// * string_custom_attribute: histogram by string
+	// [Job.custom_attributes][google.cloud.talent.v4beta1.Job.custom_attributes].
 	// Values can be accessed via square bracket notations like
 	// string_custom_attribute["key1"].
-	// * numeric_custom_attribute: histogram by numeric [Job.custom_attributes][google.cloud.talent.v4beta1.Job.custom_attributes].
+	// * numeric_custom_attribute: histogram by numeric
+	// [Job.custom_attributes][google.cloud.talent.v4beta1.Job.custom_attributes].
 	// Values can be accessed via square bracket notations like
 	// numeric_custom_attribute["key1"]. Must specify list of numeric buckets to
 	// group results by.
@@ -809,7 +843,9 @@ type SearchJobsRequest struct {
 	//
 	// An integer that specifies the current offset (that is, starting result
 	// location, amongst the jobs deemed by the API as relevant) in search
-	// results. This field is only considered if [page_token][google.cloud.talent.v4beta1.SearchJobsRequest.page_token] is unset.
+	// results. This field is only considered if
+	// [page_token][google.cloud.talent.v4beta1.SearchJobsRequest.page_token] is
+	// unset.
 	//
 	// For example, 0 means to  return results starting from the first matching
 	// job, and 10 means to return from the 11th job. This can be used for
@@ -825,8 +861,9 @@ type SearchJobsRequest struct {
 	// Optional.
 	//
 	// The token specifying the current offset within
-	// search results. See [SearchJobsResponse.next_page_token][google.cloud.talent.v4beta1.SearchJobsResponse.next_page_token] for
-	// an explanation of how to obtain the next set of query results.
+	// search results. See
+	// [SearchJobsResponse.next_page_token][google.cloud.talent.v4beta1.SearchJobsResponse.next_page_token]
+	// for an explanation of how to obtain the next set of query results.
 	PageToken string `protobuf:"bytes,11,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	// Optional.
 	//
@@ -838,28 +875,31 @@ type SearchJobsRequest struct {
 	// * "relevance desc": By relevance descending, as determined by the API
 	// algorithms. Relevance thresholding of query results is only available
 	// with this ordering.
-	// * "posting`_`publish`_`time desc": By [Job.posting_publish_time][google.cloud.talent.v4beta1.Job.posting_publish_time]
+	// * "posting`_`publish`_`time desc": By
+	// [Job.posting_publish_time][google.cloud.talent.v4beta1.Job.posting_publish_time]
 	// descending.
-	// * "posting`_`update`_`time desc": By [Job.posting_update_time][google.cloud.talent.v4beta1.Job.posting_update_time]
+	// * "posting`_`update`_`time desc": By
+	// [Job.posting_update_time][google.cloud.talent.v4beta1.Job.posting_update_time]
 	// descending.
 	// * "title": By [Job.title][google.cloud.talent.v4beta1.Job.title] ascending.
-	// * "title desc": By [Job.title][google.cloud.talent.v4beta1.Job.title] descending.
+	// * "title desc": By [Job.title][google.cloud.talent.v4beta1.Job.title]
+	// descending.
 	// * "annualized`_`base`_`compensation": By job's
-	// [CompensationInfo.annualized_base_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_base_compensation_range] ascending. Jobs
-	// whose annualized base compensation is unspecified are put at the end of
-	// search results.
+	// [CompensationInfo.annualized_base_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_base_compensation_range]
+	// ascending. Jobs whose annualized base compensation is unspecified are put
+	// at the end of search results.
 	// * "annualized`_`base`_`compensation desc": By job's
-	// [CompensationInfo.annualized_base_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_base_compensation_range] descending. Jobs
-	// whose annualized base compensation is unspecified are put at the end of
-	// search results.
+	// [CompensationInfo.annualized_base_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_base_compensation_range]
+	// descending. Jobs whose annualized base compensation is unspecified are put
+	// at the end of search results.
 	// * "annualized`_`total`_`compensation": By job's
-	// [CompensationInfo.annualized_total_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_total_compensation_range] ascending. Jobs
-	// whose annualized base compensation is unspecified are put at the end of
-	// search results.
+	// [CompensationInfo.annualized_total_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_total_compensation_range]
+	// ascending. Jobs whose annualized base compensation is unspecified are put
+	// at the end of search results.
 	// * "annualized`_`total`_`compensation desc": By job's
-	// [CompensationInfo.annualized_total_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_total_compensation_range] descending. Jobs
-	// whose annualized base compensation is unspecified are put at the end of
-	// search results.
+	// [CompensationInfo.annualized_total_compensation_range][google.cloud.talent.v4beta1.CompensationInfo.annualized_total_compensation_range]
+	// descending. Jobs whose annualized base compensation is unspecified are put
+	// at the end of search results.
 	// * "custom`_`ranking desc": By the relevance score adjusted to the
 	// [SearchJobsRequest.custom_ranking_info.ranking_expression][] with weight
 	// factor assigned by
@@ -888,8 +928,9 @@ type SearchJobsRequest struct {
 	// displayed to the job seeker higher up in the results, with the other jobs
 	// being displayed lower down in the results.
 	//
-	// Defaults to [DiversificationLevel.SIMPLE][google.cloud.talent.v4beta1.SearchJobsRequest.DiversificationLevel.SIMPLE] if no value
-	// is specified.
+	// Defaults to
+	// [DiversificationLevel.SIMPLE][google.cloud.talent.v4beta1.SearchJobsRequest.DiversificationLevel.SIMPLE]
+	// if no value is specified.
 	DiversificationLevel SearchJobsRequest_DiversificationLevel `protobuf:"varint,13,opt,name=diversification_level,json=diversificationLevel,proto3,enum=google.cloud.talent.v4beta1.SearchJobsRequest_DiversificationLevel" json:"diversification_level,omitempty"`
 	// Optional.
 	//
@@ -899,13 +940,16 @@ type SearchJobsRequest struct {
 	// Optional.
 	//
 	// Controls whether to disable exact keyword match on [Job.job_title][],
-	// [Job.description][google.cloud.talent.v4beta1.Job.description], [Job.company_display_name][google.cloud.talent.v4beta1.Job.company_display_name], [Job.locations][0],
-	// [Job.qualifications][google.cloud.talent.v4beta1.Job.qualifications]. When disable keyword match is turned off, a
-	// keyword match returns jobs that do not match given category filters when
-	// there are matching keywords. For example, for the query "program manager,"
-	// a result is returned even if the job posting has the title "software
-	// developer," which doesn't fall into "program manager" ontology, but does
-	// have "program manager" appearing in its description.
+	// [Job.description][google.cloud.talent.v4beta1.Job.description],
+	// [Job.company_display_name][google.cloud.talent.v4beta1.Job.company_display_name],
+	// [Job.locations][0],
+	// [Job.qualifications][google.cloud.talent.v4beta1.Job.qualifications]. When
+	// disable keyword match is turned off, a keyword match returns jobs that do
+	// not match given category filters when there are matching keywords. For
+	// example, for the query "program manager," a result is returned even if the
+	// job posting has the title "software developer," which doesn't fall into
+	// "program manager" ontology, but does have "program manager" appearing in
+	// its description.
 	//
 	// For queries like "cloud" that don't contain title or
 	// location specific ontology, jobs with "cloud" keyword matches are returned
@@ -927,7 +971,7 @@ func (m *SearchJobsRequest) Reset()         { *m = SearchJobsRequest{} }
 func (m *SearchJobsRequest) String() string { return proto.CompactTextString(m) }
 func (*SearchJobsRequest) ProtoMessage()    {}
 func (*SearchJobsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{7}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{7}
 }
 func (m *SearchJobsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SearchJobsRequest.Unmarshal(m, b)
@@ -1054,13 +1098,14 @@ func (m *SearchJobsRequest) GetDisableKeywordMatch() bool {
 
 // Input only.
 //
-// Custom ranking information for [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+// Custom ranking information for
+// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 type SearchJobsRequest_CustomRankingInfo struct {
 	// Required.
 	//
 	// Controls over how important the score of
-	// [CustomRankingInfo.ranking_expression][google.cloud.talent.v4beta1.SearchJobsRequest.CustomRankingInfo.ranking_expression] gets applied to job's final
-	// ranking position.
+	// [CustomRankingInfo.ranking_expression][google.cloud.talent.v4beta1.SearchJobsRequest.CustomRankingInfo.ranking_expression]
+	// gets applied to job's final ranking position.
 	//
 	// An error is thrown if not specified.
 	ImportanceLevel SearchJobsRequest_CustomRankingInfo_ImportanceLevel `protobuf:"varint,1,opt,name=importance_level,json=importanceLevel,proto3,enum=google.cloud.talent.v4beta1.SearchJobsRequest_CustomRankingInfo_ImportanceLevel" json:"importance_level,omitempty"`
@@ -1073,8 +1118,10 @@ type SearchJobsRequest_CustomRankingInfo struct {
 	// The syntax for this expression is a subset of Google SQL syntax.
 	//
 	// Supported operators are: +, -, *, /, where the left and right side of
-	// the operator is either a numeric [Job.custom_attributes][google.cloud.talent.v4beta1.Job.custom_attributes] key,
-	// integer/double value or an expression that can be evaluated to a number.
+	// the operator is either a numeric
+	// [Job.custom_attributes][google.cloud.talent.v4beta1.Job.custom_attributes]
+	// key, integer/double value or an expression that can be evaluated to a
+	// number.
 	//
 	// Parenthesis are supported to adjust calculation precedence. The
 	// expression must be < 100 characters in length.
@@ -1091,7 +1138,7 @@ func (m *SearchJobsRequest_CustomRankingInfo) Reset()         { *m = SearchJobsR
 func (m *SearchJobsRequest_CustomRankingInfo) String() string { return proto.CompactTextString(m) }
 func (*SearchJobsRequest_CustomRankingInfo) ProtoMessage()    {}
 func (*SearchJobsRequest_CustomRankingInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{7, 0}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{7, 0}
 }
 func (m *SearchJobsRequest_CustomRankingInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SearchJobsRequest_CustomRankingInfo.Unmarshal(m, b)
@@ -1129,7 +1176,8 @@ func (m *SearchJobsRequest_CustomRankingInfo) GetRankingExpression() string {
 //
 // Response for SearchJob method.
 type SearchJobsResponse struct {
-	// The Job entities that match the specified [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+	// The Job entities that match the specified
+	// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 	MatchingJobs []*SearchJobsResponse_MatchingJob `protobuf:"bytes,1,rep,name=matching_jobs,json=matchingJobs,proto3" json:"matching_jobs,omitempty"`
 	// The histogram results that match with specified
 	// [SearchJobsRequest.histogram_queries][google.cloud.talent.v4beta1.SearchJobsRequest.histogram_queries].
@@ -1172,7 +1220,7 @@ func (m *SearchJobsResponse) Reset()         { *m = SearchJobsResponse{} }
 func (m *SearchJobsResponse) String() string { return proto.CompactTextString(m) }
 func (*SearchJobsResponse) ProtoMessage()    {}
 func (*SearchJobsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{8}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{8}
 }
 func (m *SearchJobsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SearchJobsResponse.Unmarshal(m, b)
@@ -1257,9 +1305,11 @@ func (m *SearchJobsResponse) GetSpellCorrection() *SpellingCorrection {
 
 // Output only.
 //
-// Job entry with metadata inside [SearchJobsResponse][google.cloud.talent.v4beta1.SearchJobsResponse].
+// Job entry with metadata inside
+// [SearchJobsResponse][google.cloud.talent.v4beta1.SearchJobsResponse].
 type SearchJobsResponse_MatchingJob struct {
-	// Job resource that matches the specified [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+	// Job resource that matches the specified
+	// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 	Job *Job `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
 	// A summary of the job with core information that's displayed on the search
 	// results listing page.
@@ -1268,10 +1318,12 @@ type SearchJobsResponse_MatchingJob struct {
 	// closely matching a search query's keywords, if available. The matching
 	// query keywords are enclosed in HTML bold tags.
 	JobTitleSnippet string `protobuf:"bytes,3,opt,name=job_title_snippet,json=jobTitleSnippet,proto3" json:"job_title_snippet,omitempty"`
-	// Contains snippets of text from the [Job.description][google.cloud.talent.v4beta1.Job.description] and similar
-	// fields that most closely match a search query's keywords, if available.
-	// All HTML tags in the original fields are stripped when returned in this
-	// field, and matching query keywords are enclosed in HTML bold tags.
+	// Contains snippets of text from the
+	// [Job.description][google.cloud.talent.v4beta1.Job.description] and
+	// similar fields that most closely match a search query's keywords, if
+	// available. All HTML tags in the original fields are stripped when
+	// returned in this field, and matching query keywords are enclosed in HTML
+	// bold tags.
 	SearchTextSnippet string `protobuf:"bytes,4,opt,name=search_text_snippet,json=searchTextSnippet,proto3" json:"search_text_snippet,omitempty"`
 	// Commute information which is generated based on specified
 	//  [CommuteFilter][google.cloud.talent.v4beta1.CommuteFilter].
@@ -1285,7 +1337,7 @@ func (m *SearchJobsResponse_MatchingJob) Reset()         { *m = SearchJobsRespon
 func (m *SearchJobsResponse_MatchingJob) String() string { return proto.CompactTextString(m) }
 func (*SearchJobsResponse_MatchingJob) ProtoMessage()    {}
 func (*SearchJobsResponse_MatchingJob) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{8, 0}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{8, 0}
 }
 func (m *SearchJobsResponse_MatchingJob) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SearchJobsResponse_MatchingJob.Unmarshal(m, b)
@@ -1360,7 +1412,7 @@ func (m *SearchJobsResponse_CommuteInfo) Reset()         { *m = SearchJobsRespon
 func (m *SearchJobsResponse_CommuteInfo) String() string { return proto.CompactTextString(m) }
 func (*SearchJobsResponse_CommuteInfo) ProtoMessage()    {}
 func (*SearchJobsResponse_CommuteInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_service_a6470b4363404135, []int{8, 1}
+	return fileDescriptor_job_service_259db9e6c393408c, []int{8, 1}
 }
 func (m *SearchJobsResponse_CommuteInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SearchJobsResponse_CommuteInfo.Unmarshal(m, b)
@@ -1447,22 +1499,26 @@ type JobServiceClient interface {
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
 	// Deletes a list of [Job][google.cloud.talent.v4beta1.Job]s by filter.
 	BatchDeleteJobs(ctx context.Context, in *BatchDeleteJobsRequest, opts ...grpc.CallOption) (*empty.Empty, error)
-	// Searches for jobs using the provided [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+	// Searches for jobs using the provided
+	// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 	//
-	// This call constrains the [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs
-	// present in the database, and only returns jobs that the caller has
-	// permission to search against.
+	// This call constrains the
+	// [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs present in
+	// the database, and only returns jobs that the caller has permission to
+	// search against.
 	SearchJobs(ctx context.Context, in *SearchJobsRequest, opts ...grpc.CallOption) (*SearchJobsResponse, error)
-	// Searches for jobs using the provided [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+	// Searches for jobs using the provided
+	// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 	//
 	// This API call is intended for the use case of targeting passive job
 	// seekers (for example, job seekers who have signed up to receive email
 	// alerts about potential job opportunities), and has different algorithmic
 	// adjustments that are targeted to passive job seekers.
 	//
-	// This call constrains the [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs
-	// present in the database, and only returns jobs the caller has
-	// permission to search against.
+	// This call constrains the
+	// [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs present in
+	// the database, and only returns jobs the caller has permission to search
+	// against.
 	SearchJobsForAlert(ctx context.Context, in *SearchJobsRequest, opts ...grpc.CallOption) (*SearchJobsResponse, error)
 }
 
@@ -1570,22 +1626,26 @@ type JobServiceServer interface {
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
 	// Deletes a list of [Job][google.cloud.talent.v4beta1.Job]s by filter.
 	BatchDeleteJobs(context.Context, *BatchDeleteJobsRequest) (*empty.Empty, error)
-	// Searches for jobs using the provided [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+	// Searches for jobs using the provided
+	// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 	//
-	// This call constrains the [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs
-	// present in the database, and only returns jobs that the caller has
-	// permission to search against.
+	// This call constrains the
+	// [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs present in
+	// the database, and only returns jobs that the caller has permission to
+	// search against.
 	SearchJobs(context.Context, *SearchJobsRequest) (*SearchJobsResponse, error)
-	// Searches for jobs using the provided [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
+	// Searches for jobs using the provided
+	// [SearchJobsRequest][google.cloud.talent.v4beta1.SearchJobsRequest].
 	//
 	// This API call is intended for the use case of targeting passive job
 	// seekers (for example, job seekers who have signed up to receive email
 	// alerts about potential job opportunities), and has different algorithmic
 	// adjustments that are targeted to passive job seekers.
 	//
-	// This call constrains the [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs
-	// present in the database, and only returns jobs the caller has
-	// permission to search against.
+	// This call constrains the
+	// [visibility][google.cloud.talent.v4beta1.Job.visibility] of jobs present in
+	// the database, and only returns jobs the caller has permission to search
+	// against.
 	SearchJobsForAlert(context.Context, *SearchJobsRequest) (*SearchJobsResponse, error)
 }
 
@@ -1779,10 +1839,10 @@ var _JobService_serviceDesc = grpc.ServiceDesc{
 }
 
 func init() {
-	proto.RegisterFile("google/cloud/talent/v4beta1/job_service.proto", fileDescriptor_job_service_a6470b4363404135)
+	proto.RegisterFile("google/cloud/talent/v4beta1/job_service.proto", fileDescriptor_job_service_259db9e6c393408c)
 }
 
-var fileDescriptor_job_service_a6470b4363404135 = []byte{
+var fileDescriptor_job_service_259db9e6c393408c = []byte{
 	// 1805 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x58, 0x4f, 0x73, 0xdb, 0xc6,
 	0x15, 0x2f, 0xa8, 0x7f, 0xe4, 0xa3, 0x24, 0x42, 0x6b, 0xc5, 0x66, 0xa8, 0xb4, 0x51, 0xe8, 0xda,

@@ -110,6 +110,16 @@ func TestCompilerExample(t *testing.T) {
 	assertNotFailed(t, c)
 }
 
+func TestCompilerWithStageAfter(t *testing.T) {
+	c := NewCompiler().WithStageAfter("CheckRecursion", mockStageFunctionCall)
+	m := MustParseModule(testModule)
+	c.Compile(map[string]*Module{"testMod": m})
+
+	if !c.Failed() {
+		t.Errorf("Expected compilation error")
+	}
+}
+
 func TestCompilerFunctions(t *testing.T) {
 	tests := []struct {
 		note    string
@@ -1349,10 +1359,10 @@ func TestCompileInvalidEqAssignExpr(t *testing.T) {
 	checkRecursion := reflect.ValueOf(c.checkRecursion)
 
 	for _, stage := range c.stages {
-		if reflect.ValueOf(stage).Pointer() == checkRecursion.Pointer() {
+		if reflect.ValueOf(stage.f).Pointer() == checkRecursion.Pointer() {
 			break
 		}
-		prev = stage
+		prev = stage.f
 	}
 
 	compileStages(c, prev)
@@ -2351,6 +2361,10 @@ func assertNotFailed(t *testing.T, c *Compiler) {
 	}
 }
 
+func mockStageFunctionCall(c *Compiler) *Error {
+	return NewError(CompileErr, &Location{}, "mock stage error")
+}
+
 func getCompilerWithParsedModules(mods map[string]string) *Compiler {
 
 	parsed := map[string]*Module{}
@@ -2387,11 +2401,11 @@ func compileStages(c *Compiler, upto func()) {
 
 	target := reflect.ValueOf(upto)
 
-	for _, fn := range c.stages {
-		if fn(); c.Failed() {
+	for _, s := range c.stages {
+		if s.f(); c.Failed() {
 			return
 		}
-		if reflect.ValueOf(fn).Pointer() == target.Pointer() {
+		if reflect.ValueOf(s.f).Pointer() == target.Pointer() {
 			break
 		}
 	}

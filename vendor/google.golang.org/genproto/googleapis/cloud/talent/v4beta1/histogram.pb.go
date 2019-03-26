@@ -27,8 +27,11 @@ type HistogramQuery struct {
 	// An expression specifies a histogram request against matching resources
 	// (for example, jobs, profiles) for searches.
 	//
-	// See [SearchJobsRequest.histogram_queries][google.cloud.talent.v4beta1.SearchJobsRequest.histogram_queries] and
-	// [SearchProfilesRequest.histogram_queries][google.cloud.talent.v4beta1.SearchProfilesRequest.histogram_queries] for details about syntax.
+	// See
+	// [SearchJobsRequest.histogram_queries][google.cloud.talent.v4beta1.SearchJobsRequest.histogram_queries]
+	// and
+	// [SearchProfilesRequest.histogram_queries][google.cloud.talent.v4beta1.SearchProfilesRequest.histogram_queries]
+	// for details about syntax.
 	HistogramQuery       string   `protobuf:"bytes,1,opt,name=histogram_query,json=histogramQuery,proto3" json:"histogram_query,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -39,7 +42,7 @@ func (m *HistogramQuery) Reset()         { *m = HistogramQuery{} }
 func (m *HistogramQuery) String() string { return proto.CompactTextString(m) }
 func (*HistogramQuery) ProtoMessage()    {}
 func (*HistogramQuery) Descriptor() ([]byte, []int) {
-	return fileDescriptor_histogram_d3709fcfd1e3ebcb, []int{0}
+	return fileDescriptor_histogram_9cfe26ea9654e243, []int{0}
 }
 func (m *HistogramQuery) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_HistogramQuery.Unmarshal(m, b)
@@ -91,7 +94,7 @@ func (m *HistogramQueryResult) Reset()         { *m = HistogramQueryResult{} }
 func (m *HistogramQueryResult) String() string { return proto.CompactTextString(m) }
 func (*HistogramQueryResult) ProtoMessage()    {}
 func (*HistogramQueryResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_histogram_d3709fcfd1e3ebcb, []int{1}
+	return fileDescriptor_histogram_9cfe26ea9654e243, []int{1}
 }
 func (m *HistogramQueryResult) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_HistogramQueryResult.Unmarshal(m, b)
@@ -132,10 +135,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("google/cloud/talent/v4beta1/histogram.proto", fileDescriptor_histogram_d3709fcfd1e3ebcb)
+	proto.RegisterFile("google/cloud/talent/v4beta1/histogram.proto", fileDescriptor_histogram_9cfe26ea9654e243)
 }
 
-var fileDescriptor_histogram_d3709fcfd1e3ebcb = []byte{
+var fileDescriptor_histogram_9cfe26ea9654e243 = []byte{
 	// 301 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x4e, 0xcf, 0xcf, 0x4f,
 	0xcf, 0x49, 0xd5, 0x4f, 0xce, 0xc9, 0x2f, 0x4d, 0xd1, 0x2f, 0x49, 0xcc, 0x49, 0xcd, 0x2b, 0xd1,

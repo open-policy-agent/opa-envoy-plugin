@@ -14,13 +14,13 @@ import (
 	"net"
 	"os"
 	"sync"
-	"unicode/utf8"
 
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/internal/jsonrpc2"
 	"golang.org/x/tools/internal/lsp/cache"
 	"golang.org/x/tools/internal/lsp/protocol"
 	"golang.org/x/tools/internal/lsp/source"
+	"golang.org/x/tools/internal/span"
 )
 
 // RunServer starts an LSP server on the supplied stream, and waits until the
@@ -69,8 +69,10 @@ type server struct {
 	signatureHelpEnabled bool
 	snippetsSupported    bool
 
+	textDocumentSyncKind protocol.TextDocumentSyncKind
+
 	viewMu sync.Mutex
-	view   source.View
+	view   *cache.View
 }
 
 func (s *server) Initialize(ctx context.Context, params *protocol.InitializeParams) (*protocol.InitializeResult, error) {
@@ -82,21 +84,24 @@ func (s *server) Initialize(ctx context.Context, params *protocol.InitializePara
 	s.initialized = true // mark server as initialized now
 
 	// Check if the client supports snippets in completion items.
-	s.snippetsSupported = params.Capabilities.TextDocument.Completion.CompletionItem.SnippetSupport
+	capText := params.Capabilities.InnerClientCapabilities.TextDocument
+	if capText != nil && capText.Completion != nil && capText.Completion.CompletionItem != nil {
+		s.snippetsSupported = capText.Completion.CompletionItem.SnippetSupport
+	}
 	s.signatureHelpEnabled = true
 
-	var rootURI protocol.DocumentURI
-	if params.RootURI != nil {
-		rootURI = *params.RootURI
+	var rootURI span.URI
+	if params.RootURI != "" {
+		rootURI = span.URI(params.RootURI)
 	}
-	sourceURI, err := fromProtocolURI(rootURI)
+	rootPath, err := rootURI.Filename()
 	if err != nil {
 		return nil, err
 	}
-	rootPath, err := sourceURI.Filename()
-	if err != nil {
-		return nil, err
-	}
+
+	// TODO(rstambler): Change this default to protocol.Incremental (or add a
+	// flag). Disabled for now to simplify debugging.
+	s.textDocumentSyncKind = protocol.Full
 
 	s.view = cache.NewView(&packages.Config{
 		Context: ctx,
@@ -112,22 +117,28 @@ func (s *server) Initialize(ctx context.Context, params *protocol.InitializePara
 
 	return &protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
-			CodeActionProvider: true,
-			CompletionProvider: protocol.CompletionOptions{
-				TriggerCharacters: []string{"."},
+			InnerServerCapabilities: protocol.InnerServerCapabilities{
+				CodeActionProvider: true,
+				CompletionProvider: &protocol.CompletionOptions{
+					TriggerCharacters: []string{"."},
+				},
+				DefinitionProvider:              true,
+				DocumentFormattingProvider:      true,
+				DocumentRangeFormattingProvider: true,
+				DocumentSymbolProvider:          true,
+				HoverProvider:                   true,
+				DocumentHighlightProvider:       true,
+				SignatureHelpProvider: &protocol.SignatureHelpOptions{
+					TriggerCharacters: []string{"(", ","},
+				},
+				TextDocumentSync: &protocol.TextDocumentSyncOptions{
+					Change:    s.textDocumentSyncKind,
+					OpenClose: true,
+				},
 			},
-			DefinitionProvider:              true,
-			DocumentFormattingProvider:      true,
-			DocumentRangeFormattingProvider: true,
-			HoverProvider:                   true,
-			SignatureHelpProvider: protocol.SignatureHelpOptions{
-				TriggerCharacters: []string{"(", ","},
+			TypeDefinitionServerCapabilities: protocol.TypeDefinitionServerCapabilities{
+				TypeDefinitionProvider: true,
 			},
-			TextDocumentSync: protocol.TextDocumentSyncOptions{
-				Change:    float64(protocol.Incremental),
-				OpenClose: true,
-			},
-			TypeDefinitionProvider: true,
 		},
 	}, nil
 }
@@ -175,35 +186,7 @@ func (s *server) ExecuteCommand(context.Context, *protocol.ExecuteCommandParams)
 }
 
 func (s *server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocumentParams) error {
-	s.cacheAndDiagnose(ctx, params.TextDocument.URI, params.TextDocument.Text)
-	return nil
-}
-
-func bytesOffset(content []byte, pos protocol.Position) int {
-	var line, char, offset int
-
-	for len(content) > 0 {
-		if line == int(pos.Line) && char == int(pos.Character) {
-			return offset
-		}
-		r, size := utf8.DecodeRune(content)
-		char++
-		// The offsets are based on a UTF-16 string representation.
-		// So the rune should be checked twice for two code units in UTF-16.
-		if r >= 0x10000 {
-			if line == int(pos.Line) && char == int(pos.Character) {
-				return offset
-			}
-			char++
-		}
-		offset += size
-		content = content[size:]
-		if r == '\n' {
-			line++
-			char = 0
-		}
-	}
-	return -1
+	return s.cacheAndDiagnose(ctx, span.URI(params.TextDocument.URI), params.TextDocument.Text)
 }
 
 func (s *server) applyChanges(ctx context.Context, params *protocol.DidChangeTextDocumentParams) (string, error) {
@@ -216,24 +199,21 @@ func (s *server) applyChanges(ctx context.Context, params *protocol.DidChangeTex
 		return change.Text, nil
 	}
 
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
-	if err != nil {
-		return "", err
-	}
-
-	file, err := s.view.GetFile(ctx, sourceURI)
+	file, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
 	if err != nil {
 		return "", jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "file not found")
 	}
-
-	content := file.GetContent()
+	content := file.GetContent(ctx)
 	for _, change := range params.ContentChanges {
-		start := bytesOffset(content, change.Range.Start)
-		if start == -1 {
+		spn, err := m.RangeSpan(*change.Range)
+		if err != nil {
+			return "", err
+		}
+		if !spn.HasOffset() {
 			return "", jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "invalid range for content change")
 		}
-		end := bytesOffset(content, change.Range.End)
-		if end == -1 {
+		start, end := spn.Start().Offset(), spn.End().Offset()
+		if end <= start {
 			return "", jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "invalid range for content change")
 		}
 		var buf bytes.Buffer
@@ -250,12 +230,23 @@ func (s *server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 		return jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "no content changes provided")
 	}
 
-	text, err := s.applyChanges(ctx, params)
-	if err != nil {
-		return err
+	var text string
+	switch s.textDocumentSyncKind {
+	case protocol.Incremental:
+		var err error
+		text, err = s.applyChanges(ctx, params)
+		if err != nil {
+			return err
+		}
+	case protocol.Full:
+		// We expect the full content of file, i.e. a single change with no range.
+		change := params.ContentChanges[0]
+		if change.RangeLength != 0 {
+			return jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "unexpected change range provided")
+		}
+		text = change.Text
 	}
-	s.cacheAndDiagnose(ctx, params.TextDocument.URI, text)
-	return nil
+	return s.cacheAndDiagnose(ctx, span.URI(params.TextDocument.URI), text)
 }
 
 func (s *server) WillSave(context.Context, *protocol.WillSaveTextDocumentParams) error {
@@ -271,26 +262,24 @@ func (s *server) DidSave(context.Context, *protocol.DidSaveTextDocumentParams) e
 }
 
 func (s *server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocumentParams) error {
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
-	if err != nil {
-		return err
-	}
-	s.setContent(ctx, sourceURI, nil)
+	s.setContent(ctx, span.URI(params.TextDocument.URI), nil)
 	return nil
 }
 
 func (s *server) Completion(ctx context.Context, params *protocol.CompletionParams) (*protocol.CompletionList, error) {
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.view.GetFile(ctx, sourceURI)
+	spn, err := m.PointSpan(params.Position)
 	if err != nil {
 		return nil, err
 	}
-	tok := f.GetToken()
-	pos := fromProtocolPosition(tok, params.Position)
-	items, prefix, err := source.Completion(ctx, f, pos)
+	rng, err := spn.Range(m.Converter)
+	if err != nil {
+		return nil, err
+	}
+	items, prefix, err := source.Completion(ctx, f, rng.Start)
 	if err != nil {
 		return nil, err
 	}
@@ -305,46 +294,58 @@ func (s *server) CompletionResolve(context.Context, *protocol.CompletionItem) (*
 }
 
 func (s *server) Hover(ctx context.Context, params *protocol.TextDocumentPositionParams) (*protocol.Hover, error) {
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.view.GetFile(ctx, sourceURI)
+	spn, err := m.PointSpan(params.Position)
 	if err != nil {
 		return nil, err
 	}
-	tok := f.GetToken()
-	pos := fromProtocolPosition(tok, params.Position)
-	ident, err := source.Identifier(ctx, s.view, f, pos)
+	identRange, err := spn.Range(m.Converter)
 	if err != nil {
 		return nil, err
 	}
-	content, err := ident.Hover(nil)
+	ident, err := source.Identifier(ctx, s.view, f, identRange.Start)
+	if err != nil {
+		return nil, err
+	}
+	content, err := ident.Hover(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	markdown := "```go\n" + content + "\n```"
+	identSpan, err := ident.Range.Span()
+	if err != nil {
+		return nil, err
+	}
+	rng, err := m.Range(identSpan)
+	if err != nil {
+		return nil, err
+	}
 	return &protocol.Hover{
 		Contents: protocol.MarkupContent{
 			Kind:  protocol.Markdown,
 			Value: markdown,
 		},
-		Range: toProtocolRange(tok, ident.Range),
+		Range: &rng,
 	}, nil
 }
 
 func (s *server) SignatureHelp(ctx context.Context, params *protocol.TextDocumentPositionParams) (*protocol.SignatureHelp, error) {
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.view.GetFile(ctx, sourceURI)
+	spn, err := m.PointSpan(params.Position)
 	if err != nil {
 		return nil, err
 	}
-	tok := f.GetToken()
-	pos := fromProtocolPosition(tok, params.Position)
-	info, err := source.SignatureHelp(ctx, f, pos)
+	rng, err := spn.Range(m.Converter)
+	if err != nil {
+		return nil, err
+	}
+	info, err := source.SignatureHelp(ctx, f, rng.Start)
 	if err != nil {
 		return nil, err
 	}
@@ -352,39 +353,67 @@ func (s *server) SignatureHelp(ctx context.Context, params *protocol.TextDocumen
 }
 
 func (s *server) Definition(ctx context.Context, params *protocol.TextDocumentPositionParams) ([]protocol.Location, error) {
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.view.GetFile(ctx, sourceURI)
+	spn, err := m.PointSpan(params.Position)
 	if err != nil {
 		return nil, err
 	}
-	tok := f.GetToken()
-	pos := fromProtocolPosition(tok, params.Position)
-	ident, err := source.Identifier(ctx, s.view, f, pos)
+	rng, err := spn.Range(m.Converter)
 	if err != nil {
 		return nil, err
 	}
-	return []protocol.Location{toProtocolLocation(s.view.FileSet(), ident.Declaration.Range)}, nil
+	ident, err := source.Identifier(ctx, s.view, f, rng.Start)
+	if err != nil {
+		return nil, err
+	}
+	decSpan, err := ident.Declaration.Range.Span()
+	if err != nil {
+		return nil, err
+	}
+	_, decM, err := newColumnMap(ctx, s.view, decSpan.URI())
+	if err != nil {
+		return nil, err
+	}
+	loc, err := decM.Location(decSpan)
+	if err != nil {
+		return nil, err
+	}
+	return []protocol.Location{loc}, nil
 }
 
 func (s *server) TypeDefinition(ctx context.Context, params *protocol.TextDocumentPositionParams) ([]protocol.Location, error) {
-	sourceURI, err := fromProtocolURI(params.TextDocument.URI)
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.view.GetFile(ctx, sourceURI)
+	spn, err := m.PointSpan(params.Position)
 	if err != nil {
 		return nil, err
 	}
-	tok := f.GetToken()
-	pos := fromProtocolPosition(tok, params.Position)
-	ident, err := source.Identifier(ctx, s.view, f, pos)
+	rng, err := spn.Range(m.Converter)
 	if err != nil {
 		return nil, err
 	}
-	return []protocol.Location{toProtocolLocation(s.view.FileSet(), ident.Type.Range)}, nil
+	ident, err := source.Identifier(ctx, s.view, f, rng.Start)
+	if err != nil {
+		return nil, err
+	}
+	identSpan, err := ident.Type.Range.Span()
+	if err != nil {
+		return nil, err
+	}
+	_, identM, err := newColumnMap(ctx, s.view, identSpan.URI())
+	if err != nil {
+		return nil, err
+	}
+	loc, err := identM.Location(identSpan)
+	if err != nil {
+		return nil, err
+	}
+	return []protocol.Location{loc}, nil
 }
 
 func (s *server) Implementation(context.Context, *protocol.TextDocumentPositionParams) ([]protocol.Location, error) {
@@ -395,16 +424,45 @@ func (s *server) References(context.Context, *protocol.ReferenceParams) ([]proto
 	return nil, notImplemented("References")
 }
 
-func (s *server) DocumentHighlight(context.Context, *protocol.TextDocumentPositionParams) ([]protocol.DocumentHighlight, error) {
-	return nil, notImplemented("DocumentHighlight")
+func (s *server) DocumentHighlight(ctx context.Context, params *protocol.TextDocumentPositionParams) ([]protocol.DocumentHighlight, error) {
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
+	if err != nil {
+		return nil, err
+	}
+
+	spn, err := m.PointSpan(params.Position)
+	if err != nil {
+		return nil, err
+	}
+
+	rng, err := spn.Range(m.Converter)
+	if err != nil {
+		return nil, err
+	}
+
+	spans := source.Highlight(ctx, f, rng.Start)
+	return toProtocolHighlight(m, spans), nil
 }
 
-func (s *server) DocumentSymbol(context.Context, *protocol.DocumentSymbolParams) ([]protocol.DocumentSymbol, error) {
-	return nil, notImplemented("DocumentSymbol")
+func (s *server) DocumentSymbol(ctx context.Context, params *protocol.DocumentSymbolParams) ([]protocol.DocumentSymbol, error) {
+	f, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
+	if err != nil {
+		return nil, err
+	}
+	symbols := source.DocumentSymbols(ctx, f)
+	return toProtocolDocumentSymbols(m, symbols), nil
 }
 
 func (s *server) CodeAction(ctx context.Context, params *protocol.CodeActionParams) ([]protocol.CodeAction, error) {
-	edits, err := organizeImports(ctx, s.view, params.TextDocument.URI)
+	_, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
+	if err != nil {
+		return nil, err
+	}
+	spn, err := m.RangeSpan(params.Range)
+	if err != nil {
+		return nil, err
+	}
+	edits, err := organizeImports(ctx, s.view, spn)
 	if err != nil {
 		return nil, err
 	}
@@ -412,8 +470,8 @@ func (s *server) CodeAction(ctx context.Context, params *protocol.CodeActionPara
 		{
 			Title: "Organize Imports",
 			Kind:  protocol.SourceOrganizeImports,
-			Edit: protocol.WorkspaceEdit{
-				Changes: map[protocol.DocumentURI][]protocol.TextEdit{
+			Edit: &protocol.WorkspaceEdit{
+				Changes: &map[string][]protocol.TextEdit{
 					params.TextDocument.URI: edits,
 				},
 			},
@@ -446,11 +504,20 @@ func (s *server) ColorPresentation(context.Context, *protocol.ColorPresentationP
 }
 
 func (s *server) Formatting(ctx context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
-	return formatRange(ctx, s.view, params.TextDocument.URI, nil)
+	spn := span.New(span.URI(params.TextDocument.URI), span.Point{}, span.Point{})
+	return formatRange(ctx, s.view, spn)
 }
 
 func (s *server) RangeFormatting(ctx context.Context, params *protocol.DocumentRangeFormattingParams) ([]protocol.TextEdit, error) {
-	return formatRange(ctx, s.view, params.TextDocument.URI, &params.Range)
+	_, m, err := newColumnMap(ctx, s.view, span.URI(params.TextDocument.URI))
+	if err != nil {
+		return nil, err
+	}
+	spn, err := m.RangeSpan(params.Range)
+	if err != nil {
+		return nil, err
+	}
+	return formatRange(ctx, s.view, spn)
 }
 
 func (s *server) OnTypeFormatting(context.Context, *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
@@ -461,7 +528,7 @@ func (s *server) Rename(context.Context, *protocol.RenameParams) ([]protocol.Wor
 	return nil, notImplemented("Rename")
 }
 
-func (s *server) FoldingRanges(context.Context, *protocol.FoldingRangeRequestParam) ([]protocol.FoldingRange, error) {
+func (s *server) FoldingRanges(context.Context, *protocol.FoldingRangeParams) ([]protocol.FoldingRange, error) {
 	return nil, notImplemented("FoldingRanges")
 }
 

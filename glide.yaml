@@ -8,7 +8,7 @@ import:
   subpackages:
   - context
 - package: github.com/open-policy-agent/opa
-  version: v0.10.5
+  version: v0.10.6
 - package: github.com/spf13/cobra
   version: b4dbd37a01839e0653eec12aa4bbb2a2ce7b2a37
 - package: github.com/spf13/pflag

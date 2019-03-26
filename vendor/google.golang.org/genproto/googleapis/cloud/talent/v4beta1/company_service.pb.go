@@ -26,8 +26,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
-// Input only.
-//
 // The Request of the CreateCompany method.
 type CreateCompanyRequest struct {
 	// Required.
@@ -50,7 +48,7 @@ func (m *CreateCompanyRequest) Reset()         { *m = CreateCompanyRequest{} }
 func (m *CreateCompanyRequest) String() string { return proto.CompactTextString(m) }
 func (*CreateCompanyRequest) ProtoMessage()    {}
 func (*CreateCompanyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_company_service_a9bae875d0b19058, []int{0}
+	return fileDescriptor_company_service_4f27ad8b55d83637, []int{0}
 }
 func (m *CreateCompanyRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CreateCompanyRequest.Unmarshal(m, b)
@@ -84,8 +82,6 @@ func (m *CreateCompanyRequest) GetCompany() *Company {
 	return nil
 }
 
-// Input only.
-//
 // Request for getting a company by name.
 type GetCompanyRequest struct {
 	// Required.
@@ -104,7 +100,7 @@ func (m *GetCompanyRequest) Reset()         { *m = GetCompanyRequest{} }
 func (m *GetCompanyRequest) String() string { return proto.CompactTextString(m) }
 func (*GetCompanyRequest) ProtoMessage()    {}
 func (*GetCompanyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_company_service_a9bae875d0b19058, []int{1}
+	return fileDescriptor_company_service_4f27ad8b55d83637, []int{1}
 }
 func (m *GetCompanyRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_GetCompanyRequest.Unmarshal(m, b)
@@ -131,8 +127,6 @@ func (m *GetCompanyRequest) GetName() string {
 	return ""
 }
 
-// Input only.
-//
 // Request for updating a specified company.
 type UpdateCompanyRequest struct {
 	// Required.
@@ -142,11 +136,15 @@ type UpdateCompanyRequest struct {
 	// Optional but strongly recommended for the best service
 	// experience.
 	//
-	// If [update_mask][google.cloud.talent.v4beta1.UpdateCompanyRequest.update_mask] is provided, only the specified fields in
-	// [company][google.cloud.talent.v4beta1.UpdateCompanyRequest.company] are updated. Otherwise all the fields are updated.
+	// If
+	// [update_mask][google.cloud.talent.v4beta1.UpdateCompanyRequest.update_mask]
+	// is provided, only the specified fields in
+	// [company][google.cloud.talent.v4beta1.UpdateCompanyRequest.company] are
+	// updated. Otherwise all the fields are updated.
 	//
 	// A field mask to specify the company fields to be updated. Only
-	// top level fields of [Company][google.cloud.talent.v4beta1.Company] are supported.
+	// top level fields of [Company][google.cloud.talent.v4beta1.Company] are
+	// supported.
 	UpdateMask           *field_mask.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
@@ -157,7 +155,7 @@ func (m *UpdateCompanyRequest) Reset()         { *m = UpdateCompanyRequest{} }
 func (m *UpdateCompanyRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdateCompanyRequest) ProtoMessage()    {}
 func (*UpdateCompanyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_company_service_a9bae875d0b19058, []int{2}
+	return fileDescriptor_company_service_4f27ad8b55d83637, []int{2}
 }
 func (m *UpdateCompanyRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_UpdateCompanyRequest.Unmarshal(m, b)
@@ -191,8 +189,6 @@ func (m *UpdateCompanyRequest) GetUpdateMask() *field_mask.FieldMask {
 	return nil
 }
 
-// Input only.
-//
 // Request to delete a company.
 type DeleteCompanyRequest struct {
 	// Required.
@@ -211,7 +207,7 @@ func (m *DeleteCompanyRequest) Reset()         { *m = DeleteCompanyRequest{} }
 func (m *DeleteCompanyRequest) String() string { return proto.CompactTextString(m) }
 func (*DeleteCompanyRequest) ProtoMessage()    {}
 func (*DeleteCompanyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_company_service_a9bae875d0b19058, []int{3}
+	return fileDescriptor_company_service_4f27ad8b55d83637, []int{3}
 }
 func (m *DeleteCompanyRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DeleteCompanyRequest.Unmarshal(m, b)
@@ -238,8 +234,6 @@ func (m *DeleteCompanyRequest) GetName() string {
 	return ""
 }
 
-// Input only.
-//
 // List companies for which the client has ACL visibility.
 type ListCompaniesRequest struct {
 	// Required.
@@ -264,8 +258,9 @@ type ListCompaniesRequest struct {
 	//
 	// Defaults to false.
 	//
-	// If true, at most [page_size][google.cloud.talent.v4beta1.ListCompaniesRequest.page_size] of companies are fetched, among which
-	// only those with open jobs are returned.
+	// If true, at most
+	// [page_size][google.cloud.talent.v4beta1.ListCompaniesRequest.page_size] of
+	// companies are fetched, among which only those with open jobs are returned.
 	RequireOpenJobs      bool     `protobuf:"varint,4,opt,name=require_open_jobs,json=requireOpenJobs,proto3" json:"require_open_jobs,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -276,7 +271,7 @@ func (m *ListCompaniesRequest) Reset()         { *m = ListCompaniesRequest{} }
 func (m *ListCompaniesRequest) String() string { return proto.CompactTextString(m) }
 func (*ListCompaniesRequest) ProtoMessage()    {}
 func (*ListCompaniesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_company_service_a9bae875d0b19058, []int{4}
+	return fileDescriptor_company_service_4f27ad8b55d83637, []int{4}
 }
 func (m *ListCompaniesRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ListCompaniesRequest.Unmarshal(m, b)
@@ -344,7 +339,7 @@ func (m *ListCompaniesResponse) Reset()         { *m = ListCompaniesResponse{} }
 func (m *ListCompaniesResponse) String() string { return proto.CompactTextString(m) }
 func (*ListCompaniesResponse) ProtoMessage()    {}
 func (*ListCompaniesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_company_service_a9bae875d0b19058, []int{5}
+	return fileDescriptor_company_service_4f27ad8b55d83637, []int{5}
 }
 func (m *ListCompaniesResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ListCompaniesResponse.Unmarshal(m, b)
@@ -410,14 +405,12 @@ type CompanyServiceClient interface {
 	CreateCompany(ctx context.Context, in *CreateCompanyRequest, opts ...grpc.CallOption) (*Company, error)
 	// Retrieves specified company.
 	GetCompany(ctx context.Context, in *GetCompanyRequest, opts ...grpc.CallOption) (*Company, error)
-	// Updates specified company. Company names can't be updated. To update a
-	// company name, delete the company and all jobs associated with it, and only
-	// then re-create them.
+	// Updates specified company.
 	UpdateCompany(ctx context.Context, in *UpdateCompanyRequest, opts ...grpc.CallOption) (*Company, error)
 	// Deletes specified company.
 	// Prerequisite: The company has no jobs associated with it.
 	DeleteCompany(ctx context.Context, in *DeleteCompanyRequest, opts ...grpc.CallOption) (*empty.Empty, error)
-	// Lists all companies associated with the service account.
+	// Lists all companies associated with the project.
 	ListCompanies(ctx context.Context, in *ListCompaniesRequest, opts ...grpc.CallOption) (*ListCompaniesResponse, error)
 }
 
@@ -480,14 +473,12 @@ type CompanyServiceServer interface {
 	CreateCompany(context.Context, *CreateCompanyRequest) (*Company, error)
 	// Retrieves specified company.
 	GetCompany(context.Context, *GetCompanyRequest) (*Company, error)
-	// Updates specified company. Company names can't be updated. To update a
-	// company name, delete the company and all jobs associated with it, and only
-	// then re-create them.
+	// Updates specified company.
 	UpdateCompany(context.Context, *UpdateCompanyRequest) (*Company, error)
 	// Deletes specified company.
 	// Prerequisite: The company has no jobs associated with it.
 	DeleteCompany(context.Context, *DeleteCompanyRequest) (*empty.Empty, error)
-	// Lists all companies associated with the service account.
+	// Lists all companies associated with the project.
 	ListCompanies(context.Context, *ListCompaniesRequest) (*ListCompaniesResponse, error)
 }
 
@@ -615,10 +606,10 @@ var _CompanyService_serviceDesc = grpc.ServiceDesc{
 }
 
 func init() {
-	proto.RegisterFile("google/cloud/talent/v4beta1/company_service.proto", fileDescriptor_company_service_a9bae875d0b19058)
+	proto.RegisterFile("google/cloud/talent/v4beta1/company_service.proto", fileDescriptor_company_service_4f27ad8b55d83637)
 }
 
-var fileDescriptor_company_service_a9bae875d0b19058 = []byte{
+var fileDescriptor_company_service_4f27ad8b55d83637 = []byte{
 	// 673 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x95, 0x4f, 0x6b, 0x13, 0x41,
 	0x18, 0xc6, 0x99, 0xb6, 0xd6, 0xe6, 0x2d, 0xb1, 0x74, 0x8c, 0x25, 0xa4, 0x8a, 0x61, 0x91, 0x1a,

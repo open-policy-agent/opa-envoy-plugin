@@ -2,7 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := 0.10.5
+VERSION := 0.10.6
 
 GO := go
 GOVERSION := 1.11
@@ -77,23 +77,28 @@ image:
 image-quick:
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile.in > .Dockerfile_$(GOARCH)
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile_debug.in > .Dockerfile_debug_$(GOARCH)
+	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile_rootless.in > .Dockerfile_rootless_$(GOARCH)
 	docker build -t $(IMAGE):$(VERSION)	-f .Dockerfile_$(GOARCH) .
 	docker build -t $(IMAGE):$(VERSION)-debug -f .Dockerfile_debug_$(GOARCH) .
+	docker build -t $(IMAGE):$(VERSION)-rootless -f .Dockerfile_rootless_$(GOARCH) .
 
 .PHONY: push
 push:
 	docker push $(IMAGE):$(VERSION)
 	docker push $(IMAGE):$(VERSION)-debug
+	docker push $(IMAGE):$(VERSION)-rootless
 
 .PHONY: tag-latest
 tag-latest:
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest
 	docker tag $(IMAGE):$(VERSION)-debug $(IMAGE):latest-debug
+	docker tag $(IMAGE):$(VERSION)-rootless $(IMAGE):latest-rootless
 
 .PHONY: push-latest
 push-latest:
 	docker push $(IMAGE):latest
 	docker push $(IMAGE):latest-debug
+	docker push $(IMAGE):latest-rootless
 
 .PHONY: docker-login
 docker-login:
@@ -165,20 +170,7 @@ wasm-clean:
 clean: wasm-clean
 	rm -f .Dockerfile_*
 	rm -f opa_*_*
-	rm -fr site.tar.gz docs/_site docs/node_modules docs/book/_book
 	rm -fr _test
-
-.PHONY: docs
-docs:
-	docker run -it --rm \
-		-v $(PWD):/go/src/github.com/open-policy-agent/opa \
-		-w /go/src/github.com/open-policy-agent/opa \
-		-p 4000:4000 \
-		-u $(shell id -u $(USER)):$(shell id -g $(USER)) \
-		-e GITBOOK_DIR=/go/src/github.com/open-policy-agent/opa/.gitbook \
-		-e npm_config_cache=/go/src/github.com/open-policy-agent/opa/.npm \
-		$(REPOSITORY)/release-builder:$(RELEASE_BUILDER_VERSION) \
-		./build/build-docs.sh --output-dir=/go/src/github.com/open-policy-agent/opa --serve=4000
 
 
 ######################################################

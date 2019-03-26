@@ -13,6 +13,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -24,10 +25,6 @@ import (
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/packages/packagestest"
 )
-
-// TODO(matloob): remove this once Go 1.12 is released as we will end support
-// for versions of go list before Go 1.10.4.
-var usesOldGolist = false
 
 // TODO(adonovan): more test cases to write:
 //
@@ -72,7 +69,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 		Name: "golang.org/fake",
 		Files: map[string]interface{}{
 			"a/a.go":             `package a; const A = 1`,
-			"b/b.go":             `package b; import ("golang.org/fake/a"; _ "errors"); var B = a.A`,
+			"b/b.go":             `package b; import ("golang.org/fake/a"; _ "container/list"); var B = a.A`,
 			"c/c.go":             `package c; import (_ "golang.org/fake/b"; _ "unsafe")`,
 			"c/c2.go":            "// +build ignore\n\n" + `package c; import _ "fmt"`,
 			"subdir/d/d.go":      `package d`,
@@ -93,7 +90,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 	// Check graph topology.
 	graph, all := importGraph(initial)
 	wantGraph := `
-  errors
+  container/list
   golang.org/fake/a
   golang.org/fake/b
 * golang.org/fake/c
@@ -104,7 +101,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 * golang.org/fake/subdir/d_test [golang.org/fake/subdir/d.test]
   math/bits
   unsafe
-  golang.org/fake/b -> errors
+  golang.org/fake/b -> container/list
   golang.org/fake/b -> golang.org/fake/a
   golang.org/fake/c -> golang.org/fake/b
   golang.org/fake/c -> unsafe
@@ -132,7 +129,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 	// Check graph topology.
 	graph, all = importGraph(initial)
 	wantGraph = `
-  errors
+  container/list
   golang.org/fake/a
   golang.org/fake/b
 * golang.org/fake/c
@@ -143,7 +140,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 * golang.org/fake/subdir/d_test [golang.org/fake/subdir/d.test]
   math/bits
   unsafe
-  golang.org/fake/b -> errors
+  golang.org/fake/b -> container/list
   golang.org/fake/b -> golang.org/fake/a
   golang.org/fake/c -> golang.org/fake/b
   golang.org/fake/c -> unsafe
@@ -173,7 +170,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 		{"golang.org/fake/b", "b", "package", "b.go"},
 		{"golang.org/fake/c", "c", "package", "c.go"}, // c2.go is ignored
 		{"golang.org/fake/e", "main", "command", "e.go e2.go"},
-		{"errors", "errors", "package", "errors.go"},
+		{"container/list", "list", "package", "list.go"},
 		{"golang.org/fake/subdir/d", "d", "package", "d.go"},
 		{"golang.org/fake/subdir/d.test", "main", "command", "0.go"},
 		{"unsafe", "unsafe", "package", ""},
@@ -313,6 +310,29 @@ func TestLoadAbsolutePath(t *testing.T) {
 	want := []string{"golang.org/gopatha/a", "golang.org/gopathb/b"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("initial packages loaded: got [%s], want [%s]", got, want)
+	}
+}
+
+func TestReturnErrorWhenUsingNonGoFiles(t *testing.T) {
+	exported := packagestest.Export(t, packagestest.GOPATH, []packagestest.Module{{
+		Name: "golang.org/gopatha",
+		Files: map[string]interface{}{
+			"a/a.go": `package a`,
+		}}, {
+		Name: "golang.org/gopathb",
+		Files: map[string]interface{}{
+			"b/b.c": `package b`,
+		}}})
+	defer exported.Cleanup()
+	config := packages.Config{}
+	_, err := packages.Load(&config, "a/a.go", "b/b.c")
+	if err == nil {
+		t.Fatalf("should have failed with an error")
+	}
+	got := err.Error()
+	want := "named files must be .go files"
+	if !strings.Contains(got, want) {
+		t.Fatalf("want error message: %s, got: %s", want, got)
 	}
 }
 
@@ -542,11 +562,6 @@ func testLoadTypes(t *testing.T, exporter packagestest.Exporter) {
 		{"golang.org/fake/b", false}, // use export data
 		{"golang.org/fake/c", true},  // need src, no export data for c
 	} {
-		if usesOldGolist && !test.wantSyntax {
-			// legacy go list always upgrades to LoadAllSyntax, syntax will be filled in.
-			// still check that types information is complete.
-			test.wantSyntax = true
-		}
 		p := all[test.id]
 		if p == nil {
 			t.Errorf("missing package: %s", test.id)
@@ -618,14 +633,6 @@ func testLoadSyntaxOK(t *testing.T, exporter packagestest.Exporter) {
 		{"golang.org/fake/e", false, false}, // export data package
 		{"golang.org/fake/f", false, false}, // export data package
 	} {
-		// TODO(matloob): The legacy go list based support loads
-		// everything from source because it doesn't do a build
-		// and the .a files don't exist.
-		// Can we simulate its existence?
-		if usesOldGolist {
-			test.wantComplete = true
-			test.wantSyntax = true
-		}
 		p := all[test.id]
 		if p == nil {
 			t.Errorf("missing package: %s", test.id)
@@ -744,10 +751,6 @@ func testLoadSyntaxError(t *testing.T, exporter packagestest.Exporter) {
 		{"golang.org/fake/e", true, true},
 		{"golang.org/fake/f", false, false},
 	} {
-		if usesOldGolist && !test.wantSyntax {
-			// legacy go list always upgrades to LoadAllSyntax, syntax will be filled in.
-			test.wantSyntax = true
-		}
 		p := all[test.id]
 		if p == nil {
 			t.Errorf("missing package: %s", test.id)
@@ -1193,10 +1196,6 @@ func testName(t *testing.T, exporter packagestest.Exporter) {
 }
 
 func TestName_Modules(t *testing.T) {
-	if usesOldGolist {
-		t.Skip("pre-modules version of Go")
-	}
-
 	// Test the top-level package case described in runNamedQueries.
 	// Note that overriding GOPATH below prevents Export from
 	// creating more than one module.
@@ -1211,12 +1210,20 @@ func TestName_Modules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gopath, err := ioutil.TempDir("", "TestName_Modules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(gopath)
+	if err := copyAll(filepath.Join(wd, "testdata", "TestName_Modules"), gopath); err != nil {
+		t.Fatal(err)
+	}
 	// testdata/TestNamed_Modules contains:
 	// - pkg/mod/github.com/heschik/tools-testrepo@v1.0.0/pkg
 	// - pkg/mod/github.com/heschik/tools-testrepo/v2@v2.0.0/pkg
 	// - src/b/pkg
 	exported.Config.Mode = packages.LoadImports
-	exported.Config.Env = append(exported.Config.Env, "GOPATH="+wd+"/testdata/TestName_Modules")
+	exported.Config.Env = append(exported.Config.Env, "GOPATH="+gopath)
 	initial, err := packages.Load(exported.Config, "iamashamedtousethedisabledqueryname=pkg")
 	if err != nil {
 		t.Fatal(err)
@@ -1233,10 +1240,6 @@ func TestName_Modules(t *testing.T) {
 }
 
 func TestName_ModulesDedup(t *testing.T) {
-	if usesOldGolist {
-		t.Skip("pre-modules version of Go")
-	}
-
 	exported := packagestest.Export(t, packagestest.Modules, []packagestest.Module{{
 		Name: "golang.org/fake",
 		Files: map[string]interface{}{
@@ -1248,13 +1251,21 @@ func TestName_ModulesDedup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gopath, err := ioutil.TempDir("", "TestName_ModulesDedup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(gopath)
+	if err := copyAll(filepath.Join(wd, "testdata", "TestName_ModulesDedup"), gopath); err != nil {
+		t.Fatal(err)
+	}
 	// testdata/TestNamed_ModulesDedup contains:
 	// - pkg/mod/github.com/heschik/tools-testrepo/v2@v2.0.2/pkg/pkg.go
 	// - pkg/mod/github.com/heschik/tools-testrepo/v2@v2.0.1/pkg/pkg.go
 	// - pkg/mod/github.com/heschik/tools-testrepo@v1.0.0/pkg/pkg.go
 	// but, inexplicably, not v2.0.0. Nobody knows why.
 	exported.Config.Mode = packages.LoadImports
-	exported.Config.Env = append(exported.Config.Env, "GOPATH="+wd+"/testdata/TestName_ModulesDedup")
+	exported.Config.Env = append(exported.Config.Env, "GOPATH="+gopath)
 	initial, err := packages.Load(exported.Config, "iamashamedtousethedisabledqueryname=pkg")
 	if err != nil {
 		t.Fatal(err)
@@ -1515,6 +1526,8 @@ func testConfigDefaultEnv(t *testing.T, exporter packagestest.Exporter) {
 		driverScript packagestest.Writer
 	)
 	switch runtime.GOOS {
+	case "android":
+		t.Skip("doesn't run on android")
 	case "windows":
 		// TODO(jayconrod): write an equivalent batch script for windows.
 		// Hint: "type" can be used to read a file to stdout.
@@ -1717,6 +1730,7 @@ func importGraph(initial []*packages.Package) (string, map[string]*packages.Pack
 				}
 				// math/bits took on a dependency on unsafe in 1.12, which breaks some
 				// tests. As a short term hack, prune that edge.
+				// ditto for ("errors", "internal/reflectlite") in 1.13.
 				// TODO(matloob): think of a cleaner solution, or remove math/bits from the test.
 				if p.ID == "math/bits" && imp.ID == "unsafe" {
 					continue
@@ -1753,4 +1767,28 @@ func constant(p *packages.Package, name string) *types.Const {
 		return nil
 	}
 	return c.(*types.Const)
+}
+
+func copyAll(srcPath, dstPath string) error {
+	return filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		contents, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(srcPath, path)
+		if err != nil {
+			return err
+		}
+		dstFilePath := filepath.Join(dstPath, rel)
+		if err := os.MkdirAll(filepath.Dir(dstFilePath), 0755); err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(dstFilePath, contents, 0644); err != nil {
+			return err
+		}
+		return nil
+	})
 }

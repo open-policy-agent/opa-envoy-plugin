@@ -1561,9 +1561,9 @@ func (m *Node) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintBase(dAtA, i, uint64(m.Metadata.Size()))
-		n1, err := m.Metadata.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n1, err1 := m.Metadata.MarshalTo(dAtA[i:])
+		if err1 != nil {
+			return 0, err1
 		}
 		i += n1
 	}
@@ -1571,9 +1571,9 @@ func (m *Node) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintBase(dAtA, i, uint64(m.Locality.Size()))
-		n2, err := m.Locality.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n2, err2 := m.Locality.MarshalTo(dAtA[i:])
+		if err2 != nil {
+			return 0, err2
 		}
 		i += n2
 	}
@@ -1624,9 +1624,9 @@ func (m *Metadata) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintBase(dAtA, i, uint64(v.Size()))
-				n3, err := v.MarshalTo(dAtA[i:])
-				if err != nil {
-					return 0, err
+				n3, err3 := v.MarshalTo(dAtA[i:])
+				if err3 != nil {
+					return 0, err3
 				}
 				i += n3
 			}
@@ -1722,9 +1722,9 @@ func (m *HeaderValueOption) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintBase(dAtA, i, uint64(m.Header.Size()))
-		n4, err := m.Header.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n4, err4 := m.Header.MarshalTo(dAtA[i:])
+		if err4 != nil {
+			return 0, err4
 		}
 		i += n4
 	}
@@ -1732,9 +1732,9 @@ func (m *HeaderValueOption) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintBase(dAtA, i, uint64(m.Append.Size()))
-		n5, err := m.Append.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n5, err5 := m.Append.MarshalTo(dAtA[i:])
+		if err5 != nil {
+			return 0, err5
 		}
 		i += n5
 	}
@@ -1760,9 +1760,9 @@ func (m *DataSource) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Specifier != nil {
-		nn6, err := m.Specifier.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		nn6, err6 := m.Specifier.MarshalTo(dAtA[i:])
+		if err6 != nil {
+			return 0, err6
 		}
 		i += nn6
 	}
@@ -1823,9 +1823,9 @@ func (m *TransportSocket) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintBase(dAtA, i, uint64(m.Config.Size()))
-		n7, err := m.Config.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n7, err7 := m.Config.MarshalTo(dAtA[i:])
+		if err7 != nil {
+			return 0, err7
 		}
 		i += n7
 	}
@@ -1867,9 +1867,9 @@ func (m *SocketOption) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintBase(dAtA, i, uint64(m.Name))
 	}
 	if m.Value != nil {
-		nn8, err := m.Value.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		nn8, err8 := m.Value.MarshalTo(dAtA[i:])
+		if err8 != nil {
+			return 0, err8
 		}
 		i += nn8
 	}
