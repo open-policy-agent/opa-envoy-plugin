@@ -16,20 +16,24 @@ import (
 	guru "golang.org/x/tools/cmd/guru/serial"
 	"golang.org/x/tools/internal/lsp/cache"
 	"golang.org/x/tools/internal/lsp/source"
+	"golang.org/x/tools/internal/span"
 	"golang.org/x/tools/internal/tool"
 )
 
 // A Definition is the result of a 'definition' query.
 type Definition struct {
-	Location    Location `json:"location"`    // location of the definition
-	Description string   `json:"description"` // description of the denoted object
+	Span        span.Span `json:"span"`        // span of the definition
+	Description string    `json:"description"` // description of the denoted object
 }
 
-// This constant is printed in the help, and then used in a test to verify the
+// These constant is printed in the help, and then used in a test to verify the
 // help is still valid.
-// It should be the byte offset in this file of the "Set" in "flag.FlagSet" from
-// the DetailedHelp method below.
-const exampleOffset = 1277
+// They refer to "Set" in "flag.FlagSet" from the DetailedHelp method below.
+const (
+	exampleLine   = 46
+	exampleColumn = 47
+	exampleOffset = 1319
+)
 
 // definition implements the definition noun for the query command.
 type definition struct {
@@ -43,10 +47,11 @@ func (d *definition) DetailedHelp(f *flag.FlagSet) {
 	fmt.Fprintf(f.Output(), `
 Example: show the definition of the identifier at syntax at offset %[1]v in this file (flag.FlagSet):
 
-  $ gopls definition internal/lsp/cmd/definition.go:#%[1]v
+$ gopls definition internal/lsp/cmd/definition.go:%[1]v:%[2]v
+$ gopls definition internal/lsp/cmd/definition.go:#%[3]v
 
 	gopls definition flags are:
-`, exampleOffset)
+`, exampleLine, exampleColumn, exampleOffset)
 	f.PrintDefaults()
 }
 
@@ -57,32 +62,29 @@ func (d *definition) Run(ctx context.Context, args ...string) error {
 		return tool.CommandLineErrorf("definition expects 1 argument")
 	}
 	view := cache.NewView(&d.query.app.Config)
-	from, err := parseLocation(args[0])
+	from := span.Parse(args[0])
+	f, err := view.GetFile(ctx, from.URI())
 	if err != nil {
 		return err
 	}
-	f, err := view.GetFile(ctx, source.ToURI(from.Filename))
+	converter := span.NewTokenConverter(view.FileSet(), f.GetToken(ctx))
+	rng, err := from.Range(converter)
 	if err != nil {
 		return err
 	}
-	tok := f.GetToken()
-	pos := tok.Pos(from.Start.Offset)
-	if !pos.IsValid() {
-		return fmt.Errorf("invalid position %v", from.Start.Offset)
-	}
-	ident, err := source.Identifier(ctx, view, f, pos)
+	ident, err := source.Identifier(ctx, view, f, rng.Start)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v: %v", from, err)
 	}
 	if ident == nil {
-		return fmt.Errorf("not an identifier")
+		return fmt.Errorf("%v: not an identifier", from)
 	}
 	var result interface{}
 	switch d.query.Emulate {
 	case "":
-		result, err = buildDefinition(view, ident)
+		result, err = buildDefinition(ctx, view, ident)
 	case emulateGuru:
-		result, err = buildGuruDefinition(view, ident)
+		result, err = buildGuruDefinition(ctx, view, ident)
 	default:
 		return fmt.Errorf("unknown emulation for definition: %s", d.query.Emulate)
 	}
@@ -96,7 +98,7 @@ func (d *definition) Run(ctx context.Context, args ...string) error {
 	}
 	switch d := result.(type) {
 	case *Definition:
-		fmt.Printf("%v: defined here as %s", d.Location, d.Description)
+		fmt.Printf("%v: defined here as %s", d.Span, d.Description)
 	case *guru.Definition:
 		fmt.Printf("%s: defined here as %s", d.ObjPos, d.Desc)
 	default:
@@ -105,27 +107,36 @@ func (d *definition) Run(ctx context.Context, args ...string) error {
 	return nil
 }
 
-func buildDefinition(view source.View, ident *source.IdentifierInfo) (*Definition, error) {
-	content, err := ident.Hover(nil)
+func buildDefinition(ctx context.Context, view source.View, ident *source.IdentifierInfo) (*Definition, error) {
+	content, err := ident.Hover(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	spn, err := ident.Declaration.Range.Span()
 	if err != nil {
 		return nil, err
 	}
 	return &Definition{
-		Location:    newLocation(view.FileSet(), ident.Declaration.Range),
+		Span:        spn,
 		Description: content,
 	}, nil
 }
 
-func buildGuruDefinition(view source.View, ident *source.IdentifierInfo) (*guru.Definition, error) {
-	loc := newLocation(view.FileSet(), ident.Declaration.Range)
-	pkg := ident.File.GetPackage()
+func buildGuruDefinition(ctx context.Context, view source.View, ident *source.IdentifierInfo) (*guru.Definition, error) {
+	spn, err := ident.Declaration.Range.Span()
+	if err != nil {
+		return nil, err
+	}
+	pkg := ident.File.GetPackage(ctx)
 	// guru does not support ranges
-	loc.End = loc.Start
+	if !spn.IsPoint() {
+		spn = span.New(spn.URI(), spn.Start(), spn.Start())
+	}
 	// Behavior that attempts to match the expected output for guru. For an example
 	// of the format, see the associated definition tests.
 	buf := &bytes.Buffer{}
-	q := types.RelativeTo(pkg.Types)
-	qualifyName := ident.Declaration.Object.Pkg() != pkg.Types
+	q := types.RelativeTo(pkg.GetTypes())
+	qualifyName := ident.Declaration.Object.Pkg() != pkg.GetTypes()
 	name := ident.Name
 	var suffix interface{}
 	switch obj := ident.Declaration.Object.(type) {
@@ -170,7 +181,7 @@ func buildGuruDefinition(view source.View, ident *source.IdentifierInfo) (*guru.
 		fmt.Fprint(buf, suffix)
 	}
 	return &guru.Definition{
-		ObjPos: fmt.Sprint(loc),
+		ObjPos: fmt.Sprint(spn),
 		Desc:   buf.String(),
 	}, nil
 }

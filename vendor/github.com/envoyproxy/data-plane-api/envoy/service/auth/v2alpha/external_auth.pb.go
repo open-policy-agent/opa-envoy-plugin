@@ -507,9 +507,9 @@ func (m *CheckRequest) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintExternalAuth(dAtA, i, uint64(m.Attributes.Size()))
-		n1, err := m.Attributes.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n1, err1 := m.Attributes.MarshalTo(dAtA[i:])
+		if err1 != nil {
+			return 0, err1
 		}
 		i += n1
 	}
@@ -538,9 +538,9 @@ func (m *DeniedHttpResponse) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintExternalAuth(dAtA, i, uint64(m.Status.Size()))
-		n2, err := m.Status.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n2, err2 := m.Status.MarshalTo(dAtA[i:])
+		if err2 != nil {
+			return 0, err2
 		}
 		i += n2
 	}
@@ -620,16 +620,16 @@ func (m *CheckResponse) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintExternalAuth(dAtA, i, uint64(m.Status.Size()))
-		n3, err := m.Status.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n3, err3 := m.Status.MarshalTo(dAtA[i:])
+		if err3 != nil {
+			return 0, err3
 		}
 		i += n3
 	}
 	if m.HttpResponse != nil {
-		nn4, err := m.HttpResponse.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		nn4, err4 := m.HttpResponse.MarshalTo(dAtA[i:])
+		if err4 != nil {
+			return 0, err4
 		}
 		i += nn4
 	}
@@ -645,9 +645,9 @@ func (m *CheckResponse_DeniedResponse) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintExternalAuth(dAtA, i, uint64(m.DeniedResponse.Size()))
-		n5, err := m.DeniedResponse.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n5, err5 := m.DeniedResponse.MarshalTo(dAtA[i:])
+		if err5 != nil {
+			return 0, err5
 		}
 		i += n5
 	}
@@ -659,9 +659,9 @@ func (m *CheckResponse_OkResponse) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintExternalAuth(dAtA, i, uint64(m.OkResponse.Size()))
-		n6, err := m.OkResponse.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n6, err6 := m.OkResponse.MarshalTo(dAtA[i:])
+		if err6 != nil {
+			return 0, err6
 		}
 		i += n6
 	}

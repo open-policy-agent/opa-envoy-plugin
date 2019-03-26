@@ -1076,9 +1076,9 @@ func (m *SocketAddress) MarshalTo(dAtA []byte) (int, error) {
 		i += copy(dAtA[i:], m.Address)
 	}
 	if m.PortSpecifier != nil {
-		nn1, err := m.PortSpecifier.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		nn1, err1 := m.PortSpecifier.MarshalTo(dAtA[i:])
+		if err1 != nil {
+			return 0, err1
 		}
 		i += nn1
 	}
@@ -1138,9 +1138,9 @@ func (m *TcpKeepalive) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.KeepaliveProbes.Size()))
-		n2, err := m.KeepaliveProbes.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n2, err2 := m.KeepaliveProbes.MarshalTo(dAtA[i:])
+		if err2 != nil {
+			return 0, err2
 		}
 		i += n2
 	}
@@ -1148,9 +1148,9 @@ func (m *TcpKeepalive) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.KeepaliveTime.Size()))
-		n3, err := m.KeepaliveTime.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n3, err3 := m.KeepaliveTime.MarshalTo(dAtA[i:])
+		if err3 != nil {
+			return 0, err3
 		}
 		i += n3
 	}
@@ -1158,9 +1158,9 @@ func (m *TcpKeepalive) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.KeepaliveInterval.Size()))
-		n4, err := m.KeepaliveInterval.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n4, err4 := m.KeepaliveInterval.MarshalTo(dAtA[i:])
+		if err4 != nil {
+			return 0, err4
 		}
 		i += n4
 	}
@@ -1188,18 +1188,18 @@ func (m *BindConfig) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAddress(dAtA, i, uint64(m.SourceAddress.Size()))
-	n5, err := m.SourceAddress.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	n5, err5 := m.SourceAddress.MarshalTo(dAtA[i:])
+	if err5 != nil {
+		return 0, err5
 	}
 	i += n5
 	if m.Freebind != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.Freebind.Size()))
-		n6, err := m.Freebind.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n6, err6 := m.Freebind.MarshalTo(dAtA[i:])
+		if err6 != nil {
+			return 0, err6
 		}
 		i += n6
 	}
@@ -1237,9 +1237,9 @@ func (m *Address) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Address != nil {
-		nn7, err := m.Address.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		nn7, err7 := m.Address.MarshalTo(dAtA[i:])
+		if err7 != nil {
+			return 0, err7
 		}
 		i += nn7
 	}
@@ -1255,9 +1255,9 @@ func (m *Address_SocketAddress) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.SocketAddress.Size()))
-		n8, err := m.SocketAddress.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n8, err8 := m.SocketAddress.MarshalTo(dAtA[i:])
+		if err8 != nil {
+			return 0, err8
 		}
 		i += n8
 	}
@@ -1269,9 +1269,9 @@ func (m *Address_Pipe) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.Pipe.Size()))
-		n9, err := m.Pipe.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n9, err9 := m.Pipe.MarshalTo(dAtA[i:])
+		if err9 != nil {
+			return 0, err9
 		}
 		i += n9
 	}
@@ -1302,9 +1302,9 @@ func (m *CidrRange) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAddress(dAtA, i, uint64(m.PrefixLen.Size()))
-		n10, err := m.PrefixLen.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		n10, err10 := m.PrefixLen.MarshalTo(dAtA[i:])
+		if err10 != nil {
+			return 0, err10
 		}
 		i += n10
 	}

@@ -21,8 +21,9 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 // A Job resource represents a job posting (also referred to as a "job listing"
-// or "job requisition"). A job belongs to a [Company][google.cloud.talent.v4beta1.Company], which is the hiring
-// entity responsible for the job.
+// or "job requisition"). A job belongs to a
+// [Company][google.cloud.talent.v4beta1.Company], which is the hiring entity
+// responsible for the job.
 type Job struct {
 	// Required during job update.
 	//
@@ -33,7 +34,8 @@ type Job struct {
 	// for example, "projects/api-test-project/jobs/1234".
 	//
 	// Use of this field in job queries and API calls is preferred over the use of
-	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id] since this value is unique.
+	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id] since this
+	// value is unique.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Required.
 	//
@@ -45,8 +47,10 @@ type Job struct {
 	// The requisition ID, also referred to as the posting ID, is assigned by the
 	// client to identify a job. This field is intended to be used by clients
 	// for client identification and tracking of postings. A job isn't allowed
-	// to be created if there is another job with the same [company][google.cloud.talent.v4beta1.Job.name],
-	// [language_code][google.cloud.talent.v4beta1.Job.language_code] and [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id].
+	// to be created if there is another job with the same
+	// [company][google.cloud.talent.v4beta1.Job.name],
+	// [language_code][google.cloud.talent.v4beta1.Job.language_code] and
+	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id].
 	//
 	// The maximum number of allowed characters is 255.
 	RequisitionId string `protobuf:"bytes,3,opt,name=requisition_id,json=requisitionId,proto3" json:"requisition_id,omitempty"`
@@ -60,9 +64,10 @@ type Job struct {
 	//
 	// The description of the job, which typically includes a multi-paragraph
 	// description of the company and related information. Separate fields are
-	// provided on the job object for [responsibilities][google.cloud.talent.v4beta1.Job.responsibilities],
-	// [qualifications][google.cloud.talent.v4beta1.Job.qualifications], and other job characteristics. Use of
-	// these separate job fields is recommended.
+	// provided on the job object for
+	// [responsibilities][google.cloud.talent.v4beta1.Job.responsibilities],
+	// [qualifications][google.cloud.talent.v4beta1.Job.qualifications], and other
+	// job characteristics. Use of these separate job fields is recommended.
 	//
 	// This field accepts and sanitizes HTML input, and also accepts
 	// bold, italic, ordered list, and unordered list markup tags.
@@ -78,16 +83,21 @@ type Job struct {
 	//
 	// At most 50 locations are allowed for best search performance. If a job has
 	// more locations, it is suggested to split it into multiple jobs with unique
-	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id]s (e.g. 'ReqA' becomes 'ReqA-1', 'ReqA-2', etc.) as
-	// multiple jobs with the same [company][google.cloud.talent.v4beta1.Job.name][], [language_code][] and
-	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id] are not allowed. If the original [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id] must
-	// be preserved, a custom field should be used for storage. It is also
-	// suggested to group the locations that close to each other in the same job
-	// for better search experience.
+	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id]s (e.g.
+	// 'ReqA' becomes 'ReqA-1', 'ReqA-2', etc.) as multiple jobs with the same
+	// [company][google.cloud.talent.v4beta1.Job.name][], [language_code][] and
+	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id] are not
+	// allowed. If the original
+	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id] must be
+	// preserved, a custom field should be used for storage. It is also suggested
+	// to group the locations that close to each other in the same job for better
+	// search experience.
 	//
 	// The maximum number of allowed characters is 500.
 	Addresses []string `protobuf:"bytes,6,rep,name=addresses,proto3" json:"addresses,omitempty"`
-	// Required. At least one field within [ApplicationInfo][google.cloud.talent.v4beta1.Job.ApplicationInfo] must be specified.
+	// Required. At least one field within
+	// [ApplicationInfo][google.cloud.talent.v4beta1.Job.ApplicationInfo] must be
+	// specified.
 	//
 	// Job application information.
 	ApplicationInfo *Job_ApplicationInfo `protobuf:"bytes,7,opt,name=application_info,json=applicationInfo,proto3" json:"application_info,omitempty"`
@@ -148,9 +158,11 @@ type Job struct {
 	// [Tags for Identifying Languages](https://tools.ietf.org/html/bcp47){:
 	// class="external" target="_blank" }.
 	//
-	// If this field is unspecified and [Job.description][google.cloud.talent.v4beta1.Job.description] is present, detected
-	// language code based on [Job.description][google.cloud.talent.v4beta1.Job.description] is assigned, otherwise
-	// defaults to 'en_US'.
+	// If this field is unspecified and
+	// [Job.description][google.cloud.talent.v4beta1.Job.description] is present,
+	// detected language code based on
+	// [Job.description][google.cloud.talent.v4beta1.Job.description] is assigned,
+	// otherwise defaults to 'en_US'.
 	LanguageCode string `protobuf:"bytes,15,opt,name=language_code,json=languageCode,proto3" json:"language_code,omitempty"`
 	// Optional.
 	//
@@ -170,7 +182,8 @@ type Job struct {
 	//
 	// A description of the qualifications required to perform the
 	// job. The use of this field is recommended
-	// as an alternative to using the more general [description][google.cloud.talent.v4beta1.Job.description] field.
+	// as an alternative to using the more general
+	// [description][google.cloud.talent.v4beta1.Job.description] field.
 	//
 	// This field accepts and sanitizes HTML input, and also accepts
 	// bold, italic, ordered list, and unordered list markup tags.
@@ -180,8 +193,8 @@ type Job struct {
 	// Optional.
 	//
 	// A description of job responsibilities. The use of this field is
-	// recommended as an alternative to using the more general [description][google.cloud.talent.v4beta1.Job.description]
-	// field.
+	// recommended as an alternative to using the more general
+	// [description][google.cloud.talent.v4beta1.Job.description] field.
 	//
 	// This field accepts and sanitizes HTML input, and also accepts
 	// bold, italic, ordered list, and unordered list markup tags.
@@ -190,19 +203,24 @@ type Job struct {
 	Responsibilities string `protobuf:"bytes,19,opt,name=responsibilities,proto3" json:"responsibilities,omitempty"`
 	// Optional.
 	//
-	// The job [PostingRegion][google.cloud.talent.v4beta1.PostingRegion] (for example, state, country) throughout which
-	// the job is available. If this field is set, a
-	// [LocationFilter][google.cloud.talent.v4beta1.LocationFilter] in a search query within the job region
-	// finds this job posting if an exact location match isn't specified.
-	// If this field is set to [PostingRegion.NATION][google.cloud.talent.v4beta1.PostingRegion.NATION] or
-	// [PostingRegion.ADMINISTRATIVE_AREA][google.cloud.talent.v4beta1.PostingRegion.ADMINISTRATIVE_AREA], setting job [Job.addresses][google.cloud.talent.v4beta1.Job.addresses]
-	// to the same location level as this field is strongly recommended.
+	// The job [PostingRegion][google.cloud.talent.v4beta1.PostingRegion] (for
+	// example, state, country) throughout which the job is available. If this
+	// field is set, a
+	// [LocationFilter][google.cloud.talent.v4beta1.LocationFilter] in a search
+	// query within the job region finds this job posting if an exact location
+	// match isn't specified. If this field is set to
+	// [PostingRegion.NATION][google.cloud.talent.v4beta1.PostingRegion.NATION] or
+	// [PostingRegion.ADMINISTRATIVE_AREA][google.cloud.talent.v4beta1.PostingRegion.ADMINISTRATIVE_AREA],
+	// setting job [Job.addresses][google.cloud.talent.v4beta1.Job.addresses] to
+	// the same location level as this field is strongly recommended.
 	PostingRegion PostingRegion `protobuf:"varint,20,opt,name=posting_region,json=postingRegion,proto3,enum=google.cloud.talent.v4beta1.PostingRegion" json:"posting_region,omitempty"`
 	// Optional.
 	//
 	// The visibility of the job.
 	//
-	// Defaults to [Visibility.ACCOUNT_ONLY][google.cloud.talent.v4beta1.Visibility.ACCOUNT_ONLY] if not specified.
+	// Defaults to
+	// [Visibility.ACCOUNT_ONLY][google.cloud.talent.v4beta1.Visibility.ACCOUNT_ONLY]
+	// if not specified.
 	Visibility Visibility `protobuf:"varint,21,opt,name=visibility,proto3,enum=google.cloud.talent.v4beta1.Visibility" json:"visibility,omitempty"`
 	// Optional.
 	//
@@ -229,8 +247,10 @@ type Job struct {
 	// [ListJobs][] APIs, but it can be retrieved with the [GetJob][] API or
 	// updated with the [UpdateJob][] API. An expired job can be updated and
 	// opened again by using a future expiration timestamp. Updating an expired
-	// job fails if there is another existing open job with same [company][google.cloud.talent.v4beta1.Job.name][],
-	// [language_code][google.cloud.talent.v4beta1.Job.language_code] and [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id].
+	// job fails if there is another existing open job with same
+	// [company][google.cloud.talent.v4beta1.Job.name][],
+	// [language_code][google.cloud.talent.v4beta1.Job.language_code] and
+	// [requisition_id][google.cloud.talent.v4beta1.Job.requisition_id].
 	//
 	// The expired jobs are retained in our system for 90 days. However, the
 	// overall expired job count cannot exceed 3 times the maximum of open jobs
@@ -249,10 +269,11 @@ type Job struct {
 	// unspecified expiration date, the job expires after 2017/01/31 13:00AM UTC.
 	//
 	// If this value isn't provided on job update, it depends on the field masks
-	// set by [UpdateJobRequest.update_mask][google.cloud.talent.v4beta1.UpdateJobRequest.update_mask]. If the field masks include
-	// [expiry_time][], or the masks are empty meaning that every field is
-	// updated, the job posting expires after 30 days from the job's last
-	// update time. Otherwise the expiration date isn't updated.
+	// set by
+	// [UpdateJobRequest.update_mask][google.cloud.talent.v4beta1.UpdateJobRequest.update_mask].
+	// If the field masks include [expiry_time][], or the masks are empty meaning
+	// that every field is updated, the job posting expires after 30 days from the
+	// job's last update time. Otherwise the expiration date isn't updated.
 	PostingExpireTime *timestamp.Timestamp `protobuf:"bytes,25,opt,name=posting_expire_time,json=postingExpireTime,proto3" json:"posting_expire_time,omitempty"`
 	// Output only. The timestamp when this job posting was created.
 	PostingCreateTime *timestamp.Timestamp `protobuf:"bytes,26,opt,name=posting_create_time,json=postingCreateTime,proto3" json:"posting_create_time,omitempty"`
@@ -275,7 +296,7 @@ func (m *Job) Reset()         { *m = Job{} }
 func (m *Job) String() string { return proto.CompactTextString(m) }
 func (*Job) ProtoMessage()    {}
 func (*Job) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_83eef106eb2e5a90, []int{0}
+	return fileDescriptor_job_101d7f043cc4b08a, []int{0}
 }
 func (m *Job) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Job.Unmarshal(m, b)
@@ -507,18 +528,22 @@ func (m *Job) GetProcessingOptions() *Job_ProcessingOptions {
 
 // Application related details of a job posting.
 type Job_ApplicationInfo struct {
-	// Optional but at least one of [uris][google.cloud.talent.v4beta1.Job.ApplicationInfo.uris],
-	// [emails][google.cloud.talent.v4beta1.Job.ApplicationInfo.emails] or [instruction][google.cloud.talent.v4beta1.Job.ApplicationInfo.instruction] must be
-	// specified.
+	// Optional but at least one of
+	// [uris][google.cloud.talent.v4beta1.Job.ApplicationInfo.uris],
+	// [emails][google.cloud.talent.v4beta1.Job.ApplicationInfo.emails] or
+	// [instruction][google.cloud.talent.v4beta1.Job.ApplicationInfo.instruction]
+	// must be specified.
 	//
 	// Use this field to specify email address(es) to which resumes or
 	// applications can be sent.
 	//
 	// The maximum number of allowed characters for each entry is 255.
 	Emails []string `protobuf:"bytes,1,rep,name=emails,proto3" json:"emails,omitempty"`
-	// Optional but at least one of [uris][google.cloud.talent.v4beta1.Job.ApplicationInfo.uris],
-	// [emails][google.cloud.talent.v4beta1.Job.ApplicationInfo.emails] or [instruction][google.cloud.talent.v4beta1.Job.ApplicationInfo.instruction] must be
-	// specified.
+	// Optional but at least one of
+	// [uris][google.cloud.talent.v4beta1.Job.ApplicationInfo.uris],
+	// [emails][google.cloud.talent.v4beta1.Job.ApplicationInfo.emails] or
+	// [instruction][google.cloud.talent.v4beta1.Job.ApplicationInfo.instruction]
+	// must be specified.
 	//
 	// Use this field to provide instructions, such as "Mail your application
 	// to ...", that a candidate can follow to apply for the job.
@@ -528,9 +553,11 @@ type Job_ApplicationInfo struct {
 	//
 	// The maximum number of allowed characters is 3,000.
 	Instruction string `protobuf:"bytes,2,opt,name=instruction,proto3" json:"instruction,omitempty"`
-	// Optional but at least one of [uris][google.cloud.talent.v4beta1.Job.ApplicationInfo.uris],
-	// [emails][google.cloud.talent.v4beta1.Job.ApplicationInfo.emails] or [instruction][google.cloud.talent.v4beta1.Job.ApplicationInfo.instruction] must be
-	// specified.
+	// Optional but at least one of
+	// [uris][google.cloud.talent.v4beta1.Job.ApplicationInfo.uris],
+	// [emails][google.cloud.talent.v4beta1.Job.ApplicationInfo.emails] or
+	// [instruction][google.cloud.talent.v4beta1.Job.ApplicationInfo.instruction]
+	// must be specified.
 	//
 	// Use this URI field to direct an applicant to a website, for example to
 	// link to an online application form.
@@ -546,7 +573,7 @@ func (m *Job_ApplicationInfo) Reset()         { *m = Job_ApplicationInfo{} }
 func (m *Job_ApplicationInfo) String() string { return proto.CompactTextString(m) }
 func (*Job_ApplicationInfo) ProtoMessage()    {}
 func (*Job_ApplicationInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_83eef106eb2e5a90, []int{0, 0}
+	return fileDescriptor_job_101d7f043cc4b08a, []int{0, 0}
 }
 func (m *Job_ApplicationInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Job_ApplicationInfo.Unmarshal(m, b)
@@ -591,12 +618,17 @@ func (m *Job_ApplicationInfo) GetUris() []string {
 //
 // Derived details about the job posting.
 type Job_DerivedInfo struct {
-	// Structured locations of the job, resolved from [Job.addresses][google.cloud.talent.v4beta1.Job.addresses].
+	// Structured locations of the job, resolved from
+	// [Job.addresses][google.cloud.talent.v4beta1.Job.addresses].
 	//
-	// [locations][google.cloud.talent.v4beta1.Job.DerivedInfo.locations] are exactly matched to [Job.addresses][google.cloud.talent.v4beta1.Job.addresses] in the same
+	// [locations][google.cloud.talent.v4beta1.Job.DerivedInfo.locations] are
+	// exactly matched to
+	// [Job.addresses][google.cloud.talent.v4beta1.Job.addresses] in the same
 	// order.
 	Locations []*Location `protobuf:"bytes,1,rep,name=locations,proto3" json:"locations,omitempty"`
-	// Job categories derived from [Job.title][google.cloud.talent.v4beta1.Job.title] and [Job.description][google.cloud.talent.v4beta1.Job.description].
+	// Job categories derived from
+	// [Job.title][google.cloud.talent.v4beta1.Job.title] and
+	// [Job.description][google.cloud.talent.v4beta1.Job.description].
 	JobCategories        []JobCategory `protobuf:"varint,3,rep,packed,name=job_categories,json=jobCategories,proto3,enum=google.cloud.talent.v4beta1.JobCategory" json:"job_categories,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
 	XXX_unrecognized     []byte        `json:"-"`
@@ -607,7 +639,7 @@ func (m *Job_DerivedInfo) Reset()         { *m = Job_DerivedInfo{} }
 func (m *Job_DerivedInfo) String() string { return proto.CompactTextString(m) }
 func (*Job_DerivedInfo) ProtoMessage()    {}
 func (*Job_DerivedInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_83eef106eb2e5a90, []int{0, 1}
+	return fileDescriptor_job_101d7f043cc4b08a, []int{0, 1}
 }
 func (m *Job_DerivedInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Job_DerivedInfo.Unmarshal(m, b)
@@ -663,7 +695,8 @@ type Job_ProcessingOptions struct {
 	// HTML tags in these fields may be stripped if sanitiazation isn't
 	// disabled.
 	//
-	// Defaults to [HtmlSanitization.SIMPLE_FORMATTING_ONLY][google.cloud.talent.v4beta1.HtmlSanitization.SIMPLE_FORMATTING_ONLY].
+	// Defaults to
+	// [HtmlSanitization.SIMPLE_FORMATTING_ONLY][google.cloud.talent.v4beta1.HtmlSanitization.SIMPLE_FORMATTING_ONLY].
 	HtmlSanitization     HtmlSanitization `protobuf:"varint,2,opt,name=html_sanitization,json=htmlSanitization,proto3,enum=google.cloud.talent.v4beta1.HtmlSanitization" json:"html_sanitization,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
 	XXX_unrecognized     []byte           `json:"-"`
@@ -674,7 +707,7 @@ func (m *Job_ProcessingOptions) Reset()         { *m = Job_ProcessingOptions{} }
 func (m *Job_ProcessingOptions) String() string { return proto.CompactTextString(m) }
 func (*Job_ProcessingOptions) ProtoMessage()    {}
 func (*Job_ProcessingOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_job_83eef106eb2e5a90, []int{0, 2}
+	return fileDescriptor_job_101d7f043cc4b08a, []int{0, 2}
 }
 func (m *Job_ProcessingOptions) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Job_ProcessingOptions.Unmarshal(m, b)
@@ -717,10 +750,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("google/cloud/talent/v4beta1/job.proto", fileDescriptor_job_83eef106eb2e5a90)
+	proto.RegisterFile("google/cloud/talent/v4beta1/job.proto", fileDescriptor_job_101d7f043cc4b08a)
 }
 
-var fileDescriptor_job_83eef106eb2e5a90 = []byte{
+var fileDescriptor_job_101d7f043cc4b08a = []byte{
 	// 1080 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x56, 0xd1, 0x72, 0x1b, 0x35,
 	0x14, 0x1d, 0xc7, 0x4d, 0xa9, 0xe5, 0xc4, 0xb1, 0xd5, 0xb4, 0x2c, 0x6e, 0x69, 0x5d, 0x98, 0x52,

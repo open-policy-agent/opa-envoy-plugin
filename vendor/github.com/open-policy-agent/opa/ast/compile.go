@@ -78,11 +78,18 @@ type Compiler struct {
 
 	moduleLoader ModuleLoader
 	ruleIndices  *util.HashMap
-	stages       []func()
-	maxErrs      int
-	sorted       []string // list of sorted module names
-	pathExists   func([]string) (bool, error)
+	stages       []struct {
+		name string
+		f    func()
+	}
+	maxErrs    int
+	sorted     []string // list of sorted module names
+	pathExists func([]string) (bool, error)
+	after      map[string][]CompilerStage
 }
+
+// CompilerStage defines the interface for stages in the compiler.
+type CompilerStage func(*Compiler) *Error
 
 // QueryContext contains contextual information for running an ad-hoc query.
 //
@@ -188,6 +195,7 @@ func NewCompiler() *Compiler {
 			return x.(Ref).Hash()
 		}),
 		maxErrs: CompileErrorLimitDefault,
+		after:   map[string][]CompilerStage{},
 	}
 
 	c.ModuleTree = NewModuleTree(nil)
@@ -196,29 +204,30 @@ func NewCompiler() *Compiler {
 	checker := newTypeChecker()
 	c.TypeEnv = checker.checkLanguageBuiltins()
 
-	c.stages = []func(){
-
+	c.stages = []struct {
+		name string
+		f    func()
+	}{
 		// Reference resolution should run first as it may be used to lazily
 		// load additional modules. If any stages run before resolution, they
 		// need to be re-run after resolution.
-		c.resolveAllRefs,
-
-		c.rewriteLocalAssignments,
-		c.rewriteExprTerms,
-		c.setModuleTree,
-		c.setRuleTree,
-		c.setGraph,
-		c.rewriteComprehensionTerms,
-		c.rewriteRefsInHead,
-		c.rewriteWithModifiers,
-		c.checkRuleConflicts,
-		c.checkSafetyRuleHeads,
-		c.checkSafetyRuleBodies,
-		c.rewriteEquals,
-		c.rewriteDynamicTerms,
-		c.checkRecursion,
-		c.checkTypes,
-		c.buildRuleIndices,
+		{"ResolveRefs", c.resolveAllRefs},
+		{"RewriteAssignments", c.rewriteLocalAssignments},
+		{"RewriteExprTerms", c.rewriteExprTerms},
+		{"SetModuleTree", c.setModuleTree},
+		{"SetRuleTree", c.setRuleTree},
+		{"SetGraph", c.setGraph},
+		{"RewriteComprehensionTerms", c.rewriteComprehensionTerms},
+		{"RewriteRefsInHead", c.rewriteRefsInHead},
+		{"RewriteWithValues", c.rewriteWithModifiers},
+		{"CheckRuleConflicts", c.checkRuleConflicts},
+		{"CheckSafetyRuleHeads", c.checkSafetyRuleHeads},
+		{"CheckSafetyRuleBodies", c.checkSafetyRuleBodies},
+		{"RewriteEquals", c.rewriteEquals},
+		{"RewriteDynamicTerms", c.rewriteDynamicTerms},
+		{"CheckRecursion", c.checkRecursion},
+		{"CheckTypes", c.checkTypes},
+		{"BuildRuleIndices", c.buildRuleIndices},
 	}
 
 	return c
@@ -236,6 +245,13 @@ func (c *Compiler) SetErrorLimit(limit int) *Compiler {
 // paths that exist as determined by the provided callable.
 func (c *Compiler) WithPathConflictsCheck(fn func([]string) (bool, error)) *Compiler {
 	c.pathExists = fn
+	return c
+}
+
+// WithStageAfter registers a stage to run during compilation after
+// the named stage.
+func (c *Compiler) WithStageAfter(after string, stage CompilerStage) *Compiler {
+	c.after[after] = append(c.after[after], stage)
 	return c
 }
 
@@ -627,9 +643,14 @@ func (c *Compiler) compile() {
 		}
 	}()
 
-	for _, fn := range c.stages {
-		if fn(); c.Failed() {
+	for _, s := range c.stages {
+		if s.f(); c.Failed() {
 			return
+		}
+		for _, s := range c.after[s.name] {
+			if err := s(c); err != nil {
+				c.err(err)
+			}
 		}
 	}
 }
