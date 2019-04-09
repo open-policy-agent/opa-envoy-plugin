@@ -78,7 +78,7 @@ func goListDriver(cfg *Config, patterns ...string) (*driverResponse, error) {
 	var sizes types.Sizes
 	var sizeserr error
 	var sizeswg sync.WaitGroup
-	if cfg.Mode >= LoadTypes {
+	if cfg.Mode&NeedTypesSizes != 0 || cfg.Mode&NeedTypes != 0 {
 		sizeswg.Add(1)
 		go func() {
 			sizes, sizeserr = getSizes(cfg)
@@ -128,7 +128,7 @@ extractQueries:
 	// patterns also requires a go list call, since it's the equivalent of
 	// ".".
 	if len(restPatterns) > 0 || len(patterns) == 0 {
-		dr, err := golistDriverCurrent(cfg, restPatterns...)
+		dr, err := golistDriver(cfg, restPatterns...)
 		if err != nil {
 			return nil, err
 		}
@@ -147,13 +147,13 @@ extractQueries:
 	var containsCandidates []string
 
 	if len(containFiles) != 0 {
-		if err := runContainsQueries(cfg, golistDriverCurrent, response, containFiles); err != nil {
+		if err := runContainsQueries(cfg, golistDriver, response, containFiles); err != nil {
 			return nil, err
 		}
 	}
 
 	if len(packagesNamed) != 0 {
-		if err := runNamedQueries(cfg, golistDriverCurrent, response, packagesNamed); err != nil {
+		if err := runNamedQueries(cfg, golistDriver, response, packagesNamed); err != nil {
 			return nil, err
 		}
 	}
@@ -168,7 +168,7 @@ extractQueries:
 	}
 
 	if len(needPkgs) > 0 {
-		addNeededOverlayPackages(cfg, golistDriverCurrent, response, needPkgs)
+		addNeededOverlayPackages(cfg, golistDriver, response, needPkgs)
 		if err != nil {
 			return nil, err
 		}
@@ -540,10 +540,10 @@ func otherFiles(p *jsonPackage) [][]string {
 	return [][]string{p.CFiles, p.CXXFiles, p.MFiles, p.HFiles, p.FFiles, p.SFiles, p.SwigFiles, p.SwigCXXFiles, p.SysoFiles}
 }
 
-// golistDriverCurrent uses the "go list" command to expand the
-// pattern words and return metadata for the specified packages.
-// dir may be "" and env may be nil, as per os/exec.Command.
-func golistDriverCurrent(cfg *Config, words ...string) (*driverResponse, error) {
+// golistDriver uses the "go list" command to expand the pattern
+// words and return metadata for the specified packages. dir may be
+// "" and env may be nil, as per os/exec.Command.
+func golistDriver(cfg *Config, words ...string) (*driverResponse, error) {
 	// go list uses the following identifiers in ImportPath and Imports:
 	//
 	// 	"p"			-- importable package or main (command)
@@ -701,14 +701,16 @@ func absJoin(dir string, fileses ...[]string) (res []string) {
 }
 
 func golistargs(cfg *Config, words []string) []string {
+	const findFlags = NeedImports | NeedTypes | NeedSyntax | NeedTypesInfo
 	fullargs := []string{
-		"list", "-e", "-json", "-compiled",
+		"list", "-e", "-json",
+		fmt.Sprintf("-compiled=%t", cfg.Mode&(NeedCompiledGoFiles|NeedSyntax|NeedTypesInfo|NeedTypesSizes) != 0),
 		fmt.Sprintf("-test=%t", cfg.Tests),
 		fmt.Sprintf("-export=%t", usesExportData(cfg)),
-		fmt.Sprintf("-deps=%t", cfg.Mode >= LoadImports),
+		fmt.Sprintf("-deps=%t", cfg.Mode&NeedDeps != 0),
 		// go list doesn't let you pass -test and -find together,
 		// probably because you'd just get the TestMain.
-		fmt.Sprintf("-find=%t", cfg.Mode < LoadImports && !cfg.Tests),
+		fmt.Sprintf("-find=%t", !cfg.Tests && cfg.Mode&findFlags == 0),
 	}
 	fullargs = append(fullargs, cfg.BuildFlags...)
 	fullargs = append(fullargs, "--")
@@ -759,8 +761,15 @@ func invokeGo(cfg *Config, args ...string) (*bytes.Buffer, error) {
 		// the error in the Err section of stdout in case -e option is provided.
 		// This fix is provided for backwards compatibility.
 		if len(stderr.String()) > 0 && strings.Contains(stderr.String(), "named files must be .go files") {
-			output := fmt.Sprintf(`{"ImportPath": "","Incomplete": true,"Error": {"Pos": "","Err": %s}}`,
-				strconv.Quote(strings.Trim(stderr.String(), "\n")))
+			output := fmt.Sprintf(`{"ImportPath": "command-line-arguments","Incomplete": true,"Error": {"Pos": "","Err": %q}}`,
+				strings.Trim(stderr.String(), "\n"))
+			return bytes.NewBufferString(output), nil
+		}
+
+		// Workaround for #29280: go list -e has incorrect behavior when an ad-hoc package doesn't exist.
+		if len(stderr.String()) > 0 && strings.Contains(stderr.String(), "no such file or directory") {
+			output := fmt.Sprintf(`{"ImportPath": "command-line-arguments","Incomplete": true,"Error": {"Pos": "","Err": %q}}`,
+				strings.Trim(stderr.String(), "\n"))
 			return bytes.NewBufferString(output), nil
 		}
 
