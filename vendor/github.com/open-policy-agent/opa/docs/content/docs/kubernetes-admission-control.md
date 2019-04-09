@@ -90,9 +90,140 @@ kubectl create secret tls opa-server --cert=server.crt --key=server.key
 
 Next, use the file below to deploy OPA as an admission controller.
 
-#### [`admission-controller.yaml`](https://github.com/open-policy-agent/opa/blob/master/docs/book/tutorials/kubernetes-admission-control-validation/admission-controller.yaml)
+**`admission-controller.yaml`**:
 
-{{< code file="kubernetes-admission-control-validation/admission-controller.yaml" lang="yaml" >}}
+```
+# Grant OPA/kube-mgmt read-only access to resources. This lets kube-mgmt
+# replicate resources into OPA so they can be used in policies.
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: opa-viewer
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: Group
+  name: system:serviceaccounts:opa
+  apiGroup: rbac.authorization.k8s.io
+---
+# Define role for OPA/kube-mgmt to update configmaps with policy status.
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: opa
+  name: configmap-modifier
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["update", "patch"]
+---
+# Grant OPA/kube-mgmt role defined above.
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: opa
+  name: opa-configmap-modifier
+roleRef:
+  kind: Role
+  name: configmap-modifier
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: Group
+  name: system:serviceaccounts:opa
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: opa
+  namespace: opa
+spec:
+  selector:
+    app: opa
+  ports:
+  - name: https
+    protocol: TCP
+    port: 443
+    targetPort: 443
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: opa
+  namespace: opa
+  name: opa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+      name: opa
+    spec:
+      containers:
+        # WARNING: OPA is NOT running with an authorization policy configured. This
+        # means that clients can read and write policies in OPA. If you are
+        # deploying OPA in an insecure environment, be sure to configure
+        # authentication and authorization on the daemon. See the Security page for
+        # details: https://www.openpolicyagent.org/docs/security.html.
+        - name: opa
+          image: openpolicyagent/opa:{{< latest >}}
+          args:
+            - "run"
+            - "--server"
+            - "--tls-cert-file=/certs/tls.crt"
+            - "--tls-private-key-file=/certs/tls.key"
+            - "--addr=0.0.0.0:443"
+            - "--addr=http://127.0.0.1:8181"
+          volumeMounts:
+            - readOnly: true
+              mountPath: /certs
+              name: opa-server
+        - name: kube-mgmt
+          image: openpolicyagent/kube-mgmt:0.8
+          args:
+            - "--replicate-cluster=v1/namespaces"
+            - "--replicate=extensions/v1beta1/ingresses"
+      volumes:
+        - name: opa-server
+          secret:
+            secretName: opa-server
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: opa-default-system-main
+  namespace: opa
+data:
+  main: |
+    package system
+
+    import data.kubernetes.admission
+
+    main = {
+      "apiVersion": "admission.k8s.io/v1beta1",
+      "kind": "AdmissionReview",
+      "response": response,
+    }
+
+    default response = {"allowed": true}
+
+    response = {
+        "allowed": false,
+        "status": {
+            "reason": reason,
+        },
+    } {
+        reason = concat(", ", admission.deny)
+        reason != ""
+    }
+```
 
 ```bash
 kubectl apply -f admission-controller.yaml
@@ -139,7 +270,7 @@ kubectl logs -l app=opa -c opa
 
 ### 4. Define a policy and load it into OPA via Kubernetes
 
-To test admission control, create a policy that restricts the hostnames that an ingress can use ([ingress-whitelist.rego](https://github.com/open-policy-agent/opa/blob/master/docs/book/tutorials/kubernetes-admission-control-validation/ingress-whitelist.rego)):
+To test admission control, create a policy that restricts the hostnames that an ingress can use ([ingress-whitelist.rego](https://github.com/open-policy-agent/opa/blob/master/docs/code/kubernetes-admission-control-validation/ingress-whitelist.rego)):
 
 {{< code file="kubernetes-admission-control-validation/ingress-whitelist.rego" lang="ruby" >}}
 
@@ -234,7 +365,7 @@ OPA allows you to modify policies on-the-fly without recompiling any of the serv
 
 To enforce the second half of the policy from the start of this tutorial you can load another policy into OPA that prevents Ingress objects in different namespaces from sharing the same hostname.
 
-[ingress-conflicts.rego](https://github.com/open-policy-agent/opa/blob/master/docs/book/tutorials/kubernetes-admission-control-validation/ingress-conflicts.rego):
+[ingress-conflicts.rego](https://github.com/open-policy-agent/opa/blob/master/docs/code/kubernetes-admission-control-validation/ingress-conflicts.rego):
 
 {{< code file="kubernetes-admission-control-validation/ingress-conflicts.rego" lang="ruby" >}}
 
@@ -253,14 +384,14 @@ Test that you cannot create an Ingress in another namespace with the same hostna
 
 **staging-namespace.yaml**:
 
-```
+```yaml
 apiVersion: v1
 kind: Namespace
 metadata:
   annotations:
     ingress-whitelist: "*.acmecorp.com"
   name: staging
- ```
+```
 
 ```bash
 kubectl create -f staging-namespace.yaml
@@ -281,4 +412,4 @@ an External Admission Controller, policies can be modified on-the-fly to
 satisfy changing operational requirements.
 
 For more information about deploying OPA on top of Kubernetes, see
-[Deployments - Kubernetes](/deployments.md#kubernetes).
+[Deployments - Kubernetes](../deployments#kubernetes).

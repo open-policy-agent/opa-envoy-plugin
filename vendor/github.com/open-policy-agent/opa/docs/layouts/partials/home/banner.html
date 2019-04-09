@@ -1,9 +1,11 @@
+{{ $localMode   := eq (getenv "ENV") "local" }}
 {{ $title       := site.Title }}
 {{ $description := site.Params.description }}
 {{ $tagline     := site.Params.tagline }}
-{{ $buttons     := site.Params.home.buttons }}
-{{ $mainMenu    := site.Menus.main }}
 {{ $socialMenu  := site.Menus.social }}
+{{ $latest      := index site.Data.releases 0 }}
+{{ $docs        := cond $localMode "/docs" (printf "/docs/v%s" $latest) }}
+{{ $getStarted  := cond $localMode "/docs/get-started" (printf "/docs/v%s/get-started" $latest) }}
 <header role="banner">
   <nav class="nav--banner" role="navigation">
     <ul class="nav--menu">
@@ -13,13 +15,23 @@
         </a>
       </li>
 
-      {{ range $mainMenu }}
       <li class="nav--menu-item nav--docs">
-        <a href="{{ .URL }}" rel="help">
-          {{ .Name }}
+        <a href="{{ $docs }}" rel="help">
+          Documentation
         </a>
       </li>
-      {{ end }}
+
+      <li class="nav--menu-item nav--docs">
+        <a href="{{ $getStarted }}" rel="help">
+          Tutorials
+        </a>
+      </li>
+
+      <li class="nav--menu-item nav--docs">
+        <a href="https://play.openpolicyagent.org" rel="help" target="_blank">
+          Playground
+        </a>
+      </li>
     </ul>
     <ul class="nav--menu">
       {{ range $socialMenu }}
@@ -29,7 +41,7 @@
             <title>
               {{ .Name }}
             </title>
-            <use xlink:href="#social-icon--{{ lower .Name }}"/>
+            <use xlink:href="#social-icon--{{ lower .Name }}" />
           </svg>
         </a>
       </li>
@@ -47,11 +59,13 @@
       </p>
 
       <p class="headline--nav">
-        {{ range $buttons }}
-        <a id="headline--{{ urlize .title }}" href="{{ .url }}" rel="help">
-          {{ .title }}
+        <a id="headline--get-started" href="{{ $getStarted }}" rel="help">
+          Get started
         </a>
-        {{ end }}
+
+        <a id="headline--learn-more" href="{{ $docs }}" rel="help">
+          Learn more
+        </a>
       </p>
     </div>
 

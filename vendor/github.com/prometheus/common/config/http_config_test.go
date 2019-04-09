@@ -39,9 +39,9 @@ const (
 	TLSCAChainPath        = "testdata/tls-ca-chain.pem"
 	ServerCertificatePath = "testdata/server.crt"
 	ServerKeyPath         = "testdata/server.key"
-	BarneyCertificatePath = "testdata/barney.crt"
-	BarneyKeyNoPassPath   = "testdata/barney-no-pass.key"
-	InvalidCA             = "testdata/barney-no-pass.key"
+	ClientCertificatePath = "testdata/client.crt"
+	ClientKeyNoPassPath   = "testdata/client-no-pass.key"
+	InvalidCA             = "testdata/client-no-pass.key"
 	WrongClientCertPath   = "testdata/self-signed-client.crt"
 	WrongClientKeyPath    = "testdata/self-signed-client.key"
 	EmptyFile             = "testdata/empty"
@@ -113,8 +113,8 @@ func TestNewClientFromConfig(t *testing.T) {
 			clientConfig: HTTPClientConfig{
 				TLSConfig: TLSConfig{
 					CAFile:             "",
-					CertFile:           BarneyCertificatePath,
-					KeyFile:            BarneyKeyNoPassPath,
+					CertFile:           ClientCertificatePath,
+					KeyFile:            ClientKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: true},
 			},
@@ -125,8 +125,8 @@ func TestNewClientFromConfig(t *testing.T) {
 			clientConfig: HTTPClientConfig{
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           BarneyCertificatePath,
-					KeyFile:            BarneyKeyNoPassPath,
+					CertFile:           ClientCertificatePath,
+					KeyFile:            ClientKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -138,8 +138,8 @@ func TestNewClientFromConfig(t *testing.T) {
 				BearerToken: BearerToken,
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           BarneyCertificatePath,
-					KeyFile:            BarneyKeyNoPassPath,
+					CertFile:           ClientCertificatePath,
+					KeyFile:            ClientKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -157,8 +157,8 @@ func TestNewClientFromConfig(t *testing.T) {
 				BearerTokenFile: BearerTokenFile,
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           BarneyCertificatePath,
-					KeyFile:            BarneyKeyNoPassPath,
+					CertFile:           ClientCertificatePath,
+					KeyFile:            ClientKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -179,8 +179,8 @@ func TestNewClientFromConfig(t *testing.T) {
 				},
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           BarneyCertificatePath,
-					KeyFile:            BarneyKeyNoPassPath,
+					CertFile:           ClientCertificatePath,
+					KeyFile:            ClientKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -274,8 +274,8 @@ func TestMissingBearerAuthFile(t *testing.T) {
 		BearerTokenFile: MissingBearerTokenFile,
 		TLSConfig: TLSConfig{
 			CAFile:             TLSCAChainPath,
-			CertFile:           BarneyCertificatePath,
-			KeyFile:            BarneyKeyNoPassPath,
+			CertFile:           ClientCertificatePath,
+			KeyFile:            ClientKeyNoPassPath,
 			ServerName:         "",
 			InsecureSkipVerify: false},
 	}
@@ -361,8 +361,8 @@ func TestBearerAuthFileRoundTripper(t *testing.T) {
 func TestTLSConfig(t *testing.T) {
 	configTLSConfig := TLSConfig{
 		CAFile:             TLSCAChainPath,
-		CertFile:           BarneyCertificatePath,
-		KeyFile:            BarneyKeyNoPassPath,
+		CertFile:           ClientCertificatePath,
+		KeyFile:            ClientKeyNoPassPath,
 		ServerName:         "localhost",
 		InsecureSkipVerify: false}
 
@@ -384,17 +384,17 @@ func TestTLSConfig(t *testing.T) {
 		t.Fatalf("Can't create a new TLS Config from a configuration (%s).", err)
 	}
 
-	barneyCertificate, err := tls.LoadX509KeyPair(BarneyCertificatePath, BarneyKeyNoPassPath)
+	clientCertificate, err := tls.LoadX509KeyPair(ClientCertificatePath, ClientKeyNoPassPath)
 	if err != nil {
 		t.Fatalf("Can't load the client key pair ('%s' and '%s'). Reason: %s",
-			BarneyCertificatePath, BarneyKeyNoPassPath, err)
+			ClientCertificatePath, ClientKeyNoPassPath, err)
 	}
 	cert, err := tlsConfig.GetClientCertificate(nil)
 	if err != nil {
 		t.Fatalf("unexpected error returned by tlsConfig.GetClientCertificate(): %s", err)
 	}
-	if !reflect.DeepEqual(cert, &barneyCertificate) {
-		t.Fatalf("Unexpected client certificate result: \n\n%+v\n expected\n\n%+v", cert, barneyCertificate)
+	if !reflect.DeepEqual(cert, &clientCertificate) {
+		t.Fatalf("Unexpected client certificate result: \n\n%+v\n expected\n\n%+v", cert, clientCertificate)
 	}
 
 	// non-nil functions are never equal.
@@ -440,18 +440,18 @@ func TestTLSConfigInvalidCA(t *testing.T) {
 			configTLSConfig: TLSConfig{
 				CAFile:             "",
 				CertFile:           MissingCert,
-				KeyFile:            BarneyKeyNoPassPath,
+				KeyFile:            ClientKeyNoPassPath,
 				ServerName:         "",
 				InsecureSkipVerify: false},
-			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", MissingCert, BarneyKeyNoPassPath),
+			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", MissingCert, ClientKeyNoPassPath),
 		}, {
 			configTLSConfig: TLSConfig{
 				CAFile:             "",
-				CertFile:           BarneyCertificatePath,
+				CertFile:           ClientCertificatePath,
 				KeyFile:            MissingKey,
 				ServerName:         "",
 				InsecureSkipVerify: false},
-			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", BarneyCertificatePath, MissingKey),
+			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", ClientCertificatePath, MissingKey),
 		},
 	}
 
@@ -548,8 +548,8 @@ func TestBasicAuthPasswordFile(t *testing.T) {
 func getCertificateBlobs(t *testing.T) map[string][]byte {
 	files := []string{
 		TLSCAChainPath,
-		BarneyCertificatePath,
-		BarneyKeyNoPassPath,
+		ClientCertificatePath,
+		ClientKeyNoPassPath,
 		ServerCertificatePath,
 		ServerKeyPath,
 		WrongClientCertPath,
@@ -608,14 +608,14 @@ func TestTLSRoundTripper(t *testing.T) {
 		{
 			// Valid certs.
 			ca:   TLSCAChainPath,
-			cert: BarneyCertificatePath,
-			key:  BarneyKeyNoPassPath,
+			cert: ClientCertificatePath,
+			key:  ClientKeyNoPassPath,
 		},
 		{
 			// CA not matching.
-			ca:   BarneyCertificatePath,
-			cert: BarneyCertificatePath,
-			key:  BarneyKeyNoPassPath,
+			ca:   ClientCertificatePath,
+			cert: ClientCertificatePath,
+			key:  ClientKeyNoPassPath,
 
 			errMsg: "certificate signed by unknown authority",
 		},
@@ -630,8 +630,8 @@ func TestTLSRoundTripper(t *testing.T) {
 		{
 			// CA file empty
 			ca:   EmptyFile,
-			cert: BarneyCertificatePath,
-			key:  BarneyKeyNoPassPath,
+			cert: ClientCertificatePath,
+			key:  ClientKeyNoPassPath,
 
 			errMsg: "unable to use specified CA cert",
 		},
@@ -639,14 +639,14 @@ func TestTLSRoundTripper(t *testing.T) {
 			// cert file empty
 			ca:   TLSCAChainPath,
 			cert: EmptyFile,
-			key:  BarneyKeyNoPassPath,
+			key:  ClientKeyNoPassPath,
 
 			errMsg: "failed to find any PEM data in certificate input",
 		},
 		{
 			// key file empty
 			ca:   TLSCAChainPath,
-			cert: BarneyCertificatePath,
+			cert: ClientCertificatePath,
 			key:  EmptyFile,
 
 			errMsg: "failed to find any PEM data in key input",
@@ -654,8 +654,8 @@ func TestTLSRoundTripper(t *testing.T) {
 		{
 			// Valid certs again.
 			ca:   TLSCAChainPath,
-			cert: BarneyCertificatePath,
-			key:  BarneyKeyNoPassPath,
+			cert: ClientCertificatePath,
+			key:  ClientKeyNoPassPath,
 		},
 	}
 
@@ -745,8 +745,8 @@ func TestTLSRoundTripperRaces(t *testing.T) {
 
 	var c *http.Client
 	writeCertificate(bs, TLSCAChainPath, ca)
-	writeCertificate(bs, BarneyCertificatePath, cert)
-	writeCertificate(bs, BarneyKeyNoPassPath, key)
+	writeCertificate(bs, ClientCertificatePath, cert)
+	writeCertificate(bs, ClientKeyNoPassPath, key)
 	c, err = NewClientFromConfig(cfg, "test")
 	if err != nil {
 		t.Fatalf("Error creating HTTP Client: %v", err)
@@ -785,7 +785,7 @@ func TestTLSRoundTripperRaces(t *testing.T) {
 			tick := time.NewTicker(10 * time.Millisecond)
 			<-tick.C
 			if i%2 == 0 {
-				writeCertificate(bs, BarneyCertificatePath, ca)
+				writeCertificate(bs, ClientCertificatePath, ca)
 			} else {
 				writeCertificate(bs, TLSCAChainPath, ca)
 			}

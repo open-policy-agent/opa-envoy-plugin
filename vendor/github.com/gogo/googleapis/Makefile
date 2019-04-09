@@ -22,7 +22,7 @@ regenerate:
 	google/api/annotations.proto
 
 update:
-	go install ./vendor/github.com/gogo/protobuf/gogoreplace
+	go get github.com/gogo/protobuf/gogoreplace
 
 	(cd ./google/rpc && rm status.proto; wget ${URL}/google/rpc/status.proto)
 	gogoreplace \

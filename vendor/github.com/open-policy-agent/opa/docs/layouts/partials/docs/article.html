@@ -1,7 +1,11 @@
 <article class="article">
-  <section class="section">
-    <div class="content">
-      {{ .Content }}
-    </div>
-  </section>
+  <div class="container">
+    {{ partial "docs/hero.html" . }}
+
+    <section class="section">
+      <div class="content">
+        {{ .Content }}
+      </div>
+    </section>
+  </div>
 </article>

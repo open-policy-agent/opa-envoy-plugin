@@ -35,7 +35,7 @@ command line arguments for OPA's server mode are:
 * `--log-format` to set the log format (default: `"text"`).
 
 By default, OPA listens for normal HTTP connections on `0.0.0.0:8181`. To make
-OPA listen for HTTPS connections, see [Security](security.md).
+OPA listen for HTTPS connections, see [Security](../security).
 
 We can run OPA as a server using Docker:
 
@@ -87,11 +87,11 @@ provide files via volume mounts.
 docker run -v $PWD:/example openpolicyagent/opa eval --data /example 'data.example.greeting'
 ```
 
-#### <code>$PWD/example/[data.json](https://github.com/open-policy-agent/opa/docs/book/tutorials/deployments-docker/example/data.json)</code>
+#### <code>$PWD/example/[data.json](https://github.com/open-policy-agent/opa/tree/master/docs/code/deployments-docker/example/data.json)</code>
 
 {{< code file="deployments-docker/example/data.json" lang="json" >}}
 
-#### <code>$PWD/example/[policy.rego](https://github.com/open-policy-agent/opa/docs/book/tutorials/deployments-docker/example/policy.rego)</code>
+#### <code>$PWD/example/[policy.rego](https://github.com/open-policy-agent/opa/tree/master/docs/code/deployments-docker/example/data.json/deployments-docker/example/policy.rego)</code>
 
 {{< code file="deployments-docker/example/policy.rego" lang="ruby" >}}
 
@@ -143,7 +143,7 @@ In this case, the policy file does not contain sensitive information so it's
 fine to store as a ConfigMap. If the file contained sensitive information, then
 we recommend you store it as a Secret.
 
-#### [`example.rego`](https://github.com/open-policy-agent/opa/docs/book/tutorials/deployments-kubernetes/example.rego)
+#### [`example.rego`](https://github.com/open-policy-agent/opa/tree/master/docs/code/deployments-kubernetes/example.rego)
 
 {{< code file="deployments-kubernetes/example.rego" lang="ruby" >}}
 
@@ -156,9 +156,43 @@ Next, create a Deployment to run OPA. The ConfigMap containing the policy is
 volume mounted into the container. This allows OPA to load the policy from
 the file system.
 
-#### [`deployment-opa.yaml`](https://github.com/open-policy-agent/opa/docs/book/tutorials/deployments-kubernetes/deployment-opa.yaml)
+**`deployment-opa.yaml`**:
 
-{{< code file="deployments-kubernetes/deployment-opa.yaml" lang="yaml" >}}
+```
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: opa
+  labels:
+    app: opa
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: opa
+      name: opa
+    spec:
+      containers:
+      - name: opa
+        image: openpolicyagent/opa:{{< latest >}}
+        ports:
+        - name: http
+          containerPort: 8181
+        args:
+        - "run"
+        - "--ignore=.*"  # exclude hidden dirs created by Kubernetes
+        - "--server"
+        - "/policies"
+        volumeMounts:
+        - readOnly: true
+          mountPath: /policies
+          name: example-policy
+      volumes:
+      - name: example-policy
+        configMap:
+          name: example-policy
+```
 
 ```bash
 kubectl create -f deployment-opa.yaml
@@ -167,7 +201,7 @@ kubectl create -f deployment-opa.yaml
 At this point OPA is up and running. Create a Service to expose the OPA API so
 that you can query it:
 
-#### [`service-opa.yaml`](https://github.com/open-policy-agent/opa/docs/book/tutorials/deployments-kubernetes/service-opa.yaml)
+#### [`service-opa.yaml`](https://github.com/open-policy-agent/opa/tree/master/docs/code/deployments-kubernetes/service-opa.yaml)
 
 {{< code file="deployments-kubernetes/service-opa.yaml" lang="yaml" >}}
 
@@ -185,7 +219,7 @@ OPA_URL=$(minikube service opa --url)
 Now you can query OPA's API. If you use the Pod below, `deny` will be `true`
 because the Pod refers to image outside the corporate registry.
 
-#### [`example-pod.json`](https://github.com/open-policy-agent/opa/docs/book/tutorials/deployments-kubernetes/example-pod.json)
+#### [`example-pod.json`](https://github.com/open-policy-agent/opa/tree/master/docs/code/deployments-kubernetes/example-pod.json)
 
 {{< code file="deployments-kubernetes/example-pod.json" lang="json" >}}
 
