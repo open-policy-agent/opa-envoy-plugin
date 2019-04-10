@@ -19,7 +19,7 @@ import:
   subpackages:
   - golint
 - package: github.com/envoyproxy/data-plane-api
-  version: 03f20aada15e569b531b7dbc105d44a94d47b24a
+  version: 8efc03c1b34b2ff01854436123cdd591b3f02d25
 - package: github.com/lyft/protoc-gen-validate
   version: v0.0.6
 - package: github.com/gogo/googleapis
