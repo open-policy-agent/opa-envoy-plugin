@@ -27,9 +27,9 @@ availability) in order to perform the authorization check.
 
 ## Quick Start
 
-The OPA-Istio plugin is tested with Istio v1.0.6. Currently Istio v1.1.0 and later not supported.
+This section assumes you are testing with Istio v1.1.0 or later.
 
-This section assumes you have Istio deployed on top of Kubernetes. See Istio's [Quick Start](https://archive.istio.io/v1.0/docs/setup/kubernetes/quick-start/) page to get started.
+This section assumes you have Istio deployed on top of Kubernetes. See Istio's [Quick Start](https://istio.io/docs/setup/kubernetes/install/kubernetes/) page to get started.
 
 1. Install OPA-Istio.
 
