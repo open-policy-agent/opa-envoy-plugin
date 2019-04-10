@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/envoyproxy/data-plane-api/envoy/service/auth/v2alpha"
+	"github.com/envoyproxy/data-plane-api/envoy/service/auth/v2"
 	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
@@ -87,7 +87,7 @@ func TestCheckAllow(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	var req v2alpha.CheckRequest
+	var req v2.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
 		panic(err)
 	}
@@ -108,7 +108,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	var req v2alpha.CheckRequest
+	var req v2.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
 		panic(err)
 	}
@@ -142,7 +142,7 @@ func TestCheckDeny(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	var req v2alpha.CheckRequest
+	var req v2.CheckRequest
 	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
 		panic(err)
 	}
@@ -163,7 +163,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	var req v2alpha.CheckRequest
+	var req v2.CheckRequest
 	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
 		panic(err)
 	}
@@ -197,7 +197,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	// Example Mixer Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
-	var req v2alpha.CheckRequest
+	var req v2.CheckRequest
 	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
 		panic(err)
 	}

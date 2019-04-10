@@ -14,6 +14,7 @@ PROTOC_MAPPINGS=(
     "Menvoy/api/v2/core/address.proto=github.com/envoyproxy/data-plane-api/envoy/api/v2/core"
     "Menvoy/api/v2/core/base.proto=github.com/envoyproxy/data-plane-api/envoy/api/v2/core"
     "Menvoy/type/http_status.proto=github.com/envoyproxy/data-plane-api/envoy/type"
+    "Menvoy/type/percent.proto=github.com/envoyproxy/data-plane-api/envoy/type"
 	"Mgogoproto/gogo.proto=github.com/gogo/protobuf/gogoproto"
 	"Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types"
 	"Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types"
@@ -44,10 +45,11 @@ echo "Building envoy type protos"
 protoc \
     $PROTOC_IMPORTS \
     $ENVOY_API/envoy/type/http_status.proto \
+    $ENVOY_API/envoy/type/percent.proto \
     --gogofast_out=plugins=grpc,$(join ',' ${PROTOC_MAPPINGS[@]}):$ENVOY_API
 
 echo "Building ext_authz protos"
 protoc \
     $PROTOC_IMPORTS \
-    $ENVOY_API/envoy/service/auth/v2alpha/*.proto \
+    $ENVOY_API/envoy/service/auth/v2/*.proto \
     --gogofast_out=plugins=grpc,$(join ',' ${PROTOC_MAPPINGS[@]}):$ENVOY_API

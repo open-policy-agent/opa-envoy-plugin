@@ -1,12 +1,12 @@
-hash: 3ef7215f25661e28f16c07d1c8be5498e63d719c4e9c178508b9a0539cb85117
-updated: 2019-04-09T00:30:54.793211771Z
+hash: 417411711172a0260784727dcadbfffd1cfcd05e108bbfe3c952dd0ccf494c3c
+updated: 2019-04-10T01:55:38.016369872-07:00
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
   - quantile
 - name: github.com/envoyproxy/data-plane-api
-  version: 03f20aada15e569b531b7dbc105d44a94d47b24a
+  version: 8efc03c1b34b2ff01854436123cdd591b3f02d25
   subpackages:
   - envoy/service/auth/v2alpha
 - name: github.com/ghodss/yaml
@@ -32,9 +32,9 @@ imports:
   - sortkeys
   - types
 - name: github.com/golang/lint
-  version: d0100b6bd8b389f0385611eb39152c4d7c3a7905
+  version: 959b441ac422379a43da2230f62be024250818b0
 - name: github.com/golang/protobuf
-  version: d3c38a4eb4970272b87a425ae00ccc4548e2f9bb
+  version: e91709a02e0e8ff8b86b7aa913fdc9ae9498e825
   subpackages:
   - proto
   - ptypes
@@ -54,7 +54,7 @@ imports:
   subpackages:
   - pbutil
 - name: github.com/olekukonko/tablewriter
-  version: f82d31373321de71ad0289113725564fe180a301
+  version: 7e037d187b0c13d81ccf0dd1c6b990c2759e6597
 - name: github.com/OneOfOne/xxhash
   version: c1e3185f167680b62832a0a11938a04b1ab265fc
 - name: github.com/open-policy-agent/opa
@@ -115,7 +115,7 @@ imports:
 - name: github.com/pkg/errors
   version: 27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7
 - name: github.com/prometheus/client_golang
-  version: 7490f0a74525a1f863eaf81b42f3ead3a1ecc43a
+  version: 8b8c870c3087566adad67b673ddaabb07f26a2c6
   subpackages:
   - prometheus
   - prometheus/internal
@@ -147,7 +147,7 @@ imports:
   subpackages:
   - ssh/terminal
 - name: golang.org/x/lint
-  version: d0100b6bd8b389f0385611eb39152c4d7c3a7905
+  version: 959b441ac422379a43da2230f62be024250818b0
   subpackages:
   - golint
 - name: golang.org/x/net
@@ -166,14 +166,14 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 31e7599a6c37728c25ca34167be099d072ad335d
+  version: f4905fbd45b6790792202848439271c74074bbfd
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: golang.org/x/tools
-  version: e5b8258f49188ec2c4702802a35d1ea0c7ccee77
+  version: 96f2e7ef861b625ecc256679029cf597531360bc
   subpackages:
   - cmd/goimports
 - name: google.golang.org/genproto
