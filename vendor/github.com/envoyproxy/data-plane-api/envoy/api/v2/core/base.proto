@@ -1,15 +1,23 @@
 syntax = "proto3";
 
 package envoy.api.v2.core;
+
+option java_outer_classname = "BaseProto";
+option java_multiple_files = true;
+option java_package = "io.envoyproxy.envoy.api.v2.core";
 option go_package = "core";
 
+import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";
 
 import "validate/validate.proto";
 import "gogoproto/gogo.proto";
 
+import "envoy/type/percent.proto";
+
 option (gogoproto.equal_all) = true;
+option (gogoproto.stable_marshaler_all) = true;
 
 // [#protodoc-title: Common types]
 
@@ -73,14 +81,17 @@ message Node {
 }
 
 // Metadata provides additional inputs to filters based on matched listeners,
-// filter chains, routes and endpoints. It is structured as a map from filter
-// name (in reverse DNS format) to metadata specific to the filter. Metadata
+// filter chains, routes and endpoints. It is structured as a map, usually from
+// filter name (in reverse DNS format) to metadata specific to the filter. Metadata
 // key-values for a filter are merged as connection and request handling occurs,
 // with later values for the same key overriding earlier values.
 //
 // An example use of metadata is providing additional values to
 // http_connection_manager in the envoy.http_connection_manager.access_log
 // namespace.
+//
+// Another example use of metadata is to per service config info in cluster metadata, which may get
+// consumed by multiple filters.
 //
 // For load balancing, Metadata provides a means to subset cluster endpoints.
 // Endpoints have a Metadata object associated and routes contain a Metadata
@@ -134,14 +145,14 @@ enum RequestMethod {
 // Header name/value pair.
 message HeaderValue {
   // Header name.
-  string key = 1 [(validate.rules).string.min_bytes = 1];
+  string key = 1 [(validate.rules).string = {min_bytes: 1, max_bytes: 16384}];
 
   // Header value.
   //
   // The same :ref:`format specifier <config_access_log_format>` as used for
   // :ref:`HTTP access logging <config_access_log>` applies here, however
   // unknown header values are replaced with the empty string instead of `-`.
-  string value = 2;
+  string value = 2 [(validate.rules).string.max_bytes = 16384];
 }
 
 // Header name/value pair plus option to control append behavior.
@@ -152,6 +163,11 @@ message HeaderValueOption {
   // Should the value be appended? If true (default), the value is appended to
   // existing values.
   google.protobuf.BoolValue append = 2;
+}
+
+// Wrapper for a set of headers.
+message HeaderMap {
+  repeated HeaderValue headers = 1;
 }
 
 // Data source consisting of either a file or an inline value.
@@ -181,7 +197,11 @@ message TransportSocket {
 
   // Implementation specific configuration which depends on the implementation being instantiated.
   // See the supported transport socket implementations for further documentation.
-  google.protobuf.Struct config = 2;
+  oneof config_type {
+    google.protobuf.Struct config = 2;
+
+    google.protobuf.Any typed_config = 3;
+  }
 }
 
 // Generic socket option message. This would be used to set socket options that
@@ -215,4 +235,22 @@ message SocketOption {
   // STATE_PREBIND is currently the only valid value.
   SocketState state = 6
       [(validate.rules).message.required = true, (validate.rules).enum.defined_only = true];
+}
+
+// Runtime derived FractionalPercent with defaults for when the numerator or denominator is not
+// specified via a runtime key.
+message RuntimeFractionalPercent {
+  // Default value if the runtime value's for the numerator/denominator keys are not available.
+  envoy.type.FractionalPercent default_value = 1 [(validate.rules).message.required = true];
+
+  // Runtime key for a YAML representation of a FractionalPercent.
+  string runtime_key = 2;
+}
+
+// Identifies a specific ControlPlane instance that Envoy is connected to.
+message ControlPlane {
+  // An opaque control plane identifier that uniquely identifies an instance
+  // of control plane. This can be used to identify which control plane instance,
+  // the Envoy is connected to.
+  string identifier = 1;
 }
