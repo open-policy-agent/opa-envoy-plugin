@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build go1.7
-
 // Package v1 provides bindings to the Prometheus HTTP API v1:
 // http://prometheus.io/docs/querying/api/
 package v1
@@ -540,14 +538,7 @@ func (h *httpAPI) Query(ctx context.Context, query string, ts time.Time) (model.
 		q.Set("time", ts.Format(time.RFC3339Nano))
 	}
 
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	_, body, err := h.client.Do(ctx, req)
+	_, body, err := api.DoGetFallback(h.client, ctx, u, q)
 	if err != nil {
 		return nil, err
 	}
@@ -573,14 +564,7 @@ func (h *httpAPI) QueryRange(ctx context.Context, query string, r Range) (model.
 	q.Set("end", end)
 	q.Set("step", step)
 
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	_, body, err := h.client.Do(ctx, req)
+	_, body, err := api.DoGetFallback(h.client, ctx, u, q)
 	if err != nil {
 		return nil, err
 	}

@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build go1.7
-
 package v1
 
 import (
@@ -181,7 +179,7 @@ func TestAPIs(t *testing.T) {
 				},
 			},
 
-			reqMethod: "GET",
+			reqMethod: "POST",
 			reqPath:   "/api/v1/query",
 			reqParam: url.Values{
 				"query": []string{"2"},
@@ -196,7 +194,7 @@ func TestAPIs(t *testing.T) {
 			do:    doQuery("2", testTime),
 			inErr: fmt.Errorf("some error"),
 
-			reqMethod: "GET",
+			reqMethod: "POST",
 			reqPath:   "/api/v1/query",
 			reqParam: url.Values{
 				"query": []string{"2"},
@@ -214,7 +212,7 @@ func TestAPIs(t *testing.T) {
 				Detail: "some body",
 			},
 
-			reqMethod: "GET",
+			reqMethod: "POST",
 			reqPath:   "/api/v1/query",
 			reqParam: url.Values{
 				"query": []string{"2"},
@@ -232,7 +230,7 @@ func TestAPIs(t *testing.T) {
 				Detail: "some body",
 			},
 
-			reqMethod: "GET",
+			reqMethod: "POST",
 			reqPath:   "/api/v1/query",
 			reqParam: url.Values{
 				"query": []string{"2"},
@@ -249,7 +247,7 @@ func TestAPIs(t *testing.T) {
 			}),
 			inErr: fmt.Errorf("some error"),
 
-			reqMethod: "GET",
+			reqMethod: "POST",
 			reqPath:   "/api/v1/query_range",
 			reqParam: url.Values{
 				"query": []string{"2"},

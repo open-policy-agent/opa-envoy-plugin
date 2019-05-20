@@ -1,0 +1,52 @@
+{{ $docsHome   := .CurrentSection }}
+{{ $allDocs    := where site.RegularPages "Section" "docs" }}
+{{ $docs       := where $allDocs ".Params.kind" "eq" "documentation" }}
+{{ $tutorials  := where $allDocs ".Params.kind" "eq" "tutorial" }}
+{{ $guides     := where $allDocs ".Params.kind" "eq" "guides" }}
+{{ $pageUrl    := .URL }}
+{{ $isDocsHome := eq .URL $docsHome.URL }}
+{{ $version    := index (split .File.Path "/") 1 }}
+{{ $latest     := index site.Data.releases 0 }}
+<span class="docs-nav-title">
+  Documentation
+</span>
+
+{{ $docsHomeVersion := $version }}
+{{ if or (eq $version $latest) }}
+  {{ $docsHomeVersion = "latest" }}
+{{ end }}
+<a class="docs-nav-item{{ if $isDocsHome }} is-active{{ end }}" href="/docs/{{ $docsHomeVersion }}">
+  {{ $docsHome.Name }}
+</a>
+
+{{ if $isDocsHome }}
+<div class="toc">
+  {{ .TableOfContents }}
+</div>
+{{ end }}
+
+{{ range $docs }}
+  {{ partial "docs/sidenav-link.html" (dict "ctx" . "pageUrl" $pageUrl "version" $version) }}
+{{ end }}
+
+<hr class="docs-nav-hr" />
+
+<span class="docs-nav-title">
+  Tutorials
+</span>
+
+{{ range $tutorials }}
+{{ partial "docs/sidenav-link.html" (dict "ctx" . "pageUrl" $pageUrl "version" $version) }}
+{{ end }}
+
+{{ with $guides }}
+<hr class="docs-nav-hr" />
+
+<span class="docs-nav-title">
+  Guides
+</span>
+
+{{ range . }}
+{{ partial "docs/sidenav-link.html" (dict "ctx" . "pageUrl" $pageUrl "version" $version) }}
+{{ end }}
+{{ end }}

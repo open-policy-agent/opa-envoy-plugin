@@ -24,6 +24,7 @@ func TestPlannerHelloWorld(t *testing.T) {
 	tests := []struct {
 		note    string
 		queries []string
+		modules []string
 		exp     ir.Policy
 	}{
 		{
@@ -70,6 +71,81 @@ func TestPlannerHelloWorld(t *testing.T) {
 			note:    "arrays pattern match",
 			queries: []string{"[x, 3, [2]] = [1, 3, [y]]"},
 		},
+		{
+			note:    "sets",
+			queries: []string{"x = {1,2,3}; x[y]"},
+		},
+		{
+			note:    "vars",
+			queries: []string{"x = 1"},
+		},
+		{
+			note:    "complete rules",
+			queries: []string{"true"},
+			modules: []string{`
+				package test
+				p = x { x = 1 }
+				p = y { y = 2 }
+			`},
+		},
+		{
+			note:    "complete rule reference",
+			queries: []string{"data.test.p = 10"},
+			modules: []string{`
+				package test
+				p = x { x = 10 }
+			`},
+		},
+		{
+			note:    "functions",
+			queries: []string{"data.test.f([1,x])"},
+			modules: []string{`
+				package test
+				f([a, b]) {
+					a = b
+				}
+			`},
+		},
+		{
+			note:    "else",
+			queries: []string{"data.test.p = 1"},
+			modules: []string{`
+				package test
+				p = 0 {
+					false
+				} else = 1 {
+					true
+				}
+			`},
+		},
+		{
+			note:    "partial set",
+			queries: []string{"data.test.p = {1,2}"},
+			modules: []string{`
+				package test
+				p[1]
+				p[2]
+			`},
+		},
+		{
+			note:    "partial object",
+			queries: []string{`data.test.p = {"a": 1, "b": 2}`},
+			modules: []string{`
+				package test
+				p["a"] = 1
+				p["b"] = 2
+			`},
+		},
+		{
+			note:    "virtual extent",
+			queries: []string{`data`},
+			modules: []string{`
+				package test
+
+				p = 1
+				q = 2 { false }
+			`},
+		},
 	}
 
 	for _, tc := range tests {
@@ -78,7 +154,11 @@ func TestPlannerHelloWorld(t *testing.T) {
 			for i := range queries {
 				queries[i] = ast.MustParseBody(tc.queries[i])
 			}
-			planner := New().WithQueries(queries)
+			modules := make([]*ast.Module, len(tc.modules))
+			for i := range modules {
+				modules[i] = ast.MustParseModule(tc.modules[i])
+			}
+			planner := New().WithQueries(queries).WithModules(modules)
 			policy, err := planner.Plan()
 			if err != nil {
 				t.Fatal(err)

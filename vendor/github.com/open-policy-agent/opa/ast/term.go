@@ -1160,6 +1160,7 @@ type Set interface {
 	Map(func(*Term) (*Term, error)) (Set, error)
 	Reduce(*Term, func(*Term, *Term) (*Term, error)) (*Term, error)
 	Sorted() Array
+	Slice() []*Term
 }
 
 // NewSet returns a new Set containing t.
@@ -1199,7 +1200,7 @@ type set struct {
 func (s *set) Copy() Set {
 	cpy := NewSet()
 	s.Foreach(func(x *Term) {
-		cpy.Add(x)
+		cpy.Add(x.Copy())
 	})
 	return cpy
 }
@@ -1397,6 +1398,11 @@ func (s *set) Sorted() Array {
 	}
 	sort.Sort(termSlice(cpy))
 	return cpy
+}
+
+// Slice returns a slice of terms contained in the set.
+func (s *set) Slice() []*Term {
+	return s.keys
 }
 
 func (s *set) insert(x *Term) {

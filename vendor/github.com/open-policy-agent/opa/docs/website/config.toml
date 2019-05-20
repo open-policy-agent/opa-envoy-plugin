@@ -1,0 +1,59 @@
+title = "Open Policy Agent"
+baseURL = "https://openpolicyagent.org"
+languageCode = "en"
+disableKinds = ["taxonomy", "taxonomyTerm"]
+googleAnalytics = "UA-84550302-1"
+
+pygmentsCodeFences = true
+pygmentsUseClasses = false
+pygmentsStyle = "tango"
+pygmentsGuessSyntax = true
+
+# Don't try and render the code snippets as html pages
+# the are loaded via shortcode helpers.
+ignorefiles = [ "/docs/v.*/code/.*" ]
+
+[params]
+description = "Policy-based control for cloud native environments"
+tagline = "Empower your administrators with flexible, fine-grained control across your entire stack."
+
+[params.social]
+twitter = "OpenPolicyAgent"
+medium = "https://blog.openpolicyagent.org"
+slack = "https://slack.openpolicyagent.org"
+github = "https://github.com/open-policy-agent/opa"
+
+[params.logos]
+sidebar = "/img/logos/opa-stacked-color.png"
+navbar = "/img/logos/opa-icon-white.png"
+
+[menu]
+[[menu.social]]
+name = "Medium"
+url = "https://blog.openpolicyagent.org"
+weight = 1
+
+[[menu.social]]
+name = "Twitter"
+url = "https://twitter.com/openpolicyagent"
+weight = 2
+
+[[menu.social]]
+name = "Slack"
+url = "https://slack.openpolicyagent.org/"
+weight = 3
+
+[[menu.social]]
+name = "GitHub"
+url = "https://github.com/open-policy-agent/opa"
+weight = 4
+
+[mediaTypes."text/netlify"]
+delimiter = ""
+
+[outputFormats.REDIRECTS]
+mediaType = "text/netlify"
+baseName = "_redirects"
+
+[outputs]
+home = ["HTML", "REDIRECTS"]

@@ -19,7 +19,9 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,12 +30,14 @@ import (
 	"github.com/open-policy-agent/opa/internal/manifest"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
+	pluginBundle "github.com/open-policy-agent/opa/plugins/bundle"
 	"github.com/open-policy-agent/opa/server/identifier"
 	"github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/open-policy-agent/opa/util/test"
+	"github.com/open-policy-agent/opa/version"
 	"github.com/pkg/errors"
 )
 
@@ -57,6 +61,75 @@ func TestUnversionedGetHealth(t *testing.T) {
 	req := newReqUnversioned(http.MethodGet, "/health", "")
 	if err := f.executeRequest(req, 200, `{}`); err != nil {
 		t.Fatalf("Unexpected error while health check: %v", err)
+	}
+}
+
+func TestUnversionedGetHealthBundleNoBundleSet(t *testing.T) {
+
+	f := newFixture(t)
+
+	req := newReqUnversioned(http.MethodGet, "/health?bundle=true", "")
+	if err := f.executeRequest(req, 200, `{}`); err != nil {
+		t.Fatalf("Unexpected error while health check: %v", err)
+	}
+}
+
+func TestUnversionedGetHealthCheckBundleActivation(t *testing.T) {
+
+	f := newFixture(t)
+
+	// Initialize the server as if a bundle plugin was
+	// configured on the manager.
+	f.server.hasBundle = true
+	f.server.bundleStatusMtx = new(sync.RWMutex)
+
+	// The bundle hasnt been activated yet, expect it to be activated
+	req := newReqUnversioned(http.MethodGet, "/health?bundle=true", "")
+	if err := f.executeRequest(req, 500, `{}`); err != nil {
+		t.Fatalf("Unexpected error while health check: %v", err)
+	}
+
+	// Set the bundle to be activated.
+	status := pluginBundle.Status{}
+	status.SetActivateSuccess("")
+	f.server.updateBundleStatus(status)
+
+	// The heath check should now respond as healthy
+	req = newReqUnversioned(http.MethodGet, "/health?bundle=true", "")
+	if err := f.executeRequest(req, 200, `{}`); err != nil {
+		t.Fatalf("Unexpected error while health check: %v", err)
+	}
+}
+
+func TestInitWithBundlePlugin(t *testing.T) {
+	store := inmem.New()
+	m, err := plugins.New([]byte{}, "test", store)
+	if err != nil {
+		t.Fatalf("Unexpected error creating plugin manager: %s", err.Error())
+	}
+
+	m.Register(pluginBundle.Name, new(pluginBundle.Plugin))
+
+	server, err := New().
+		WithStore(store).
+		WithManager(m).
+		Init(context.Background())
+
+	if err != nil {
+		t.Fatalf("Unexpected error initializing server: %s", err.Error())
+	}
+
+	if server.hasBundle == false {
+		t.Error("server.hasBundle should be true")
+	}
+
+	if server.bundleStatusMtx == nil {
+		t.Error("server.bundleStatusMtx should be initialized")
+	}
+
+	isActivated := server.bundleActivated()
+	if isActivated {
+		t.Error("bundle should not be initialized to activated")
 	}
 }
 
@@ -1360,6 +1433,69 @@ p = [1, 2, 3, 4] { true }`, 200, "")
 
 }
 
+func TestDataPostExplainNotes(t *testing.T) {
+	f := newFixture(t)
+
+	f.v1(http.MethodPut, "/policies/test", `
+		package test
+		p {
+			data.a[i] = x; x > 1
+			trace(sprintf("found x = %d", [x]))
+		}`, 200, "")
+
+	f.v1(http.MethodPut, "/data/a", `[1,2,3]`, 200, "")
+	f.reset()
+
+	req := newReqV1(http.MethodPost, "/data/test/p?explain=notes", "")
+	f.server.Handler.ServeHTTP(f.recorder, req)
+
+	var result types.DataResponseV1
+
+	if err := util.NewJSONDecoder(f.recorder.Body).Decode(&result); err != nil {
+		t.Fatalf("Unexpected JSON decode err: %v", err)
+	}
+
+	var trace types.TraceV1Raw
+
+	if err := trace.UnmarshalJSON(result.Explanation); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(trace) != 6 || trace[2].Op != "note" || trace[5].Op != "note" {
+		t.Logf("Found %d events in trace", len(trace))
+		for i := range trace {
+			t.Logf("Event #%d: %v\n", i, trace[i])
+		}
+		t.Fatal("Unexpected trace")
+	}
+}
+
+func TestDataProvenance(t *testing.T) {
+
+	f := newFixture(t)
+
+	// Dummy up since we are not using ld...
+	// Note:  No bundle 'revision'...
+	version.Version = "0.10.7"
+	version.Vcs = "ac23eb45"
+	version.Timestamp = "today"
+	version.Hostname = "foo.bar.com"
+
+	req := newReqV1(http.MethodPost, "/data?provenance", "")
+	f.reset()
+	f.server.Handler.ServeHTTP(f.recorder, req)
+
+	var result types.DataResponseV1
+
+	if err := util.NewJSONDecoder(f.recorder.Body).Decode(&result); err != nil {
+		t.Fatalf("Unexpected JSON decode error: %v", err)
+	}
+
+	if result.Provenance == nil {
+		t.Fatalf("Expected non-nil provenance: %v", result.Provenance)
+	}
+}
+
 func TestDataMetrics(t *testing.T) {
 
 	f := newFixture(t)
@@ -1596,6 +1732,49 @@ q[x] { p[x] }`,
 	if name.Compare(ast.String("test")) != 0 {
 		t.Fatalf("Expected name ot equal test but got: %v", name)
 	}
+}
+
+func TestPoliciesPutV1Noop(t *testing.T) {
+	f := newFixture(t)
+	f.v1("PUT", "/policies/test?metrics", `package foo`, 200, "")
+	f.reset()
+	f.v1("PUT", "/policies/test?metrics", `package foo`, 200, "")
+
+	var resp types.PolicyPutResponseV1
+	if err := json.NewDecoder(f.recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+
+	exp := []string{"timer_server_read_bytes_ns"}
+
+	// Sort the metric keys and compare to expected value. We're assuming the
+	// server skips parsing if the bytes are equal.
+	result := []string{}
+
+	for k := range resp.Metrics {
+		result = append(result, k)
+	}
+
+	sort.Strings(result)
+
+	if !reflect.DeepEqual(exp, result) {
+		t.Fatalf("Expected %v but got %v", exp, result)
+	}
+
+	f.reset()
+
+	// Ensure subsequent update with changed policy parses the body.
+	f.v1("PUT", "/policies/test?metrics", "package foo\np = 1", 200, "")
+
+	var resp2 types.PolicyPutResponseV1
+	if err := json.NewDecoder(f.recorder.Body).Decode(&resp2); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := resp2.Metrics["timer_rego_module_parse_ns"]; !ok {
+		t.Fatalf("Expected parse module metric in response but got %v", resp2)
+	}
+
 }
 
 func TestPoliciesListV1(t *testing.T) {
@@ -3335,4 +3514,104 @@ func newClient(t *testing.T, pool *x509.CertPool, clientKeyPair ...string) *http
 	}
 	c.Transport = tr
 	return &c
+}
+
+func TestShutdown(t *testing.T) {
+	f := newFixture(t)
+	loops, err := f.server.Listeners()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err.Error())
+	}
+
+	errc := make(chan error)
+	for _, loop := range loops {
+		go func(serverLoop func() error) {
+			errc <- serverLoop()
+		}(loop)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+	defer cancel()
+	err = f.server.Shutdown(ctx)
+	if err != nil {
+		t.Errorf("unexpected error shutting down server: %s", err.Error())
+	}
+}
+
+func TestShutdownError(t *testing.T) {
+	f := newFixture(t)
+
+	errMsg := "failed to shutdown"
+
+	// Add a mock httpListener to the server
+	m := &mockHTTPListener{
+		ShutdownHook: func() error {
+			return errors.New(errMsg)
+		},
+	}
+	f.server.httpListeners = []httpListener{m}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+	defer cancel()
+	err := f.server.Shutdown(ctx)
+	if err == nil {
+		t.Error("expected an error shutting down server but err==nil")
+	} else if !strings.Contains(err.Error(), errMsg) {
+		t.Errorf("unexpected error shutting down server: %s", err.Error())
+	}
+}
+
+func TestShutdownMultipleErrors(t *testing.T) {
+	f := newFixture(t)
+
+	shutdownErrs := []error{errors.New("err1"), nil, errors.New("err3")}
+
+	// Add mock httpListeners to the server
+	for _, err := range shutdownErrs {
+		m := &mockHTTPListener{}
+		if err != nil {
+			retVal := errors.New(err.Error())
+			m.ShutdownHook = func() error {
+				return retVal
+			}
+		}
+		f.server.httpListeners = append(f.server.httpListeners, m)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+	defer cancel()
+	err := f.server.Shutdown(ctx)
+	if err == nil {
+		t.Fatal("expected an error shutting down server but err==nil")
+	}
+
+	for _, expectedErr := range shutdownErrs {
+		if expectedErr != nil && !strings.Contains(err.Error(), expectedErr.Error()) {
+			t.Errorf("expected error message to contain '%s', full message: '%s'", expectedErr.Error(), err.Error())
+		}
+	}
+}
+
+type listenerHook func() error
+
+type mockHTTPListener struct {
+	ShutdownHook listenerHook
+}
+
+var _ httpListener = (*mockHTTPListener)(nil)
+
+func (m mockHTTPListener) ListenAndServe() error {
+	return errors.New("not implemented")
+}
+
+func (m mockHTTPListener) ListenAndServeTLS(certFile, keyFile string) error {
+	return errors.New("not implemented")
+}
+
+func (m mockHTTPListener) Shutdown(ctx context.Context) error {
+	var err error
+	if m.ShutdownHook != nil {
+		err = m.ShutdownHook()
+	}
+	return err
 }

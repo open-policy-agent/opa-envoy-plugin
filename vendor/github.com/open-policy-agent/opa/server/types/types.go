@@ -118,6 +118,15 @@ func (p PolicyV1) Equal(other PolicyV1) bool {
 	return p.ID == other.ID && p.Raw == other.Raw && p.AST.Equal(other.AST)
 }
 
+// ProvenanceV1 models a collection of build/version information.
+type ProvenanceV1 struct {
+	Version   string `json:"version"`
+	Vcs       string `json:"build_commit"`
+	Timestamp string `json:"build_timestamp"`
+	Hostname  string `json:"build_hostname"`
+	Revision  string `json:"revision,omitempty"`
+}
+
 // DataRequestV1 models the request message for Data API POST operations.
 type DataRequestV1 struct {
 	Input *interface{} `json:"input"`
@@ -125,10 +134,11 @@ type DataRequestV1 struct {
 
 // DataResponseV1 models the response message for Data API read operations.
 type DataResponseV1 struct {
-	DecisionID  string       `json:"decision_id,omitempty"`
-	Explanation TraceV1      `json:"explanation,omitempty"`
-	Metrics     MetricsV1    `json:"metrics,omitempty"`
-	Result      *interface{} `json:"result,omitempty"`
+	DecisionID  string        `json:"decision_id,omitempty"`
+	Provenance  *ProvenanceV1 `json:"provenance,omitempty"`
+	Explanation TraceV1       `json:"explanation,omitempty"`
+	Metrics     MetricsV1     `json:"metrics,omitempty"`
+	Result      *interface{}  `json:"result,omitempty"`
 }
 
 // DiagnosticsResponseV1 models the response message for diagnostics reads.
@@ -181,8 +191,9 @@ type ExplainModeV1 string
 
 // Explanation mode enumeration.
 const (
-	ExplainOffV1  ExplainModeV1 = "off"
-	ExplainFullV1 ExplainModeV1 = "full"
+	ExplainOffV1   ExplainModeV1 = "off"
+	ExplainFullV1  ExplainModeV1 = "full"
+	ExplainNotesV1 ExplainModeV1 = "notes"
 )
 
 // TraceV1 models the trace result returned for queries that include the
@@ -415,9 +426,18 @@ const (
 	// query evaluation.
 	ParamPartialV1 = "partial"
 
+	// ParamProvenanceV1 defines the name of the HTTP URL parameter that indicates
+	// the client wants build and version information in addition to the result.
+	ParamProvenanceV1 = "provenance"
+
 	// ParamWatchV1 defines the name of the HTTP URL parameter that indicates
 	// the client wants to set a watch on the current query or data reference.
 	ParamWatchV1 = "watch"
+
+	// ParamBundleActivationV1 defines the name of the HTTP URL parameter that
+	// indicates the client wants to include bundle activation in the results
+	// of the health API.
+	ParamBundleActivationV1 = "bundle"
 )
 
 // BadRequestErr represents an error condition raised if the caller passes

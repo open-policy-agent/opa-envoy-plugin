@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/opa/internal/manifest"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
+	"github.com/open-policy-agent/opa/plugins/bundle"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server/authorizer"
 	"github.com/open-policy-agent/opa/server/identifier"
@@ -37,6 +38,7 @@ import (
 	"github.com/open-policy-agent/opa/server/writer"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/topdown/notes"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/open-policy-agent/opa/version"
 	"github.com/open-policy-agent/opa/watch"
@@ -104,6 +106,10 @@ type Server struct {
 	errLimit          int
 	pprofEnabled      bool
 	runtime           *ast.Term
+	httpListeners     []httpListener
+	bundleStatus      bundle.Status
+	bundleStatusMtx   *sync.RWMutex
+	hasBundle         bool
 }
 
 // Loop will contain all the calls from the server that we'll be listening on.
@@ -163,7 +169,45 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 
 	s.partials = map[string]rego.PartialResult{}
 
+	bp := bundle.Lookup(s.manager)
+	if bp != nil {
+		s.bundleStatusMtx = new(sync.RWMutex)
+		s.hasBundle = true
+		bp.Register("REST API Server", func(status bundle.Status) {
+			s.updateBundleStatus(status)
+		})
+	}
+
 	return s, s.store.Commit(ctx, txn)
+}
+
+// Shutdown will attempt to gracefully shutdown each of the http servers
+// currently in use by the OPA Server. If any exceed the deadline specified
+// by the context an error will be returned.
+func (s *Server) Shutdown(ctx context.Context) error {
+	errChan := make(chan error)
+	for _, srvr := range s.httpListeners {
+		go func(s httpListener) {
+			errChan <- s.Shutdown(ctx)
+		}(srvr)
+	}
+	// wait until each server has finished shutting down
+	var errorList []error
+	for i := 0; i < len(s.httpListeners); i++ {
+		err := <-errChan
+		if err != nil {
+			errorList = append(errorList, err)
+		}
+	}
+
+	if len(errorList) > 0 {
+		errMsg := "error while shutting down: "
+		for i, err := range errorList {
+			errMsg += fmt.Sprintf("(%d) %s. ", i, err.Error())
+		}
+		return errors.New(errMsg)
+	}
+	return nil
 }
 
 // WithAddresses sets the listening addresses that the server will bind to.
@@ -277,19 +321,21 @@ func (s *Server) Listeners() ([]Loop, error) {
 			return nil, err
 		}
 		var loop Loop
+		var listener httpListener
 		switch parsedURL.Scheme {
 		case "unix":
-			loop, err = s.getListenerForUNIXSocket(parsedURL)
+			loop, listener, err = s.getListenerForUNIXSocket(parsedURL)
 		case "http":
-			loop, err = s.getListenerForHTTPServer(parsedURL)
+			loop, listener, err = s.getListenerForHTTPServer(parsedURL)
 		case "https":
-			loop, err = s.getListenerForHTTPSServer(parsedURL)
+			loop, listener, err = s.getListenerForHTTPSServer(parsedURL)
 		default:
 			err = fmt.Errorf("invalid url scheme %q", parsedURL.Scheme)
 		}
 		if err != nil {
 			return nil, err
 		}
+		s.httpListeners = append(s.httpListeners, listener)
 		loops = append(loops, loop)
 	}
 
@@ -298,29 +344,59 @@ func (s *Server) Listeners() ([]Loop, error) {
 		if err != nil {
 			return nil, err
 		}
-		loop, err := s.getListenerForHTTPServer(parsedURL)
+		loop, httpListener, err := s.getListenerForHTTPServer(parsedURL)
 		if err != nil {
 			return nil, err
 		}
+		s.httpListeners = append(s.httpListeners, httpListener)
 		loops = append(loops, loop)
 	}
 
 	return loops, nil
 }
 
-func (s *Server) getListenerForHTTPServer(u *url.URL) (Loop, error) {
+type httpListener interface {
+	ListenAndServe() error
+	ListenAndServeTLS(certFile, keyFile string) error
+	Shutdown(ctx context.Context) error
+}
+
+// baseHTTPListener is just a wrapper around http.Server
+type baseHTTPListener struct {
+	s *http.Server
+}
+
+var _ httpListener = (*baseHTTPListener)(nil)
+
+func newHTTPListener(srvr *http.Server) httpListener {
+	return &baseHTTPListener{srvr}
+}
+
+func (l *baseHTTPListener) ListenAndServe() error {
+	return l.s.ListenAndServe()
+}
+
+func (l *baseHTTPListener) ListenAndServeTLS(certFile, keyFile string) error {
+	return l.s.ListenAndServeTLS(certFile, keyFile)
+}
+
+func (l *baseHTTPListener) Shutdown(ctx context.Context) error {
+	return l.s.Shutdown(ctx)
+}
+
+func (s *Server) getListenerForHTTPServer(u *url.URL) (Loop, httpListener, error) {
 	httpServer := http.Server{
 		Addr:    u.Host,
 		Handler: s.Handler,
 	}
 
-	return httpServer.ListenAndServe, nil
+	return httpServer.ListenAndServe, newHTTPListener(&httpServer), nil
 }
 
-func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
+func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, httpListener, error) {
 
 	if s.cert == nil {
-		return nil, fmt.Errorf("TLS certificate required but not supplied")
+		return nil, nil, fmt.Errorf("TLS certificate required but not supplied")
 	}
 
 	httpsServer := http.Server{
@@ -337,10 +413,10 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
 
 	httpsLoop := func() error { return httpsServer.ListenAndServeTLS("", "") }
 
-	return httpsLoop, nil
+	return httpsLoop, newHTTPListener(&httpsServer), nil
 }
 
-func (s *Server) getListenerForUNIXSocket(u *url.URL) (Loop, error) {
+func (s *Server) getListenerForUNIXSocket(u *url.URL) (Loop, httpListener, error) {
 	socketPath := u.Host + u.Path
 
 	// Remove domain socket file in case it already exists.
@@ -349,11 +425,11 @@ func (s *Server) getListenerForUNIXSocket(u *url.URL) (Loop, error) {
 	domainSocketServer := http.Server{Handler: s.Handler}
 	unixListener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	domainSocketLoop := func() error { return domainSocketServer.Serve(unixListener) }
-	return domainSocketLoop, nil
+	return domainSocketLoop, newHTTPListener(&domainSocketServer), nil
 }
 
 func (s *Server) initRouter() {
@@ -700,27 +776,59 @@ func (s *Server) v1DiagnosticsGet(w http.ResponseWriter, r *http.Request) {
 	writer.JSON(w, 200, resp, pretty)
 }
 
-func (s *Server) unversionedGetHealth(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (s *Server) updateBundleStatus(status bundle.Status) {
+	s.bundleStatusMtx.Lock()
+	defer s.bundleStatusMtx.Unlock()
+	s.bundleStatus = status
+}
+
+func (s *Server) canEval(ctx context.Context) bool {
 	// Create very simple query that binds a single variable.
 	eval := rego.New(rego.Compiler(s.getCompiler()),
 		rego.Store(s.store), rego.Query("x = 1"))
 	// Run evaluation.
 	rs, err := eval.Eval(ctx)
 	if err != nil {
-		writer.ErrorAuto(w, err)
-		return
+		return false
 	}
 	type emptyObject struct{}
 	v, ok := rs[0].Bindings["x"]
 	if ok {
 		jsonNumber, ok := v.(json.Number)
 		if ok && jsonNumber.String() == "1" {
-			writer.JSON(w, http.StatusOK, emptyObject{}, false)
-			return
+			return true
 		}
 	}
-	writer.JSON(w, http.StatusInternalServerError, emptyObject{}, false)
+	return false
+}
+
+func (s *Server) bundleActivated() bool {
+	s.bundleStatusMtx.RLock()
+	defer s.bundleStatusMtx.RUnlock()
+
+	// Ensure that the bundle status has an activation time set on it
+	return s.bundleStatus.LastSuccessfulActivation != time.Time{}
+}
+
+func (s *Server) unversionedGetHealth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	includeBundleStatus := getBoolParam(r.URL, types.ParamBundleActivationV1, false)
+
+	// Ensure the server can evaluate a simple query
+	type emptyObject struct{}
+	if !s.canEval(ctx) {
+		writer.JSON(w, http.StatusInternalServerError, emptyObject{}, false)
+		return
+	}
+
+	// Ensure that bundles (if configured, and requested to be included in the result)
+	// have been activated successfully.
+	if includeBundleStatus && s.hasBundle && !s.bundleActivated() {
+		writer.JSON(w, http.StatusInternalServerError, emptyObject{}, false)
+		return
+	}
+
+	writer.JSON(w, http.StatusOK, emptyObject{}, false)
 }
 
 func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +938,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 	explainMode := getExplain(r.URL.Query()["explain"], types.ExplainOffV1)
 	includeMetrics := getBoolParam(r.URL, types.ParamMetricsV1, true)
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
+	provenance := getBoolParam(r.URL, types.ParamProvenanceV1, true)
 
 	m.Timer(metrics.RegoQueryParse).Start()
 
@@ -908,6 +1017,10 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 	if includeMetrics || includeInstrumentation {
 		result.Metrics = m.All()
+	}
+
+	if provenance {
+		result.Provenance = getProvenance(s.revision)
 	}
 
 	if len(rs) == 0 {
@@ -1010,6 +1123,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 	includeMetrics := getBoolParam(r.URL, types.ParamMetricsV1, true)
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
 	partial := getBoolParam(r.URL, types.ParamPartialV1, true)
+	provenance := getBoolParam(r.URL, types.ParamProvenanceV1, true)
 
 	m.Timer(metrics.RegoQueryParse).Start()
 
@@ -1081,6 +1195,10 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 
 	if includeMetrics || includeInstrumentation {
 		result.Metrics = m.All()
+	}
+
+	if provenance {
+		result.Provenance = getProvenance(s.revision)
 	}
 
 	if len(rs) == 0 {
@@ -1360,10 +1478,30 @@ func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.Timer("server_read_bytes").Stop()
+
+	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	if bs, err := s.store.GetPolicy(ctx, txn, path); err != nil {
+		if !storage.IsNotFound(err) {
+			s.abortAuto(ctx, txn, w, err)
+			return
+		}
+	} else if bytes.Equal(buf, bs) {
+		s.store.Abort(ctx, txn)
+		response := types.PolicyPutResponseV1{}
+		if includeMetrics {
+			response.Metrics = m.All()
+		}
+		writer.JSON(w, http.StatusOK, response, pretty)
+		return
+	}
+
 	m.Timer(metrics.RegoModuleParse).Start()
-
 	parsedMod, err := ast.ParseModule(path, string(buf))
-
 	m.Timer(metrics.RegoModuleParse).Stop()
 
 	if err != nil {
@@ -1378,13 +1516,6 @@ func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 
 	if parsedMod == nil {
 		writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, "empty module"))
-		return
-	}
-
-	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
-
-	if err != nil {
-		writer.ErrorAuto(w, err)
 		return
 	}
 
@@ -1727,6 +1858,12 @@ func (s *Server) evalDiagnosticPolicy(r *http.Request) (logger diagnosticsLogger
 
 func (s *Server) getExplainResponse(explainMode types.ExplainModeV1, trace []*topdown.Event, pretty bool) (explanation types.TraceV1) {
 	switch explainMode {
+	case types.ExplainNotesV1:
+		var err error
+		explanation, err = types.NewTraceV1(notes.Filter(trace), pretty)
+		if err != nil {
+			break
+		}
 	case types.ExplainFullV1:
 		var err error
 		explanation, err = types.NewTraceV1(trace, pretty)
@@ -1975,6 +2112,8 @@ func getWatch(p []string) (watch bool) {
 func getExplain(p []string, zero types.ExplainModeV1) types.ExplainModeV1 {
 	for _, x := range p {
 		switch x {
+		case string(types.ExplainNotesV1):
+			return types.ExplainNotesV1
 		case string(types.ExplainFullV1):
 			return types.ExplainFullV1
 		}
@@ -2289,4 +2428,15 @@ func parseURL(s string, useHTTPSByDefault bool) (*url.URL, error) {
 		s = scheme + s
 	}
 	return url.Parse(s)
+}
+
+func getProvenance(revision string) *types.ProvenanceV1 {
+
+	return &types.ProvenanceV1{
+		Version:   version.Version,
+		Vcs:       version.Vcs,
+		Timestamp: version.Timestamp,
+		Hostname:  version.Hostname,
+		Revision:  revision,
+	}
 }

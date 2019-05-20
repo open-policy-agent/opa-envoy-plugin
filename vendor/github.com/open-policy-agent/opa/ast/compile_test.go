@@ -5,12 +5,14 @@
 package ast
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/open-policy-agent/opa/util/test"
 )
@@ -111,7 +113,10 @@ func TestCompilerExample(t *testing.T) {
 }
 
 func TestCompilerWithStageAfter(t *testing.T) {
-	c := NewCompiler().WithStageAfter("CheckRecursion", mockStageFunctionCall)
+	c := NewCompiler().WithStageAfter(
+		"CheckRecursion",
+		CompilerStageDefinition{"MockStage", "mock_stage", mockStageFunctionCall},
+	)
 	m := MustParseModule(testModule)
 	c.Compile(map[string]*Module{"testMod": m})
 
@@ -1095,174 +1100,303 @@ elsekw {
 
 func TestCompilerRewriteLocalAssignments(t *testing.T) {
 
-	c := NewCompiler()
+	tests := []struct {
+		module string
+		exp    string
+	}{
+		{
+			module: `
+				package test
+				body { a := 1; a > 0 }
+			`,
+			exp: `
+				package test
+				body = true { __local0__ = 1; gt(__local0__, 0) }
+			`,
+		},
+		{
+			module: `
+				package test
+				head_vars(a) = b { b := a }
+			`,
+			exp: `
+				package test
+				head_vars(a) = __local0__ { __local0__ = a }
+			`,
+		},
+		{
+			module: `
+				package test
+				head_key[a] { a := 1 }
+			`,
+			exp: `
+				package test
+				head_key[__local0__] { __local0__ = 1 }
+			`,
+		},
+		{
+			module: `
+				package test
+				p = {1,2,3}
+				x = 4
+				head_nested[p[x]] {
+					some x
+				}`,
+			exp: `
+					package test
+					p = {1,2,3}
+					x = 4
+					head_nested[data.test.p[__local0__]]
+			`,
+		},
+		{
+			module: `
+				package test
+				p = {1,2}
+				head_closure_nested[p[x]] {
+					y = [true | some x; x = 1]
+				}
+			`,
+			exp: `
+				package test
+				p = {1,2}
+				head_closure_nested[data.test.p[x]] {
+					y = [true | __local0__ = 1]
+				}
+			`,
+		},
+		{
+			module: `
+				package test
+				nested {
+					a := [1,2,3]
+					x := [true | a[i] > 1]
+				}
+			`,
+			exp: `
+				package test
+				nested = true { __local0__ = [1, 2, 3]; __local1__ = [true | gt(__local0__[i], 1)] }
+			`,
+		},
+		{
+			module: `
+				package test
+				x = 2
+				shadow_globals[x] { x := 1 }
+			`,
+			exp: `
+				package test
+				x = 2 { true }
+				shadow_globals[__local0__] { __local0__ = 1 }
+			`,
+		},
+		{
+			module: `
+				package test
+				shadow_rule[shadow_rule] { shadow_rule := 1 }
+			`,
+			exp: `
+				package test
+				shadow_rule[__local0__] { __local0__ = 1 }
+			`,
+		},
+		{
+			module: `
+				package test
+				shadow_roots_1 { data := 1; input := 2; input > data }
+			`,
+			exp: `
+				package test
+				shadow_roots_1 = true { __local0__ = 1; __local1__ = 2; gt(__local1__, __local0__) }
+			`,
+		},
+		{
+			module: `
+				package test
+				shadow_roots_2 { input := {"a": 1}; input.a > 0  }
+			`,
+			exp: `
+				package test
+				shadow_roots_2 = true { __local0__ = {"a": 1}; gt(__local0__.a, 0) }
+			`,
+		},
+		{
+			module: `
+				package test
+				skip_with_target { a := 1; input := 2; data.p with input as a }
+			`,
+			exp: `
+				package test
+				skip_with_target = true { __local0__ = 1; __local1__ = 2; data.p with input as __local0__ }
+			`,
+		},
+		{
+			module: `
+				package test
+				shadow_comprehensions {
+					a := 1
+					[true | a := 2; b := 1]
+					b := 2
+				}
+			`,
+			exp: `
+				package test
+				shadow_comprehensions = true { __local0__ = 1; [true | __local1__ = 2; __local2__ = 1]; __local3__ = 2 }
+			`,
+		},
+		{
+			module: `
+				package test
+					scoping {
+						[true | a := 1]
+						[true | a := 2]
+					}
+			`,
+			exp: `
+				package test
+				scoping = true { [true | __local0__ = 1]; [true | __local1__ = 2] }
+			`,
+		},
+		{
+			module: `
+				package test
+				object_keys {
+					{k: v1, "k2": v2} := {"foo": 1, "k2": 2}
+				}
+			`,
+			exp: `
+				package test
+				object_keys = true { {k: __local0__, "k2": __local1__} = {"foo": 1, "k2": 2} }
+			`,
+		},
+		{
+			module: `
+				package test
+				head_array_comprehensions = [[x] | x := 1]
+					head_set_comprehensions = {[x] | x := 1}
+					head_object_comprehensions = {k: [x] | k := "foo"; x := 1}
+			`,
+			exp: `
+				package test
+				head_array_comprehensions = [[__local0__] | __local0__ = 1] { true }
+				head_set_comprehensions = {[__local1__] | __local1__ = 1} { true }
+				head_object_comprehensions = {__local2__: [__local3__] | __local2__ = "foo"; __local3__ = 1} { true }
+			`,
+		},
+		{
+			module: `
+				package test
+				rewritten_object_key {
+					k := "foo"
+					{k: 1}
+				}
+			`,
+			exp: `
+				package test
+				rewritten_object_key = true { __local0__ = "foo"; {__local0__: 1} }
+			`,
+		},
+		{
+			module: `
+				package test
+				rewritten_object_key_head[[{k: 1}]] {
+					k := "foo"
+				}
+			`,
+			exp: `
+				package test
+				rewritten_object_key_head[[{__local0__: 1}]] { __local0__ = "foo" }
+			`,
+		},
+		{
+			module: `
+				package test
+				rewritten_object_key_head_value = [{k: 1}] {
+					k := "foo"
+				}
+			`,
+			exp: `
+				package test
+				rewritten_object_key_head_value = [{__local0__: 1}] { __local0__ = "foo" }
+			`,
+		},
+		{
+			module: `
+				package test
+				skip_with_target_in_assignment {
+					input := 1
+					a := [true | true with input as 2; true with input as 3]
+				}
+			`,
+			exp: `
+				package test
+				skip_with_target_in_assignment = true { __local0__ = 1; __local1__ = [true | true with input as 2; true with input as 3] }
+			`,
+		},
+		{
+			module: `
+				package test
+				rewrite_value_in_assignment {
+					a := 1
+					b := 1 with input as [a]
+				}
+			`,
+			exp: `
+				package test
+				rewrite_value_in_assignment = true { __local0__ = 1; __local1__ = 1 with input as [__local0__] }
+			`,
+		},
+		{
+			module: `
+				package test
+				global = {}
+				ref_shadowed {
+					global := {"a": 1}
+					global.a > 0
+				}
+			`,
+			exp: `
+				package test
+				global = {} { true }
+				ref_shadowed = true { __local0__ = {"a": 1}; gt(__local0__.a, 0) }
+			`,
+		},
+		{
+			module: `
+				package test
+				f(x) = y {
+					x == 1
+					y := 2
+				} else = y {
+					x == 3
+					y := 4
+				}
+			`,
+			exp: `
+				package test
 
-	c.Modules["test1"] = MustParseModule(`package test
-
-	body { a := 1; a > 0 }
-	head_vars(a) = b { a := 1; b := a }
-	head_key[a] { a := 1 }
-	nested {
-		a := [1,2,3]
-		x := [true | a[i] > 1]
+				f(x) = __local0__ { x == 1; __local0__ = 2 } else = __local1__ { x == 3; __local1__ = 4 }
+			`,
+		},
 	}
 
-	x = 2
-	shadow_globals[x] { x := 1 }
-	shadow_rule[shadow_rule] { shadow_rule := 1 }
-	shadow_roots_1 { data := 1; input := 2; input > data }
-	shadow_roots_2 { input := {"a": 1}; input.a > 0  }
-
-	skip_with_target { a := 1; input := 2; data.p with input as a }
-
-	shadow_comprehensions {
-		a := 1
-		[true | a := 2; b := 1]
-		b := 2
-	}
-
-	scoping {
-		[true | a := 1]
-		[true | a := 2]
-	}
-
-	object_keys {
-		{k: v1, "k2": v2} := {"foo": 1, "k2": 2}
-	}
-
-	head_array_comprehensions = [[x] | x := 1]
-	head_set_comprehensions = {[x] | x := 1}
-	head_object_comprehensions = {k: [x] | k := "foo"; x := 1}
-
-	rewritten_object_key {
-		k := "foo"
-		{k: 1}
-	}
-
-	rewritten_object_key_head[[{k: 1}]] {
-		k := "foo"
-	}
-
-	rewritten_object_key_head_value = [{k: 1}] {
-		k := "foo"
-	}
-
-	skip_with_target_in_assignment {
-		input := 1
-		a := [true | true with input as 2; true with input as 3]
-	}
-
-	rewrite_value_in_assignment {
-		a := 1
-		b := 1 with input as [a]
-	}
-
-	global = {}
-
-	ref_shadowed {
-		global := {"a": 1}
-		global.a > 0
-	}
-	`)
-
-	c.Modules["test2"] = MustParseModule(`package test
-
-	f(x) = y {
-		x := 1
-		y := 2
-	} else = y {
-		x := 3
-		y := 4
-	}
-	`)
-
-	compileStages(c, c.rewriteLocalAssignments)
-	assertNotFailed(t, c)
-	if t.Failed() {
-		return
-	}
-
-	module1 := c.Modules["test1"]
-
-	expectedModule := MustParseModule(`package test
-
-	body { __local0__ = 1; __local0__ > 0 }
-	head_vars(__local1__) = __local2__ { __local1__ = 1; __local2__ = __local1__ }
-	head_key[__local3__] { __local3__ = 1 }
-	nested {
-		__local4__ = [1,2,3]
-		__local5__ = [true  | __local4__[i] > 1]
-	}
-
-	x = 2 { true }
-	shadow_globals[__local6__] { __local6__ = 1 }
-	shadow_rule[__local7__] { __local7__ = 1 }
-	shadow_roots_1 { __local8__ = 1; __local9__ = 2; __local9__ > __local8__ }
-	shadow_roots_2 { __local10__ = {"a": 1}; __local10__.a > 0 }
-
-	skip_with_target { __local11__ = 1; __local12__ = 2; data.p with input as __local11__ }
-
-	shadow_comprehensions {
-		__local13__ = 1
-		[true | __local14__ = 2; __local15__ = 1]
-		__local16__ = 2
-	}
-
-	scoping {
-		[true | __local17__ = 1]
-		[true | __local18__ = 2]
-	}
-
-	object_keys {
-		{k: __local19__, "k2": __local20__} = {"foo": 1, "k2": 2}
-	}
-
-	head_array_comprehensions = [[__local21__] | __local21__ = 1]
-	head_set_comprehensions = {[__local22__] | __local22__ = 1}
-	head_object_comprehensions = {__local23__: [__local24__] | __local23__ = "foo"; __local24__ = 1}
-
-	rewritten_object_key = true { __local25__ = "foo"; {__local25__: 1} }
-	rewritten_object_key_head[[{__local26__: 1}]] { __local26__ = "foo" }
-	rewritten_object_key_head_value = [{__local27__: 1}] { __local27__ = "foo" }
-
-	skip_with_target_in_assignment {
-		__local28__ = 1
-		__local29__ = [true | true with input as 2; true with input as 3]
-	}
-
-	rewrite_value_in_assignment {
-		__local30__ = 1
-		__local31__ = 1 with input as [__local30__]
-	}
-
-	global = {}
-
-	ref_shadowed { __local32__ = {"a": 1}; __local32__.a > 0 }
-	`)
-
-	if len(module1.Rules) != len(expectedModule.Rules) {
-		t.Fatalf("Expected %d rules but got %d. Expected:\n\n%v\n\nGot:\n\n%v", len(expectedModule.Rules), len(module1.Rules), expectedModule, module1)
-	}
-
-	for i := range module1.Rules {
-		a := expectedModule.Rules[i]
-		b := module1.Rules[i]
-		if !a.Equal(b) {
-			t.Errorf("Expected rule %d to be:\n\n%v\n\nGot:\n\n%v", i, a, b)
-		}
-	}
-
-	module2 := c.Modules["test2"]
-
-	resultElse := module2.Rules[0].Else
-	expectedElse := MustParseRule(`f(__local2__) = __local3__ { __local2__ = 3; __local3__ = 4 } `)
-
-	if !resultElse.Equal(expectedElse) {
-		t.Errorf("Expected else rule:\n\n%v\n\nGot:\n\n%v", expectedElse, resultElse)
+	for i, tc := range tests {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			c := NewCompiler()
+			c.Modules = map[string]*Module{
+				"test.rego": MustParseModule(tc.module),
+			}
+			compileStages(c, c.rewriteLocalVars)
+			assertNotFailed(t, c)
+			result := c.Modules["test.rego"]
+			exp := MustParseModule(tc.exp)
+			if result.Compare(exp) != 0 {
+				t.Fatalf("Expected:\n\n%v\n\nGot:\n\n%v", exp, result)
+			}
+		})
 	}
 
 }
-
 func TestRewriteLocalVarDeclarationErrors(t *testing.T) {
 
 	c := NewCompiler()
@@ -1295,15 +1429,20 @@ func TestRewriteLocalVarDeclarationErrors(t *testing.T) {
 		data.foo := 1
 		[z, 1] := [1, 2]
 	}
+
+	arg_redeclared(arg1) {
+		arg1 := 1
+	}
 	`)
 
-	compileStages(c, c.rewriteLocalAssignments)
+	compileStages(c, c.rewriteLocalVars)
 
 	expectedErrors := []string{
-		"var r1 assigned or referenced above",
-		"var r2 assigned or referenced above",
-		"var input assigned or referenced above",
-		"var nested assigned or referenced above",
+		"var r1 referenced above",
+		"var r2 assigned above",
+		"var input referenced above",
+		"var nested assigned above",
+		"arg arg1 redeclared",
 		"cannot assign vars inside negated expression",
 		"cannot assign to ref",
 		"cannot assign to arraycomprehension",
@@ -1335,6 +1474,187 @@ func TestRewriteLocalVarDeclarationErrors(t *testing.T) {
 		if result[i] != expectedErrors[i] {
 			t.Fatalf("Expected:\n\n%v\n\nGot:\n\n%v", strings.Join(expectedErrors, "\n"), strings.Join(result, "\n"))
 		}
+	}
+}
+
+func TestRewriteDeclaredVars(t *testing.T) {
+	tests := []struct {
+		note    string
+		module  string
+		exp     string
+		wantErr error
+	}{
+		{
+			note: "rewrite unify",
+			module: `
+				package test
+				x = 1
+				y = 2
+				p { some x; input = [x, y] }
+			`,
+			exp: `
+				package test
+				x = 1
+				y = 2
+				p { __local1__ = data.test.y; input = [__local0__, __local1__] }
+			`,
+		},
+		{
+			note: "rewrite call",
+			module: `
+				package test
+				x = []
+				y = {}
+				p { some x; walk(y, [x, y]) }
+			`,
+			exp: `
+				package test
+				x = []
+				y = {}
+				p { __local1__ = data.test.y; __local2__ = data.test.y; walk(__local1__, [__local0__, __local2__]) }
+			`,
+		},
+		{
+			note: "rewrite term",
+			module: `
+				package test
+				x = "a"
+				y = 1
+				q[[2, "b"]]
+				p { some x; q[[y,x]] }
+			`,
+			exp: `
+				package test
+				x = "a"
+				y = 1
+				q[[2, "b"]]
+				p { __local1__ = data.test.y; data.test.q[[__local1__, __local0__]] }
+			`,
+		},
+		{
+			note: "rewrite closures",
+			module: `
+				package test
+				x = 1
+				y = 2
+				p {
+					some x, z
+					z = 3
+					[x | x = 2; y = 2; some z; z = 4]
+				}
+			`,
+			exp: `
+				package test
+				x = 1
+				y = 2
+				p {
+					__local1__ = 3
+					[__local0__ | __local0__ = 2; data.test.y = 2; __local2__ = 4]
+				}
+			`,
+		},
+		{
+			note: "rewrite head var",
+			module: `
+				package test
+				x = "a"
+				y = 1
+				z = 2
+				p[x] = [y, z] {
+					some x, z
+					x = "b"
+					z = 4
+				}`,
+			exp: `
+				package test
+				x = "a"
+				y = 1
+				z = 2
+				p[__local0__] = __local2__ {
+					__local0__ = "b"
+					__local1__ = 4;
+					__local3__ = data.test.y
+					__local2__ = [__local3__, __local1__]
+				}
+			`,
+		},
+		{
+			note: "redeclare err",
+			module: `
+				package test
+				p {
+					some x
+					some x
+				}
+			`,
+			wantErr: errors.New("var x declared above"),
+		},
+		{
+			note: "redeclare assigned err",
+			module: `
+				package test
+				p {
+					x := 1
+					some x
+				}
+			`,
+			wantErr: errors.New("var x assigned above"),
+		},
+		{
+			note: "redeclare reference err",
+			module: `
+				package test
+				p {
+					data.q[x]
+					some x
+				}
+			`,
+			wantErr: errors.New("var x referenced above"),
+		},
+		{
+			note: "declare unused err",
+			module: `
+				package test
+				p {
+					some x
+				}
+			`,
+			wantErr: errors.New("declared var x unused"),
+		},
+		{
+			note: "declare arg err",
+			module: `
+			package test
+
+			f([a]) {
+				some a
+				a = 1
+			}
+			`,
+			wantErr: errors.New("arg a redeclared"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.note, func(t *testing.T) {
+			compiler, err := CompileModules(map[string]string{"test.rego": tc.module})
+			if tc.wantErr != nil {
+				if err == nil {
+					t.Fatal("Expected error but got success")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr.Error()) {
+					t.Fatalf("Expected %v but got %v", tc.wantErr, err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			} else {
+				exp := MustParseModule(tc.exp)
+				result := compiler.Modules["test.rego"]
+				if exp.Compare(result) != 0 {
+					t.Fatalf("Expected:\n\n%v\n\nGot:\n\n%v", exp, result)
+				}
+			}
+		})
 	}
 }
 
@@ -1591,9 +1911,20 @@ func TestCompilerMockFunction(t *testing.T) {
 	p {true with data.test.is_allowed as "blah" }
 	`)
 	compileStages(c, c.rewriteWithModifiers)
+	assertCompilerErrorStrings(t, c, []string{"rego_compile_error: with keyword cannot replace functions"})
+}
 
-	expectedError := fmt.Errorf("rego_compile_error: with keyword cannot replace rules with arguments")
-	assertCompilerErrorStrings(t, c, []string{expectedError.Error()})
+func TestCompilerMockVirtualDocumentPartially(t *testing.T) {
+	c := NewCompiler()
+
+	c.Modules["test"] = MustParseModule(`
+	package test
+	p = {"a": 1}
+	q = x { p = x with p.a as 2 }
+	`)
+
+	compileStages(c, c.rewriteWithModifiers)
+	assertCompilerErrorStrings(t, c, []string{"rego_compile_error: with keyword cannot partially replace virtual document(s)"})
 }
 
 func TestCompilerSetGraph(t *testing.T) {
@@ -2243,6 +2574,38 @@ grault = deadbeef { true }`)
 	}
 }
 
+func TestCompilerWithMetrics(t *testing.T) {
+	m := metrics.New()
+	c := NewCompiler().WithMetrics(m)
+	mod := MustParseModule(testModule)
+
+	c.Compile(map[string]*Module{"testMod": mod})
+	assertNotFailed(t, c)
+
+	if len(m.All()) == 0 {
+		t.Error("Expected to have metrics after compiling")
+	}
+}
+
+func TestCompilerWithStageAfterWithMetrics(t *testing.T) {
+	m := metrics.New()
+	c := NewCompiler().WithStageAfter(
+		"CheckRecursion",
+		CompilerStageDefinition{"MockStage", "mock_stage", mockStageFunctionCallNoErr},
+	)
+
+	c.WithMetrics(m)
+
+	mod := MustParseModule(testModule)
+
+	c.Compile(map[string]*Module{"testMod": mod})
+	assertNotFailed(t, c)
+
+	if len(m.All()) == 0 {
+		t.Error("Expected to have metrics after compiling")
+	}
+}
+
 func TestQueryCompiler(t *testing.T) {
 	tests := []struct {
 		note     string
@@ -2262,20 +2625,86 @@ func TestQueryCompiler(t *testing.T) {
 			q:        "eq(1)",
 			expected: fmt.Errorf("too few arguments"),
 		},
-		{"rewrite assignment", "a := 1; [b, c] := data.foo", "", nil, "", "__local0__ = 1; [__local1__, __local2__] = data.foo"},
-		{"exports resolved", "z", `package a.b.c`, nil, "", "data.a.b.c.z"},
-		{"imports resolved", "z", `package a.b.c.d`, []string{"import data.a.b.c.z"}, "", "data.a.b.c.z"},
-		{"rewrite comprehensions", "[x[i] | a = [[1], [2]]; x = a[j]]", "", nil, "", "[__local0__ | a = [[1], [2]]; x = a[j]; __local0__ = x[i]]"},
-		{"unsafe vars", "z", "", nil, "", fmt.Errorf("1 error occurred: 1:1: rego_unsafe_var_error: var z is unsafe")},
-		{"safe vars", `data; abc`, `package ex`, []string{"import input.xyz as abc"}, `{}`, `data; input.xyz`},
-		{"reorder", `x != 1; x = 0`, "", nil, "", `x = 0; x != 1`},
-		{"bad with target", "x = 1 with foo.p as null", "", nil, "", fmt.Errorf("1 error occurred: 1:12: rego_type_error: with keyword target must start with input or data")},
-		{"rewrite with value", `1 with input as [z]`, "package a.b.c", nil, "", `__local1__ = data.a.b.c.z; __local0__ = [__local1__]; 1 with input as __local0__`},
-		{"unsafe exprs", "count(sum())", "", nil, "", fmt.Errorf("1 error occurred: 1:1: rego_unsafe_var_error: expression is unsafe")},
-		{"check types", "x = data.a.b.c.z; y = null; x = y", "", nil, "", fmt.Errorf("match error\n\tleft  : number\n\tright : null")},
+		{
+			note:     "rewrite assignment",
+			q:        "a := 1; [b, c] := data.foo",
+			pkg:      "",
+			imports:  nil,
+			expected: "__local0__ = 1; [__local1__, __local2__] = data.foo",
+		},
+		{
+			note:     "exports resolved",
+			q:        "z",
+			pkg:      `package a.b.c`,
+			imports:  nil,
+			expected: "data.a.b.c.z",
+		},
+		{
+			note:     "imports resolved",
+			q:        "z",
+			pkg:      `package a.b.c.d`,
+			imports:  []string{"import data.a.b.c.z"},
+			expected: "data.a.b.c.z",
+		},
+		{
+			note:     "rewrite comprehensions",
+			q:        "[x[i] | a = [[1], [2]]; x = a[j]]",
+			pkg:      "",
+			imports:  nil,
+			expected: "[__local0__ | a = [[1], [2]]; x = a[j]; __local0__ = x[i]]",
+		},
+		{
+			note:     "unsafe vars",
+			q:        "z",
+			pkg:      "",
+			imports:  nil,
+			expected: fmt.Errorf("1 error occurred: 1:1: rego_unsafe_var_error: var z is unsafe"),
+		},
+		{
+			note:     "safe vars",
+			q:        `data; abc`,
+			pkg:      `package ex`,
+			imports:  []string{"import input.xyz as abc"},
+			expected: `data; input.xyz`,
+		},
+		{
+			note:     "reorder",
+			q:        `x != 1; x = 0`,
+			pkg:      "",
+			imports:  nil,
+			expected: `x = 0; x != 1`,
+		},
+		{
+			note:     "bad with target",
+			q:        "x = 1 with foo.p as null",
+			pkg:      "",
+			imports:  nil,
+			expected: fmt.Errorf("1 error occurred: 1:12: rego_type_error: with keyword target must start with input or data"),
+		},
+		{
+			note:     "rewrite with value",
+			q:        `1 with input as [z]`,
+			pkg:      "package a.b.c",
+			imports:  nil,
+			expected: `__local1__ = data.a.b.c.z; __local0__ = [__local1__]; 1 with input as __local0__`,
+		},
+		{
+			note:     "unsafe exprs",
+			q:        "count(sum())",
+			pkg:      "",
+			imports:  nil,
+			expected: fmt.Errorf("1 error occurred: 1:1: rego_unsafe_var_error: expression is unsafe"),
+		},
+		{
+			note:     "check types",
+			q:        "x = data.a.b.c.z; y = null; x = y",
+			pkg:      "",
+			imports:  nil,
+			expected: fmt.Errorf("match error\n\tleft  : number\n\tright : null"),
+		},
 	}
 	for _, tc := range tests {
-		runQueryCompilerTest(t, tc.note, tc.q, tc.pkg, tc.imports, tc.input, tc.expected)
+		runQueryCompilerTest(t, tc.note, tc.q, tc.pkg, tc.imports, tc.expected)
 	}
 }
 
@@ -2342,6 +2771,54 @@ func TestQueryCompilerRecompile(t *testing.T) {
 
 }
 
+func TestQueryCompilerWithMetrics(t *testing.T) {
+	m := metrics.New()
+	c := NewCompiler().WithMetrics(m)
+	c.Compile(getCompilerTestModules())
+	assertNotFailed(t, c)
+	m.Clear()
+
+	qc := c.QueryCompiler()
+
+	query := MustParseBody("a = 1; a > 2")
+	_, err := qc.Compile(query)
+	if err != nil {
+		t.Fatalf("Unexpected error from %v: %v", query, err)
+	}
+
+	if len(m.All()) == 0 {
+		t.Error("Expected to have metrics after compiling")
+	}
+}
+
+func TestQueryCompilerWithStageAfterWithMetrics(t *testing.T) {
+	m := metrics.New()
+	c := NewCompiler().WithMetrics(m)
+	c.Compile(getCompilerTestModules())
+	assertNotFailed(t, c)
+	m.Clear()
+
+	qc := c.QueryCompiler().WithStageAfter(
+		"CheckSafety",
+		QueryCompilerStageDefinition{
+			"MockStage",
+			"mock_stage",
+			func(qc QueryCompiler, b Body) (Body, error) {
+				return b, nil
+			},
+		})
+
+	query := MustParseBody("a = 1; a > 2")
+	_, err := qc.Compile(query)
+	if err != nil {
+		t.Fatalf("Unexpected error from %v: %v", query, err)
+	}
+
+	if len(m.All()) == 0 {
+		t.Error("Expected to have metrics after compiling")
+	}
+}
+
 func assertCompilerErrorStrings(t *testing.T, compiler *Compiler, expected []string) {
 	result := compilerErrsToStringSlice(compiler.Errors)
 
@@ -2363,6 +2840,10 @@ func assertNotFailed(t *testing.T, c *Compiler) {
 
 func mockStageFunctionCall(c *Compiler) *Error {
 	return NewError(CompileErr, &Location{}, "mock stage error")
+}
+
+func mockStageFunctionCallNoErr(c *Compiler) *Error {
+	return nil
 }
 
 func getCompilerWithParsedModules(mods map[string]string) *Compiler {
@@ -2503,7 +2984,7 @@ func compilerErrsToStringSlice(errors []*Error) []string {
 	return result
 }
 
-func runQueryCompilerTest(t *testing.T, note, q, pkg string, imports []string, input string, expected interface{}) {
+func runQueryCompilerTest(t *testing.T, note, q, pkg string, imports []string, expected interface{}) {
 	test.Subtest(t, note, func(t *testing.T) {
 		c := NewCompiler()
 		c.Compile(getCompilerTestModules())
@@ -2517,9 +2998,6 @@ func runQueryCompilerTest(t *testing.T, note, q, pkg string, imports []string, i
 		}
 		if len(imports) != 0 {
 			qctx = qctx.WithImports(MustParseImports(strings.Join(imports, "\n")))
-		}
-		if input != "" {
-			qctx = qctx.WithInput(MustParseTerm(input).Value)
 		}
 
 		if qctx != nil {
