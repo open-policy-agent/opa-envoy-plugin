@@ -215,7 +215,8 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			rego.ParsedInput(input),
 			rego.Compiler(p.manager.GetCompiler()),
 			rego.Store(p.manager.Store),
-			rego.Transaction(txn))
+			rego.Transaction(txn),
+			rego.Runtime(p.manager.Info))
 
 		rs, err := rego.New(opts...).Eval(ctx)
 
