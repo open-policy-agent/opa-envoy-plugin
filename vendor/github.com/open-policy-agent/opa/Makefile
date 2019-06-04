@@ -2,7 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := 0.10.7
+VERSION := 0.11.0
 
 GO := go
 GOVERSION := 1.11
@@ -132,9 +132,7 @@ go-test: generate
 .PHONY: wasm-test
 wasm-test: generate
 ifeq ($(DOCKER_INSTALLED), 1)
-	@mkdir -p _test
-	@$(GO) run test/wasm/cmd/testgen.go --input-dir test/wasm/assets --output _test/testcases.tar.gz
-	@$(DOCKER) run -it --rm -e VERBOSE=$(VERBOSE) -v $(PWD):/src -w /src node:8 ./build/test-wasm.sh
+	@./build/run-wasm-tests.sh
 else
 	@echo "Docker not installed. Skipping WASM-based test execution."
 endif
@@ -172,9 +170,11 @@ clean: wasm-clean
 	rm -f opa_*_*
 	rm -fr _test
 
-.PHONY: site
-site:
-	$(MAKE) -C docs -f Makefile.ghpages VERSION=$(VERSION)
+# The docs-% pattern target will shim to the
+# makefile in ./docs 
+.PHONY: docs-%
+docs-%:
+	$(MAKE) -C docs $*
 
 ######################################################
 #

@@ -171,6 +171,7 @@ func TestCollectAndCompareHistogram(t *testing.T) {
 		c           prometheus.Collector
 		metadata    string
 		expect      string
+		labels      []string
 		observation float64
 	}{
 		{
@@ -290,11 +291,13 @@ metric output does not match expectation; want:
 # TYPE some_other_metric counter
 some_other_metric{label1="value1"} 1
 
+
 got:
 
 # HELP some_total A value that represents a counter.
 # TYPE some_total counter
 some_total{label1="value1"} 1
+
 `
 
 	err := CollectAndCompare(c, strings.NewReader(metadata+expected))
@@ -303,6 +306,6 @@ some_total{label1="value1"} 1
 	}
 
 	if err.Error() != expectedError {
-		t.Errorf("Expected\n%#+v\nGot:\n%#+v", expectedError, err.Error())
+		t.Errorf("Expected\n%#+v\nGot:\n%#+v\n", expectedError, err.Error())
 	}
 }

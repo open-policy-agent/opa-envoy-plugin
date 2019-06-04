@@ -15,11 +15,6 @@
 // Fields are documented in https://www.svennd.be/nfsd-stats-explained-procnetrpcnfsd/
 package nfs
 
-import (
-	"os"
-	"path"
-)
-
 // ReplyCache models the "rc" line.
 type ReplyCache struct {
 	Hits    uint64
@@ -265,28 +260,4 @@ type ServerRPCStats struct {
 	V3Stats        V3Stats
 	ServerV4Stats  ServerV4Stats
 	V4Ops          V4Ops
-}
-
-// ReadClientRPCStats retrieves NFS client RPC statistics
-// from proc/net/rpc/nfs.
-func ReadClientRPCStats(procfs string) (*ClientRPCStats, error) {
-	f, err := os.Open(path.Join(procfs, "net/rpc/nfs"))
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return ParseClientRPCStats(f)
-}
-
-// ReadServerRPCStats retrieves NFS daemon RPC statistics
-// from proc/net/rpc/nfsd.
-func ReadServerRPCStats(procfs string) (*ServerRPCStats, error) {
-	f, err := os.Open(path.Join(procfs, "net/rpc/nfsd"))
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return ParseServerRPCStats(f)
 }

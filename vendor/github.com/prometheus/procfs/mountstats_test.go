@@ -220,19 +220,6 @@ func TestMountStats(t *testing.T) {
 			}},
 		},
 		{
-			name: "NFSv3 device with mountaddr OK",
-			s:    "device 192.168.1.1:/srv mounted on /mnt/nfs with fstype nfs statvers=1.1\nopts: rw,vers=3,mountaddr=192.168.1.1,proto=udp\n",
-			mounts: []*Mount{{
-				Device: "192.168.1.1:/srv",
-				Mount:  "/mnt/nfs",
-				Type:   "nfs",
-				Stats: &MountStatsNFS{
-					StatVersion:  "1.1",
-					MountAddress: "192.168.1.1",
-				},
-			}},
-		},
-		{
 			name: "device rootfs OK",
 			s:    `device rootfs mounted on / with fstype rootfs`,
 			mounts: []*Mount{{
@@ -254,7 +241,7 @@ func TestMountStats(t *testing.T) {
 			}},
 		},
 		{
-			name: "fixtures/proc OK",
+			name: "fixtures OK",
 			mounts: []*Mount{
 				{
 					Device: "rootfs",
@@ -344,7 +331,7 @@ func TestMountStats(t *testing.T) {
 		if tt.s != "" {
 			mounts, err = parseMountStats(strings.NewReader(tt.s))
 		} else {
-			proc, e := FS(procTestFixtures).NewProc(26231)
+			proc, e := FS("fixtures").NewProc(26231)
 			if e != nil {
 				t.Fatalf("failed to create proc: %v", err)
 			}
@@ -376,7 +363,6 @@ func mountsStr(mounts []*Mount) string {
 			continue
 		}
 
-		out += fmt.Sprintf("\n\t- mountaddr: %s", stats.MountAddress)
 		out += fmt.Sprintf("\n\t- v%s, age: %s", stats.StatVersion, stats.Age)
 		out += fmt.Sprintf("\n\t- bytes: %v", stats.Bytes)
 		out += fmt.Sprintf("\n\t- events: %v", stats.Events)

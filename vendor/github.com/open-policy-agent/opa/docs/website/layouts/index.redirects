@@ -1,0 +1,16 @@
+{{- $latest       := index site.Data.releases 0 -}}
+{{- $allDocs      := where site.RegularPages "Section" "docs" }}
+{{- $docRedirects := site.Data.redirects }}
+# Redirect to latest doc version by default
+/docs     /docs/latest
+
+# Rewrite "latest" to latest version of docs
+/docs/latest     /docs/{{ $latest }}     200
+/docs/latest/*     /docs/{{ $latest }}/:splat     200
+
+{{- range $docRedirects }}
+/docs/{{ . }}     /docs/latest/{{ . }}
+
+# Legacy git book redirects
+/docs/{{ . }}.html /docs/latest/{{ . }}
+{{- end }}

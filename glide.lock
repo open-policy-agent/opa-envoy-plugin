@@ -1,16 +1,16 @@
-hash: 417411711172a0260784727dcadbfffd1cfcd05e108bbfe3c952dd0ccf494c3c
-updated: 2019-04-10T01:55:38.016369872-07:00
+hash: 2b92048d97d42632344f1d87916b959828fbd139a9861c75b85cede1dd094877
+updated: 2019-06-04T12:37:24.971145722-07:00
 imports:
 - name: github.com/beorn7/perks
-  version: 3a771d992973f24aa725d07868b467d1ddfceafb
+  version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
   subpackages:
   - quantile
 - name: github.com/envoyproxy/data-plane-api
   version: 8efc03c1b34b2ff01854436123cdd591b3f02d25
   subpackages:
-  - envoy/service/auth/v2alpha
+  - envoy/service/auth/v2
 - name: github.com/ghodss/yaml
-  version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
+  version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gobwas/glob
   version: 5ccd90ef52e1e632236f7326478d4faa74f99438
   subpackages:
@@ -34,7 +34,7 @@ imports:
 - name: github.com/golang/lint
   version: 959b441ac422379a43da2230f62be024250818b0
 - name: github.com/golang/protobuf
-  version: e91709a02e0e8ff8b86b7aa913fdc9ae9498e825
+  version: b4deda0973fb4c70b50d226b1af49f3da59f5265
   subpackages:
   - proto
   - ptypes
@@ -42,9 +42,11 @@ imports:
   - ptypes/duration
   - ptypes/timestamp
 - name: github.com/gorilla/mux
-  version: c5c6c98bc25355028a63748a498942a6398ccd22
+  version: ed099d42384823742bba0bf9a72b53b55c9e2e38
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/konsorten/go-windows-terminal-sequences
+  version: f55edac94c9bbba5d6182a4be46d86a2c9b5b50e
 - name: github.com/lyft/protoc-gen-validate
   version: 930a67cf7ba41b9d9436ad7a1be70a5d5ff6e1fc
 - name: github.com/mattn/go-runewidth
@@ -54,11 +56,11 @@ imports:
   subpackages:
   - pbutil
 - name: github.com/olekukonko/tablewriter
-  version: 7e037d187b0c13d81ccf0dd1c6b990c2759e6597
+  version: 1c0837c15a0bac7871496dfce5dcdd308e0a330f
 - name: github.com/OneOfOne/xxhash
   version: c1e3185f167680b62832a0a11938a04b1ab265fc
 - name: github.com/open-policy-agent/opa
-  version: 0f39c27e2069be20c4a2ec0c8751b6132a681ac1
+  version: e7a343194dc0bf3d38b13b5a73ff09a870cecd17
   subpackages:
   - ast
   - bundle
@@ -76,6 +78,7 @@ imports:
   - internal/planner
   - internal/presentation
   - internal/runtime
+  - internal/strvals
   - internal/version
   - internal/wasm/constant
   - internal/wasm/encoding
@@ -106,6 +109,7 @@ imports:
   - topdown
   - topdown/builtins
   - topdown/copypropagation
+  - topdown/notes
   - types
   - util
   - version
@@ -115,69 +119,68 @@ imports:
 - name: github.com/pkg/errors
   version: 27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7
 - name: github.com/prometheus/client_golang
-  version: 8b8c870c3087566adad67b673ddaabb07f26a2c6
+  version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
   - prometheus
   - prometheus/internal
   - prometheus/promhttp
 - name: github.com/prometheus/client_model
-  version: fd36f4220a901265f90734c3183c5f0c91daa0b8
+  version: 5c3871d89910bfb32f5fcab2aa4b9ec68e65a99f
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: a82f4c12f983cc2649298185f296632953e50d3e
+  version: 4724e9255275ce38f7179b2478abeae4e28c904f
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: ea9eea63887261e4d8ed8315f4078e88d540c725
+  version: 1dc9a6cbc91aacc3e8b2d63db4d2e957a5394ac4
+  subpackages:
+  - internal/util
+  - nfs
+  - xfs
 - name: github.com/rcrowley/go-metrics
   version: 3113b8401b8a98917cde58f8bbd42a1b1c03b1fd
 - name: github.com/sirupsen/logrus
-  version: f006c2ac4710855cf0f916dd6b77acf6b048dc6e
+  version: 8bdbc7bcc01dcbb8ec23dc8a28e332258d25251f
 - name: github.com/spf13/cobra
   version: b4dbd37a01839e0653eec12aa4bbb2a2ce7b2a37
 - name: github.com/spf13/pflag
   version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
 - name: github.com/yashtewari/glob-intersection
   version: 5c77d914dd0ba7bedca923f97232d37137e038f3
-- name: golang.org/x/crypto
-  version: 38d8ce5564a5b71b2e3a00553993f1b9a7ae852f
-  subpackages:
-  - ssh/terminal
 - name: golang.org/x/lint
   version: 959b441ac422379a43da2230f62be024250818b0
   subpackages:
   - golint
 - name: golang.org/x/net
-  version: eb5bcb51f2a31c7d5141d810b70815c05d9c9146
+  version: 1c05540f6879653db88113bc4a2b70aec4bd491f
   subpackages:
   - context
-  - http/httpguts
   - http2
   - http2/hpack
   - idna
   - internal/timeseries
+  - lex/httplex
   - trace
 - name: golang.org/x/sys
-  version: 4b34438f7a67ee5f45cc6132e2bad873a20324e9
+  version: 95c6576299259db960f6c5b9b69ea52422860fce
   subpackages:
   - unix
-  - windows
 - name: golang.org/x/text
-  version: f4905fbd45b6790792202848439271c74074bbfd
+  version: b19bf474d317b857955b12035d2c5acb57ce8b01
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: golang.org/x/tools
-  version: 96f2e7ef861b625ecc256679029cf597531360bc
+  version: 8aaa1484dc108aa23dcf2d4a09371c0c9e280f6b
   subpackages:
   - cmd/goimports
 - name: google.golang.org/genproto
-  version: 64821d5d210748c883cd2b809589555ae4654203
+  version: 09f6ed296fc66555a25fe4ce95173148778dfa85
   subpackages:
   - googleapis/rpc/status
 - name: google.golang.org/grpc
@@ -208,5 +211,5 @@ imports:
 - name: gopkg.in/fsnotify.v1
   version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
 - name: gopkg.in/yaml.v2
-  version: 51d6538a90f86fe93ac480b35f37b2be17fef232
+  version: 670d4cfef0544295bc27a114dbac37980d83185a
 testImports: []

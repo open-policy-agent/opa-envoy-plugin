@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/procfs"
 	"github.com/prometheus/procfs/xfs"
 )
 
@@ -424,7 +425,7 @@ func TestParseStats(t *testing.T) {
 			stats, err = xfs.ParseStats(strings.NewReader(tt.s))
 		}
 		if tt.fs {
-			stats, err = xfs.ReadProcStat("../fixtures/proc")
+			stats, err = procfs.FS("../fixtures").XFSStats()
 		}
 
 		if tt.invalid && err == nil {
