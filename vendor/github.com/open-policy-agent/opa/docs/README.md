@@ -1,35 +1,112 @@
 # The OPA Website and Documentation
+The content and tooling is separated into a few places:
 
-This directory contains all of the Markdown, HTML, Sass/CSS, and other assets needed
-to build the [openpolicyagent.org](https://openpolicyagent.org) website. See the
-section below for steps to build the site and test documentation changes
-locally.
+[devel/](./devel/) - Developer documentation for OPA (not part of the website)
 
-The raw OPA documentation can be found under the [content/docs](./content/docs)
-directory.
 
-> ### Developing OPA
-> For documentation on developing OPA, see the [devel](./devel) directory.
+[website/](./website/) - This directory contains all of the Markdown, HTML, Sass/CSS,
+and other assets needed to build the [openpolicyagent.org](https://openpolicyagent.org)
+website. See the section below for steps to build the site and test documentation changes
+locally. This content is not versioned for each release, it is common scaffolding for
+the website.
+
+[content/](./content/) - The raw OPA documentation can be found under the 
+directory. This content is versioned for each release and should have all images
+and code snippets alongside the markdown content files.
+
+## Website Components
+
+The website ([openpolicyagent.org](https://openpolicyagent.org)) and doc's hosted there
+([openpolicyagent.org/docs](https://openpolicyagent.org/docs)) have a few components
+involved with the buildings and hosting.
+
+The static site is generated with [Hugo](https://gohugo.io/) which uses the markdown
+in [content/](./content) as its content for pages under `/docs/*`. There is a script
+to generate the previous supported versions, automated via `make generate`, and the
+latest (current working tree) documentations is under `/docs/edge/*`.
+
+The static site content is then hosted by [Netlify](https://www.netlify.com/). To
+support backwards compatible URLs (from pre-netlify days) and to have the `latest`
+version of the docs URLs work
+[openpolicyagent.org/docs/latest](https://openpolicyagent.org/docs/latest) the site
+relies on Netlify URL [redirects and rewrites](https://www.netlify.com/docs/redirects/)
+which are defined in [website/layouts/index.redirects](./webiste/layouts/index.redirects)
+and are build into a `_redirects` file when the Hugo build happens via
+`make production-build` or `make preview-build`.
+
+### How to Edit and Test
+
+Because of the different components at play there are a few different ways to
+test/view the website. The choice depends largely on what is being modified:
+
+#### Full Site Preview
+
+Go to [Netlify](https://www.netlify.com/) and log-in. Link to your public fork of
+OPA on github and have it deploy a site. As long as it is public this is free
+and can be configured to deploy test branches before opening PR's on the official
+OPA github repo.
+
+This approach gives the best simulation for what the website will behave like once
+code has merged.
+
+
+#### Modifying `content` (*.md)
+
+The majorify of this can be done with any markdown renderer (typically built-in or
+a plug-in for IDE's). The rendered output will be very similar to what Hugo will
+generate.
+ 
+> This excludes the Hugo shortcodes (places with `{{< SHORT_CODE >}}` in the markdown.
+  To see the output of these you'll need to involve Hugo
+
+#### Modifying the Hugo templates and/or website (HTML/CSS/JS)
+
+The easiest way is to run Hugo locally in dev mode. Changes made will be reflected
+immediately be the Hugo dev server. See 
+[Run the site locally using Docker](#run-the-site-locally-using-docker)
+
+> This approach will *not* include the Netlify redirects so urls like
+ `http://localhost:1313/docs/latest/` will not work. You must navigate directly to
+ the version of docs you want to test. Typically this will be
+ [http://localhost:1313/docs/edge/](http://localhost:1313/docs/edge/).
+
+
+#### Modifying the netlify config/redirects
+
+This requires either using the [Full Site Preview](#full-site-preview) or using
+the local dev tools as described below in:
+[Run the site locally without Docker](#run-the-site-locally-without-docker)
+
+The local dev tools will *not* give live updates as the content changes, but
+will give the most accurate production simulation.
 
 ## Run the site locally
 
 You can run the site locally [with Docker](#run-the-site-locally-using-docker) or
-[without Docker](#run-the-site-locally-without-docker). Regardless of your method,
-you'll need install [npm](https://www.npmjs.com/get-npm).
+[without Docker](#run-the-site-locally-without-docker).
+
+### Generating Versioned Content ###
+
+> This *MUST* be done before you can serve the site locally!
+
+The site will show all versions of doc content from the tagged versions listed
+in [RELEASES](./RELEASES).
+
+To generate them run:
+```shell
+make generate
+```
+The content then will be placed into `docs/website/generated/docs/$VERSION/`.
 
 ### Run the site locally using Docker
 
-To run the site locally using [Docker](https://docker.com), first install the
-necessary static assets using npm:
+> Note: running with docker only uses the Hugo server and not Netlify locally.
+This means that redirects and other Netlify features the site relies on will not work.
+
+If [Docker is running](https://docs.docker.com/get-started/):
 
 ```bash
-npm install
-```
-
-Then, if [Docker is running](https://docs.docker.com/get-started/):
-
-```bash
-make docker-server
+make docker-serve
 ```
 
 Open your browser to http://localhost:1313 to see the site running locally. The docs
@@ -40,8 +117,12 @@ are available at http://localhost:1313/docs.
 To build and serve the site locally without using Docker, install the following packages
 on your system:
 
-- [npm](https://npmjs.org)
 - The [Hugo](#installing-hugo) static site generator
+- The [Netlify dev CLI](https://www.netlify.com/products/dev/)
+
+The site will be running from the Hugo dev server and fronted through netlify running
+as a local reverse proxy. This more closely simulates the production environment but
+gives live updates as code changes.
 
 #### Installing Hugo
 
@@ -60,15 +141,7 @@ using the non-extended version:
 error: failed to transform resource: TOCSS: failed to transform "sass/style.sass" (text/x-sass): this feature is not available in your current Hugo version
 ```
 
-#### Installing static assets
-
-The OPA website requires some static assets installable via npm:
-
-```bash
-npm install
-```
-
-#### Serving the site
+#### Serving the full site
 
 From this directory:
 
@@ -76,16 +149,9 @@ From this directory:
 make serve
 ```
 
-Open your browser to http://localhost:1313 to see the site running locally. The docs
-are available at http://localhost:1313/docs.
+Watch the console output for a localhost URL (the port is randomized). The docs are
+available at http://localhost:$PORT/docs.
 
-> The local version of the site is different from the production site at
-> https://openpolicyagent.org in important ways. When running the site locally,
-> the documentation you'll see is from the current branch, not from any past release.
-> Thus, there is no version selector or concept of documentation versions in the
-> "dev" site. The documentation that you see when running the site locally will be
-> visible on the production site only when that documentation has been included as
-> part of an OPA release.
 
 ## Site updates
 

@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/tools/internal/jsonrpc2"
 	"golang.org/x/tools/internal/lsp"
+	"golang.org/x/tools/internal/lsp/debug"
 	"golang.org/x/tools/internal/tool"
 )
 
@@ -30,6 +31,7 @@ type Serve struct {
 	Port    int    `flag:"port" help:"port on which to run gopls for debugging purposes"`
 	Address string `flag:"listen" help:"address on which to listen for remote connections"`
 	Trace   bool   `flag:"rpc.trace" help:"Print the full rpc trace in lsp inspector format"`
+	Debug   string `flag:"debug" help:"Serve debug information on the supplied address"`
 
 	app *Application
 }
@@ -69,6 +71,9 @@ func (s *Serve) Run(ctx context.Context, args ...string) error {
 		log.SetOutput(io.MultiWriter(os.Stderr, f))
 		out = f
 	}
+
+	debug.Serve(ctx, s.Debug)
+
 	if s.app.Remote != "" {
 		return s.forward()
 	}
@@ -79,13 +84,13 @@ func (s *Serve) Run(ctx context.Context, args ...string) error {
 		go srv.Conn.Run(ctx)
 	}
 	if s.Address != "" {
-		return lsp.RunServerOnAddress(ctx, s.Address, run)
+		return lsp.RunServerOnAddress(ctx, s.app.cache, s.Address, run)
 	}
 	if s.Port != 0 {
-		return lsp.RunServerOnPort(ctx, s.Port, run)
+		return lsp.RunServerOnPort(ctx, s.app.cache, s.Port, run)
 	}
 	stream := jsonrpc2.NewHeaderStream(os.Stdin, os.Stdout)
-	srv := lsp.NewServer(stream)
+	srv := lsp.NewServer(s.app.cache, stream)
 	srv.Conn.Logger = logger(s.Trace, out)
 	return srv.Conn.Run(ctx)
 }

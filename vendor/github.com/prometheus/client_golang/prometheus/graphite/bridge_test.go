@@ -16,7 +16,6 @@ package graphite
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +26,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
+	"golang.org/x/net/context"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

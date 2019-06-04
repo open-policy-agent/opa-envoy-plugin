@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build go1.8
-
 package config
 
 import (
@@ -22,29 +20,19 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 const (
 	TLSCAChainPath        = "testdata/tls-ca-chain.pem"
 	ServerCertificatePath = "testdata/server.crt"
 	ServerKeyPath         = "testdata/server.key"
-	ClientCertificatePath = "testdata/client.crt"
-	ClientKeyNoPassPath   = "testdata/client-no-pass.key"
-	InvalidCA             = "testdata/client-no-pass.key"
-	WrongClientCertPath   = "testdata/self-signed-client.crt"
-	WrongClientKeyPath    = "testdata/self-signed-client.key"
-	EmptyFile             = "testdata/empty"
+	BarneyCertificatePath = "testdata/barney.crt"
+	BarneyKeyNoPassPath   = "testdata/barney-no-pass.key"
 	MissingCA             = "missing/ca.crt"
 	MissingCert           = "missing/cert.crt"
 	MissingKey            = "missing/secret.key"
@@ -113,8 +101,8 @@ func TestNewClientFromConfig(t *testing.T) {
 			clientConfig: HTTPClientConfig{
 				TLSConfig: TLSConfig{
 					CAFile:             "",
-					CertFile:           ClientCertificatePath,
-					KeyFile:            ClientKeyNoPassPath,
+					CertFile:           BarneyCertificatePath,
+					KeyFile:            BarneyKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: true},
 			},
@@ -125,8 +113,8 @@ func TestNewClientFromConfig(t *testing.T) {
 			clientConfig: HTTPClientConfig{
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           ClientCertificatePath,
-					KeyFile:            ClientKeyNoPassPath,
+					CertFile:           BarneyCertificatePath,
+					KeyFile:            BarneyKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -138,8 +126,8 @@ func TestNewClientFromConfig(t *testing.T) {
 				BearerToken: BearerToken,
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           ClientCertificatePath,
-					KeyFile:            ClientKeyNoPassPath,
+					CertFile:           BarneyCertificatePath,
+					KeyFile:            BarneyKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -157,8 +145,8 @@ func TestNewClientFromConfig(t *testing.T) {
 				BearerTokenFile: BearerTokenFile,
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           ClientCertificatePath,
-					KeyFile:            ClientKeyNoPassPath,
+					CertFile:           BarneyCertificatePath,
+					KeyFile:            BarneyKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -179,8 +167,8 @@ func TestNewClientFromConfig(t *testing.T) {
 				},
 				TLSConfig: TLSConfig{
 					CAFile:             TLSCAChainPath,
-					CertFile:           ClientCertificatePath,
-					KeyFile:            ClientKeyNoPassPath,
+					CertFile:           BarneyCertificatePath,
+					KeyFile:            BarneyKeyNoPassPath,
 					ServerName:         "",
 					InsecureSkipVerify: false},
 			},
@@ -241,17 +229,12 @@ func TestNewClientFromInvalidConfig(t *testing.T) {
 			clientConfig: HTTPClientConfig{
 				TLSConfig: TLSConfig{
 					CAFile:             MissingCA,
+					CertFile:           "",
+					KeyFile:            "",
+					ServerName:         "",
 					InsecureSkipVerify: true},
 			},
-			errorMsg: fmt.Sprintf("unable to load specified CA cert %s:", MissingCA),
-		},
-		{
-			clientConfig: HTTPClientConfig{
-				TLSConfig: TLSConfig{
-					CAFile:             InvalidCA,
-					InsecureSkipVerify: true},
-			},
-			errorMsg: fmt.Sprintf("unable to use specified CA cert %s", InvalidCA),
+			errorMsg: fmt.Sprintf("unable to use specified CA cert %s:", MissingCA),
 		},
 	}
 
@@ -264,7 +247,7 @@ func TestNewClientFromInvalidConfig(t *testing.T) {
 			t.Errorf("No error was returned using this config: %+v", invalidConfig.clientConfig)
 		}
 		if !strings.Contains(err.Error(), invalidConfig.errorMsg) {
-			t.Errorf("Expected error %q does not contain %q", err.Error(), invalidConfig.errorMsg)
+			t.Errorf("Expected error %s does not contain %s", err.Error(), invalidConfig.errorMsg)
 		}
 	}
 }
@@ -274,8 +257,8 @@ func TestMissingBearerAuthFile(t *testing.T) {
 		BearerTokenFile: MissingBearerTokenFile,
 		TLSConfig: TLSConfig{
 			CAFile:             TLSCAChainPath,
-			CertFile:           ClientCertificatePath,
-			KeyFile:            ClientKeyNoPassPath,
+			CertFile:           BarneyCertificatePath,
+			KeyFile:            BarneyKeyNoPassPath,
 			ServerName:         "",
 			InsecureSkipVerify: false},
 	}
@@ -361,8 +344,8 @@ func TestBearerAuthFileRoundTripper(t *testing.T) {
 func TestTLSConfig(t *testing.T) {
 	configTLSConfig := TLSConfig{
 		CAFile:             TLSCAChainPath,
-		CertFile:           ClientCertificatePath,
-		KeyFile:            ClientKeyNoPassPath,
+		CertFile:           BarneyCertificatePath,
+		KeyFile:            BarneyKeyNoPassPath,
 		ServerName:         "localhost",
 		InsecureSkipVerify: false}
 
@@ -374,31 +357,24 @@ func TestTLSConfig(t *testing.T) {
 	rootCAs := x509.NewCertPool()
 	rootCAs.AppendCertsFromPEM(tlsCAChain)
 
+	barneyCertificate, err := tls.LoadX509KeyPair(BarneyCertificatePath, BarneyKeyNoPassPath)
+	if err != nil {
+		t.Fatalf("Can't load the client key pair ('%s' and '%s'). Reason: %s",
+			BarneyCertificatePath, BarneyKeyNoPassPath, err)
+	}
+
 	expectedTLSConfig := &tls.Config{
 		RootCAs:            rootCAs,
+		Certificates:       []tls.Certificate{barneyCertificate},
 		ServerName:         configTLSConfig.ServerName,
 		InsecureSkipVerify: configTLSConfig.InsecureSkipVerify}
+	expectedTLSConfig.BuildNameToCertificate()
 
 	tlsConfig, err := NewTLSConfig(&configTLSConfig)
 	if err != nil {
 		t.Fatalf("Can't create a new TLS Config from a configuration (%s).", err)
 	}
 
-	clientCertificate, err := tls.LoadX509KeyPair(ClientCertificatePath, ClientKeyNoPassPath)
-	if err != nil {
-		t.Fatalf("Can't load the client key pair ('%s' and '%s'). Reason: %s",
-			ClientCertificatePath, ClientKeyNoPassPath, err)
-	}
-	cert, err := tlsConfig.GetClientCertificate(nil)
-	if err != nil {
-		t.Fatalf("unexpected error returned by tlsConfig.GetClientCertificate(): %s", err)
-	}
-	if !reflect.DeepEqual(cert, &clientCertificate) {
-		t.Fatalf("Unexpected client certificate result: \n\n%+v\n expected\n\n%+v", cert, clientCertificate)
-	}
-
-	// non-nil functions are never equal.
-	tlsConfig.GetClientCertificate = nil
 	if !reflect.DeepEqual(tlsConfig, expectedTLSConfig) {
 		t.Fatalf("Unexpected TLS Config result: \n\n%+v\n expected\n\n%+v", tlsConfig, expectedTLSConfig)
 	}
@@ -406,12 +382,15 @@ func TestTLSConfig(t *testing.T) {
 
 func TestTLSConfigEmpty(t *testing.T) {
 	configTLSConfig := TLSConfig{
-		InsecureSkipVerify: true,
-	}
+		CAFile:             "",
+		CertFile:           "",
+		KeyFile:            "",
+		ServerName:         "",
+		InsecureSkipVerify: true}
 
 	expectedTLSConfig := &tls.Config{
-		InsecureSkipVerify: configTLSConfig.InsecureSkipVerify,
-	}
+		InsecureSkipVerify: configTLSConfig.InsecureSkipVerify}
+	expectedTLSConfig.BuildNameToCertificate()
 
 	tlsConfig, err := NewTLSConfig(&configTLSConfig)
 	if err != nil {
@@ -435,23 +414,23 @@ func TestTLSConfigInvalidCA(t *testing.T) {
 				KeyFile:            "",
 				ServerName:         "",
 				InsecureSkipVerify: false},
-			errorMessage: fmt.Sprintf("unable to load specified CA cert %s:", MissingCA),
+			errorMessage: fmt.Sprintf("unable to use specified CA cert %s:", MissingCA),
 		}, {
 			configTLSConfig: TLSConfig{
 				CAFile:             "",
 				CertFile:           MissingCert,
-				KeyFile:            ClientKeyNoPassPath,
+				KeyFile:            BarneyKeyNoPassPath,
 				ServerName:         "",
 				InsecureSkipVerify: false},
-			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", MissingCert, ClientKeyNoPassPath),
+			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", MissingCert, BarneyKeyNoPassPath),
 		}, {
 			configTLSConfig: TLSConfig{
 				CAFile:             "",
-				CertFile:           ClientCertificatePath,
+				CertFile:           BarneyCertificatePath,
 				KeyFile:            MissingKey,
 				ServerName:         "",
 				InsecureSkipVerify: false},
-			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", ClientCertificatePath, MissingKey),
+			errorMessage: fmt.Sprintf("unable to use specified client cert (%s) & key (%s):", BarneyCertificatePath, MissingKey),
 		},
 	}
 
@@ -470,11 +449,11 @@ func TestTLSConfigInvalidCA(t *testing.T) {
 func TestBasicAuthNoPassword(t *testing.T) {
 	cfg, _, err := LoadHTTPConfigFile("testdata/http.conf.basic-auth.no-password.yaml")
 	if err != nil {
-		t.Fatalf("Error loading HTTP client config: %v", err)
+		t.Errorf("Error loading HTTP client config: %v", err)
 	}
 	client, err := NewClientFromConfig(*cfg, "test")
 	if err != nil {
-		t.Fatalf("Error creating HTTP Client: %v", err)
+		t.Errorf("Error creating HTTP Client: %v", err)
 	}
 
 	rt, ok := client.Transport.(*basicAuthRoundTripper)
@@ -496,11 +475,11 @@ func TestBasicAuthNoPassword(t *testing.T) {
 func TestBasicAuthNoUsername(t *testing.T) {
 	cfg, _, err := LoadHTTPConfigFile("testdata/http.conf.basic-auth.no-username.yaml")
 	if err != nil {
-		t.Fatalf("Error loading HTTP client config: %v", err)
+		t.Errorf("Error loading HTTP client config: %v", err)
 	}
 	client, err := NewClientFromConfig(*cfg, "test")
 	if err != nil {
-		t.Fatalf("Error creating HTTP Client: %v", err)
+		t.Errorf("Error creating HTTP Client: %v", err)
 	}
 
 	rt, ok := client.Transport.(*basicAuthRoundTripper)
@@ -522,16 +501,16 @@ func TestBasicAuthNoUsername(t *testing.T) {
 func TestBasicAuthPasswordFile(t *testing.T) {
 	cfg, _, err := LoadHTTPConfigFile("testdata/http.conf.basic-auth.good.yaml")
 	if err != nil {
-		t.Fatalf("Error loading HTTP client config: %v", err)
+		t.Errorf("Error loading HTTP client config: %v", err)
 	}
 	client, err := NewClientFromConfig(*cfg, "test")
 	if err != nil {
-		t.Fatalf("Error creating HTTP Client: %v", err)
+		t.Errorf("Error creating HTTP Client: %v", err)
 	}
 
 	rt, ok := client.Transport.(*basicAuthRoundTripper)
 	if !ok {
-		t.Fatalf("Error casting to basic auth transport, %v", client.Transport)
+		t.Errorf("Error casting to basic auth transport, %v", client.Transport)
 	}
 
 	if rt.username != "user" {
@@ -542,264 +521,6 @@ func TestBasicAuthPasswordFile(t *testing.T) {
 	}
 	if string(rt.passwordFile) != "testdata/basic-auth-password" {
 		t.Errorf("Bad HTTP client passwordFile: %s", rt.passwordFile)
-	}
-}
-
-func getCertificateBlobs(t *testing.T) map[string][]byte {
-	files := []string{
-		TLSCAChainPath,
-		ClientCertificatePath,
-		ClientKeyNoPassPath,
-		ServerCertificatePath,
-		ServerKeyPath,
-		WrongClientCertPath,
-		WrongClientKeyPath,
-		EmptyFile,
-	}
-	bs := make(map[string][]byte, len(files)+1)
-	for _, f := range files {
-		b, err := ioutil.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bs[f] = b
-	}
-
-	return bs
-}
-
-func writeCertificate(bs map[string][]byte, src string, dst string) {
-	b, ok := bs[src]
-	if !ok {
-		panic(fmt.Sprintf("Couldn't find %q in bs", src))
-	}
-	if err := ioutil.WriteFile(dst, b, 0664); err != nil {
-		panic(err)
-	}
-}
-
-func TestTLSRoundTripper(t *testing.T) {
-	bs := getCertificateBlobs(t)
-
-	tmpDir, err := ioutil.TempDir("", "tlsroundtripper")
-	if err != nil {
-		t.Fatal("Failed to create tmp dir", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	ca, cert, key := filepath.Join(tmpDir, "ca"), filepath.Join(tmpDir, "cert"), filepath.Join(tmpDir, "key")
-
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, ExpectedMessage)
-	}
-	testServer, err := newTestServer(handler)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	defer testServer.Close()
-
-	testCases := []struct {
-		ca   string
-		cert string
-		key  string
-
-		errMsg string
-	}{
-		{
-			// Valid certs.
-			ca:   TLSCAChainPath,
-			cert: ClientCertificatePath,
-			key:  ClientKeyNoPassPath,
-		},
-		{
-			// CA not matching.
-			ca:   ClientCertificatePath,
-			cert: ClientCertificatePath,
-			key:  ClientKeyNoPassPath,
-
-			errMsg: "certificate signed by unknown authority",
-		},
-		{
-			// Invalid client cert+key.
-			ca:   TLSCAChainPath,
-			cert: WrongClientCertPath,
-			key:  WrongClientKeyPath,
-
-			errMsg: "remote error: tls",
-		},
-		{
-			// CA file empty
-			ca:   EmptyFile,
-			cert: ClientCertificatePath,
-			key:  ClientKeyNoPassPath,
-
-			errMsg: "unable to use specified CA cert",
-		},
-		{
-			// cert file empty
-			ca:   TLSCAChainPath,
-			cert: EmptyFile,
-			key:  ClientKeyNoPassPath,
-
-			errMsg: "failed to find any PEM data in certificate input",
-		},
-		{
-			// key file empty
-			ca:   TLSCAChainPath,
-			cert: ClientCertificatePath,
-			key:  EmptyFile,
-
-			errMsg: "failed to find any PEM data in key input",
-		},
-		{
-			// Valid certs again.
-			ca:   TLSCAChainPath,
-			cert: ClientCertificatePath,
-			key:  ClientKeyNoPassPath,
-		},
-	}
-
-	cfg := HTTPClientConfig{
-		TLSConfig: TLSConfig{
-			CAFile:             ca,
-			CertFile:           cert,
-			KeyFile:            key,
-			InsecureSkipVerify: false},
-	}
-
-	var c *http.Client
-	for i, tc := range testCases {
-		tc := tc
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			writeCertificate(bs, tc.ca, ca)
-			writeCertificate(bs, tc.cert, cert)
-			writeCertificate(bs, tc.key, key)
-			if c == nil {
-				c, err = NewClientFromConfig(cfg, "test")
-				if err != nil {
-					t.Fatalf("Error creating HTTP Client: %v", err)
-				}
-			}
-
-			req, err := http.NewRequest(http.MethodGet, testServer.URL, nil)
-			if err != nil {
-				t.Fatalf("Error creating HTTP request: %v", err)
-			}
-			r, err := c.Do(req)
-			if len(tc.errMsg) > 0 {
-				if err == nil {
-					r.Body.Close()
-					t.Fatalf("Could connect to the test server.")
-				}
-				if !strings.Contains(err.Error(), tc.errMsg) {
-					t.Fatalf("Expected error message to contain %q, got %q", tc.errMsg, err)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("Can't connect to the test server")
-			}
-
-			b, err := ioutil.ReadAll(r.Body)
-			r.Body.Close()
-			if err != nil {
-				t.Errorf("Can't read the server response body")
-			}
-
-			got := strings.TrimSpace(string(b))
-			if ExpectedMessage != got {
-				t.Errorf("The expected message %q differs from the obtained message %q", ExpectedMessage, got)
-			}
-		})
-	}
-}
-
-func TestTLSRoundTripperRaces(t *testing.T) {
-	bs := getCertificateBlobs(t)
-
-	tmpDir, err := ioutil.TempDir("", "tlsroundtripper")
-	if err != nil {
-		t.Fatal("Failed to create tmp dir", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	ca, cert, key := filepath.Join(tmpDir, "ca"), filepath.Join(tmpDir, "cert"), filepath.Join(tmpDir, "key")
-
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, ExpectedMessage)
-	}
-	testServer, err := newTestServer(handler)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	defer testServer.Close()
-
-	cfg := HTTPClientConfig{
-		TLSConfig: TLSConfig{
-			CAFile:             ca,
-			CertFile:           cert,
-			KeyFile:            key,
-			InsecureSkipVerify: false},
-	}
-
-	var c *http.Client
-	writeCertificate(bs, TLSCAChainPath, ca)
-	writeCertificate(bs, ClientCertificatePath, cert)
-	writeCertificate(bs, ClientKeyNoPassPath, key)
-	c, err = NewClientFromConfig(cfg, "test")
-	if err != nil {
-		t.Fatalf("Error creating HTTP Client: %v", err)
-	}
-
-	var wg sync.WaitGroup
-	ch := make(chan struct{})
-	var total, ok int64
-	// Spawn 10 Go routines polling the server concurrently.
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ch:
-					return
-				default:
-					atomic.AddInt64(&total, 1)
-					r, err := c.Get(testServer.URL)
-					if err == nil {
-						r.Body.Close()
-						atomic.AddInt64(&ok, 1)
-					}
-				}
-			}
-		}()
-	}
-
-	// Change the CA file every 10ms for 1 second.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		i := 0
-		for {
-			tick := time.NewTicker(10 * time.Millisecond)
-			<-tick.C
-			if i%2 == 0 {
-				writeCertificate(bs, ClientCertificatePath, ca)
-			} else {
-				writeCertificate(bs, TLSCAChainPath, ca)
-			}
-			i++
-			if i > 100 {
-				close(ch)
-				return
-			}
-		}
-	}()
-
-	wg.Wait()
-	if ok == total {
-		t.Fatalf("Expecting some requests to fail but got %d/%d successful requests", ok, total)
 	}
 }
 

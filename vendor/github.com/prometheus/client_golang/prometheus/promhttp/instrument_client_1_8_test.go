@@ -74,16 +74,16 @@ func TestClientMiddlewareAPI(t *testing.T) {
 
 	trace := &InstrumentTrace{
 		DNSStart: func(t float64) {
-			dnsLatencyVec.WithLabelValues("dns_start").Observe(t)
+			dnsLatencyVec.WithLabelValues("dns_start")
 		},
 		DNSDone: func(t float64) {
-			dnsLatencyVec.WithLabelValues("dns_done").Observe(t)
+			dnsLatencyVec.WithLabelValues("dns_done")
 		},
 		TLSHandshakeStart: func(t float64) {
-			tlsLatencyVec.WithLabelValues("tls_handshake_start").Observe(t)
+			tlsLatencyVec.WithLabelValues("tls_handshake_start")
 		},
 		TLSHandshakeDone: func(t float64) {
-			tlsLatencyVec.WithLabelValues("tls_handshake_done").Observe(t)
+			tlsLatencyVec.WithLabelValues("tls_handshake_done")
 		},
 	}
 
@@ -162,16 +162,16 @@ func ExampleInstrumentRoundTripperDuration() {
 	// functions that we want to instrument.
 	trace := &InstrumentTrace{
 		DNSStart: func(t float64) {
-			dnsLatencyVec.WithLabelValues("dns_start").Observe(t)
+			dnsLatencyVec.WithLabelValues("dns_start")
 		},
 		DNSDone: func(t float64) {
-			dnsLatencyVec.WithLabelValues("dns_done").Observe(t)
+			dnsLatencyVec.WithLabelValues("dns_done")
 		},
 		TLSHandshakeStart: func(t float64) {
-			tlsLatencyVec.WithLabelValues("tls_handshake_start").Observe(t)
+			tlsLatencyVec.WithLabelValues("tls_handshake_start")
 		},
 		TLSHandshakeDone: func(t float64) {
-			tlsLatencyVec.WithLabelValues("tls_handshake_done").Observe(t)
+			tlsLatencyVec.WithLabelValues("tls_handshake_done")
 		},
 	}
 

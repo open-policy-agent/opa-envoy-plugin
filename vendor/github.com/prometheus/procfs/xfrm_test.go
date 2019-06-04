@@ -18,7 +18,7 @@ import (
 )
 
 func TestXfrmStats(t *testing.T) {
-	xfrmStats, err := FS(procTestFixtures).NewXfrmStat()
+	xfrmStats, err := FS("fixtures").NewXfrmStat()
 	if err != nil {
 		t.Fatal(err)
 	}

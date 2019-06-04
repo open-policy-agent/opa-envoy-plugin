@@ -64,8 +64,6 @@ type Pusher struct {
 	client             *http.Client
 	useBasicAuth       bool
 	username, password string
-
-	expfmt expfmt.Format
 }
 
 // New creates a new Pusher to push to the provided URL with the provided job
@@ -98,7 +96,6 @@ func New(url, job string) *Pusher {
 		gatherers:  prometheus.Gatherers{reg},
 		registerer: reg,
 		client:     &http.Client{},
-		expfmt:     expfmt.FmtProtoDelim,
 	}
 }
 
@@ -185,16 +182,6 @@ func (p *Pusher) BasicAuth(username, password string) *Pusher {
 	return p
 }
 
-// Format configures the Pusher to use an encoding format given by the
-// provided expfmt.Format. The default format is expfmt.FmtProtoDelim and
-// should be used with the standard Prometheus Pushgateway. Custom
-// implementations may require different formats. For convenience, this
-// method returns a pointer to the Pusher itself.
-func (p *Pusher) Format(format expfmt.Format) *Pusher {
-	p.expfmt = format
-	return p
-}
-
 func (p *Pusher) push(method string) error {
 	if p.error != nil {
 		return p.error
@@ -210,7 +197,7 @@ func (p *Pusher) push(method string) error {
 		return err
 	}
 	buf := &bytes.Buffer{}
-	enc := expfmt.NewEncoder(buf, p.expfmt)
+	enc := expfmt.NewEncoder(buf, expfmt.FmtProtoDelim)
 	// Check for pre-existing grouping labels:
 	for _, mf := range mfs {
 		for _, m := range mf.GetMetric() {
@@ -235,7 +222,7 @@ func (p *Pusher) push(method string) error {
 	if p.useBasicAuth {
 		req.SetBasicAuth(p.username, p.password)
 	}
-	req.Header.Set(contentTypeHeader, string(p.expfmt))
+	req.Header.Set(contentTypeHeader, string(expfmt.FmtProtoDelim))
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return err

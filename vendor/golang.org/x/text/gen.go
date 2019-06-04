@@ -25,16 +25,13 @@ import (
 	"sync"
 	"unicode"
 
-	"golang.org/x/text/collate"
 	"golang.org/x/text/internal/gen"
-	"golang.org/x/text/language"
 )
 
 var (
 	verbose     = flag.Bool("v", false, "verbose output")
 	force       = flag.Bool("force", false, "ignore failing dependencies")
 	doCore      = flag.Bool("core", false, "force an update to core")
-	skipTest    = flag.Bool("skiptest", false, "skip tests")
 	excludeList = flag.String("exclude", "",
 		"comma-separated list of packages to exclude")
 
@@ -75,31 +72,20 @@ func main() {
 		fmt.Printf("Requested Unicode version %s; core unicode version is %s.\n",
 			gen.UnicodeVersion(),
 			unicode.Version)
-		c := collate.New(language.Und, collate.Numeric)
-		if c.CompareString(gen.UnicodeVersion(), unicode.Version) < 0 && !*force {
+		// TODO: use collate to compare. Simple comparison will work, though,
+		// until Unicode reaches version 10. To avoid circular dependencies, we
+		// could use the NumericWeighter without using package collate using a
+		// trivial Weighter implementation.
+		if gen.UnicodeVersion() < unicode.Version && !*force {
 			os.Exit(2)
 		}
 		updateCore = true
-		goroot := os.Getenv("GOROOT")
-		appendToFile(
-			filepath.Join(goroot, "api", "except.txt"),
-			fmt.Sprintf("pkg unicode, const Version = %q\n", unicode.Version),
-		)
-		const lines = `pkg unicode, const Version = %q
-// TODO: add a new line of the following form for each new script and property.
-pkg unicode, var <new script or property> *RangeTable
-`
-		appendToFile(
-			filepath.Join(goroot, "api", "next.txt"),
-			fmt.Sprintf(lines, gen.UnicodeVersion()),
-		)
 	}
 
 	var unicode = &dependency{}
 	if updateCore {
 		fmt.Printf("Updating core to version %s...\n", gen.UnicodeVersion())
-		unicodeInternal := generate("./internal/export/unicode")
-		unicode = generate("unicode", unicodeInternal)
+		unicode = generate("unicode")
 
 		// Test some users of the unicode packages, especially the ones that
 		// keep a mirrored table. These may need to be corrected by hand.
@@ -111,8 +97,7 @@ pkg unicode, var <new script or property> *RangeTable
 
 	var (
 		cldr       = generate("./unicode/cldr", unicode)
-		compact    = generate("./internal/language/compact", cldr)
-		language   = generate("./language", cldr, compact)
+		language   = generate("./language", cldr)
 		internal   = generate("./internal", unicode, language)
 		norm       = generate("./unicode/norm", unicode)
 		rangetable = generate("./unicode/rangetable", unicode)
@@ -120,19 +105,16 @@ pkg unicode, var <new script or property> *RangeTable
 		width      = generate("./width", unicode)
 		bidi       = generate("./unicode/bidi", unicode, norm, rangetable)
 		mib        = generate("./encoding/internal/identifier", unicode)
-		number     = generate("./internal/number", unicode, cldr, language, internal)
-		cldrtree   = generate("./internal/cldrtree", language, internal)
-		_          = generate("./unicode/runenames", unicode)
 		_          = generate("./encoding/htmlindex", unicode, language, mib)
 		_          = generate("./encoding/ianaindex", unicode, language, mib)
 		_          = generate("./secure/precis", unicode, norm, rangetable, cases, width, bidi)
-		_          = generate("./currency", unicode, cldr, language, internal, number)
-		_          = generate("./feature/plural", unicode, cldr, language, internal, number)
+		_          = generate("./currency", unicode, cldr, language, internal)
+		_          = generate("./internal/number", unicode, cldr, language, internal)
+		_          = generate("./feature/plural", unicode, cldr, language, internal)
 		_          = generate("./internal/export/idna", unicode, bidi, norm)
-		_          = generate("./language/display", unicode, cldr, language, internal, number)
+		_          = generate("./language/display", unicode, cldr, language, internal)
 		_          = generate("./collate", unicode, norm, cldr, language, rangetable)
 		_          = generate("./search", unicode, norm, cldr, language, rangetable)
-		_          = generate("./date", cldr, language, cldrtree)
 	)
 	all.Wait()
 
@@ -140,7 +122,7 @@ pkg unicode, var <new script or property> *RangeTable
 	copyExported("golang.org/x/net/idna")
 
 	if updateCore {
-		copyInternal()
+		copyVendored()
 	}
 
 	if hasErrors {
@@ -148,20 +130,6 @@ pkg unicode, var <new script or property> *RangeTable
 		os.Exit(1)
 	}
 	vprintf("SUCCESS\n")
-}
-
-func appendToFile(file, text string) {
-	fmt.Println("Augmenting", file)
-	w, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		fmt.Println("Failed to open file:", err)
-		os.Exit(1)
-	}
-	defer w.Close()
-	if _, err := w.WriteString(text); err != nil {
-		fmt.Println("Failed to write to file:", err)
-		os.Exit(1)
-	}
 }
 
 var (
@@ -210,10 +178,6 @@ func generate(pkg string, deps ...*dependency) *dependency {
 			return
 		}
 
-		if *skipTest {
-			return
-		}
-
 		vprintf("=== TEST %s\n", pkg)
 		args[0] = "test"
 		cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), args...)
@@ -242,9 +206,9 @@ func copyExported(p string) {
 		p)
 }
 
-// copyInternal copies packages used by Go core into the internal directory.
-func copyInternal() {
-	root := filepath.Join(build.Default.GOROOT, filepath.FromSlash("src/internal/x"))
+// copyVendored copies packages used by Go core into the vendored directory.
+func copyVendored() {
+	root := filepath.Join(build.Default.GOROOT, filepath.FromSlash("src/vendor/golang_org/x"))
 
 	err := filepath.Walk(root, func(dir string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() || root == dir {
@@ -259,7 +223,7 @@ func copyInternal() {
 			// Copy the vendored package if it exists in the export directory.
 			src = filepath.Join("internal", "export", filepath.Base(src))
 		}
-		copyPackage(src, dir, "golang.org", "internal")
+		copyPackage(src, dir, "golang.org", "golang_org")
 		return nil
 	})
 	if err != nil {
@@ -274,22 +238,16 @@ var goGenRE = regexp.MustCompile("//go:generate[^\n]*\n")
 // copyPackage copies relevant files from a directory in x/text to the
 // destination package directory. The destination package is assumed to have
 // the same name. For each copied file go:generate lines are removed and
-// package comments are rewritten to the new path.
+// and package comments are rewritten to the new path.
 func copyPackage(dirSrc, dirDst, search, replace string) {
 	err := filepath.Walk(dirSrc, func(file string, info os.FileInfo, err error) error {
 		base := filepath.Base(file)
 		if err != nil || info.IsDir() ||
 			!strings.HasSuffix(base, ".go") ||
-			strings.HasSuffix(base, "_test.go") ||
+			strings.HasSuffix(base, "_test.go") && !strings.HasPrefix(base, "example") ||
 			// Don't process subdirectories.
 			filepath.Dir(file) != dirSrc {
 			return nil
-		}
-		if strings.HasPrefix(base, "tables") {
-			if !strings.HasSuffix(base, gen.UnicodeVersion()+".go") {
-				return nil
-			}
-			base = "tables.go"
 		}
 		b, err := ioutil.ReadFile(file)
 		if err != nil || bytes.Contains(b, []byte("\n// +build ignore")) {
@@ -297,10 +255,12 @@ func copyPackage(dirSrc, dirDst, search, replace string) {
 		}
 		// Fix paths.
 		b = bytes.Replace(b, []byte(search), []byte(replace), -1)
-		b = bytes.Replace(b, []byte("internal/export"), []byte(""), -1)
 		// Remove go:generate lines.
 		b = goGenRE.ReplaceAllLiteral(b, nil)
 		comment := "// Code generated by running \"go generate\" in golang.org/x/text. DO NOT EDIT.\n\n"
+		if *doCore {
+			comment = "// Code generated by running \"go run gen.go -core\" in golang.org/x/text. DO NOT EDIT.\n\n"
+		}
 		if !bytes.HasPrefix(b, []byte(comment)) {
 			b = append([]byte(comment), b...)
 		}

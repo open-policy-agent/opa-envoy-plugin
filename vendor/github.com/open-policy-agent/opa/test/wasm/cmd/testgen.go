@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -23,8 +24,9 @@ import (
 )
 
 type params struct {
-	Output   string
-	InputDir string
+	Output          string
+	InputDir        string
+	TestFilePattern string
 }
 
 type testCaseSet struct {
@@ -34,8 +36,10 @@ type testCaseSet struct {
 type testCase struct {
 	Note       string       `json:"note"`
 	Query      string       `json:"query"`
+	Modules    []string     `json:"modules"`
 	Input      *interface{} `json:"input"`
 	ReturnCode int          `json:"return_code"`
+	WantError  string       `json:"want_error"`
 }
 
 type compiledTestCaseSet struct {
@@ -50,7 +54,13 @@ type compiledTestCase struct {
 func compileTestCases(ctx context.Context, tests testCaseSet) (*compiledTestCaseSet, error) {
 	var result []compiledTestCase
 	for _, tc := range tests.Cases {
-		cr, err := rego.New(rego.Query(tc.Query)).Compile(ctx)
+		args := []func(*rego.Rego){
+			rego.Query(tc.Query),
+		}
+		for idx, module := range tc.Modules {
+			args = append(args, rego.Module(fmt.Sprintf("module%d.rego", idx), module))
+		}
+		cr, err := rego.New(args...).Compile(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +94,7 @@ func run(params params, args []string) error {
 	}
 
 	for i := range files {
-		if strings.HasSuffix(files[i].Name(), ".yaml") {
+		if ok, err := path.Match(params.TestFilePattern, files[i].Name()); ok {
 
 			err := func() error {
 				bs, err := ioutil.ReadFile(filepath.Join(params.InputDir, files[i].Name()))
@@ -117,6 +127,8 @@ func run(params params, args []string) error {
 			if err != nil {
 				return errors.Wrap(err, files[i].Name())
 			}
+		} else if err != nil {
+			return errors.Wrap(err, files[i].Name())
 		}
 	}
 
@@ -181,8 +193,9 @@ func main() {
 		},
 	}
 
-	command.Flags().StringVarP(&params.Output, "output", "o", "", "set path of output file")
-	command.Flags().StringVarP(&params.InputDir, "input-dir", "i", "", "set path of input directory containing test files")
+	command.Flags().StringVarP(&params.Output, "output", "", "", "set path of output file")
+	command.Flags().StringVarP(&params.InputDir, "input-dir", "", "", "set path of input directory containing test files")
+	command.Flags().StringVarP(&params.TestFilePattern, "file-pattern", "", "*.yaml", "set filename pattern to match test files against")
 
 	if err := command.Execute(); err != nil {
 		os.Exit(1)
