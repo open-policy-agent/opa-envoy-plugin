@@ -22,10 +22,27 @@ type goFile struct {
 
 type astFile struct {
 	file      *ast.File
+	err       error // parse errors
 	isTrimmed bool
 }
 
 func (f *goFile) GetToken(ctx context.Context) *token.File {
+	f.view.mu.Lock()
+	defer f.view.mu.Unlock()
+
+	if f.isDirty() || f.astIsTrimmed() {
+		if _, err := f.view.loadParseTypecheck(ctx, f); err != nil {
+			f.View().Session().Logger().Errorf(ctx, "unable to check package for %s: %v", f.URI(), err)
+			return nil
+		}
+	}
+	if unexpectedAST(ctx, f) {
+		return nil
+	}
+	return f.token
+}
+
+func (f *goFile) GetAnyAST(ctx context.Context) *ast.File {
 	f.view.mu.Lock()
 	defer f.view.mu.Unlock()
 
@@ -35,18 +52,8 @@ func (f *goFile) GetToken(ctx context.Context) *token.File {
 			return nil
 		}
 	}
-	return f.token
-}
-
-func (f *goFile) GetTrimmedAST(ctx context.Context) *ast.File {
-	f.view.mu.Lock()
-	defer f.view.mu.Unlock()
-
-	if f.isDirty() {
-		if _, err := f.view.loadParseTypecheck(ctx, f); err != nil {
-			f.View().Session().Logger().Errorf(ctx, "unable to check package for %s: %v", f.URI(), err)
-			return nil
-		}
+	if f.ast == nil {
+		return nil
 	}
 	return f.ast.file
 }
@@ -60,6 +67,9 @@ func (f *goFile) GetAST(ctx context.Context) *ast.File {
 			f.View().Session().Logger().Errorf(ctx, "unable to check package for %s: %v", f.URI(), err)
 			return nil
 		}
+	}
+	if unexpectedAST(ctx, f) {
+		return nil
 	}
 	return f.ast.file
 }
@@ -79,13 +89,30 @@ func (f *goFile) GetPackage(ctx context.Context) source.Package {
 			return nil
 		}
 	}
+	if unexpectedAST(ctx, f) {
+		return nil
+	}
 	return f.pkg
+}
+
+func unexpectedAST(ctx context.Context, f *goFile) bool {
+	// If the AST comes back nil, something has gone wrong.
+	if f.ast == nil {
+		f.View().Session().Logger().Errorf(ctx, "expected full AST for %s, returned nil", f.URI())
+		return true
+	}
+	// If the AST comes back trimmed, something has gone wrong.
+	if f.astIsTrimmed() {
+		f.View().Session().Logger().Errorf(ctx, "expected full AST for %s, returned trimmed", f.URI())
+		return true
+	}
+	return false
 }
 
 // isDirty is true if the file needs to be type-checked.
 // It assumes that the file's view's mutex is held by the caller.
 func (f *goFile) isDirty() bool {
-	return f.meta == nil || f.imports == nil || f.token == nil || f.ast == nil || f.pkg == nil || len(f.view.contentChanges) > 0
+	return f.meta == nil || len(f.meta.missingImports) > 0 || f.token == nil || f.ast == nil || f.pkg == nil
 }
 
 func (f *goFile) astIsTrimmed() bool {
@@ -104,9 +131,9 @@ func (f *goFile) GetActiveReverseDeps(ctx context.Context) []source.GoFile {
 	f.view.mcache.mu.Lock()
 	defer f.view.mcache.mu.Unlock()
 
-	seen := make(map[string]struct{}) // visited packages
+	seen := make(map[packagePath]struct{}) // visited packages
 	results := make(map[*goFile]struct{})
-	f.view.reverseDeps(ctx, seen, results, pkg.PkgPath())
+	f.view.reverseDeps(ctx, seen, results, packagePath(pkg.PkgPath()))
 
 	var files []source.GoFile
 	for rd := range results {
@@ -122,7 +149,7 @@ func (f *goFile) GetActiveReverseDeps(ctx context.Context) []source.GoFile {
 	return files
 }
 
-func (v *view) reverseDeps(ctx context.Context, seen map[string]struct{}, results map[*goFile]struct{}, pkgPath string) {
+func (v *view) reverseDeps(ctx context.Context, seen map[packagePath]struct{}, results map[*goFile]struct{}, pkgPath packagePath) {
 	if _, ok := seen[pkgPath]; ok {
 		return
 	}

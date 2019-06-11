@@ -512,7 +512,7 @@ func (c *Compiler) checkRecursion() {
 }
 
 func (c *Compiler) checkSelfPath(loc *Location, eq func(a, b util.T) bool, a, b util.T) {
-	tr := newgraphTraversal(c.Graph)
+	tr := NewGraphTraversal(c.Graph)
 	if p := util.DFSPath(tr, eq, a, b); len(p) > 0 {
 		n := []string{}
 		for _, x := range p {
@@ -1447,19 +1447,22 @@ func (sort *graphSort) Visit(node util.T) (ok bool) {
 	return true
 }
 
-type graphTraversal struct {
+// GraphTraversal is a Traversal that understands the dependency graph
+type GraphTraversal struct {
 	graph   *Graph
 	visited map[util.T]struct{}
 }
 
-func newgraphTraversal(graph *Graph) *graphTraversal {
-	return &graphTraversal{
+// NewGraphTraversal returns a Traversal for the dependency graph
+func NewGraphTraversal(graph *Graph) *GraphTraversal {
+	return &GraphTraversal{
 		graph:   graph,
 		visited: map[util.T]struct{}{},
 	}
 }
 
-func (g *graphTraversal) Edges(x util.T) []util.T {
+// Edges lists all dependency connections for a given node
+func (g *GraphTraversal) Edges(x util.T) []util.T {
 	r := []util.T{}
 	for v := range g.graph.Dependencies(x) {
 		r = append(r, v)
@@ -1467,7 +1470,8 @@ func (g *graphTraversal) Edges(x util.T) []util.T {
 	return r
 }
 
-func (g *graphTraversal) Visited(u util.T) bool {
+// Visited returns whether a node has been visited, setting a node to visited if not
+func (g *GraphTraversal) Visited(u util.T) bool {
 	_, ok := g.visited[u]
 	g.visited[u] = struct{}{}
 	return ok

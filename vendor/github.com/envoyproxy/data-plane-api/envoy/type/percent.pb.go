@@ -12,6 +12,7 @@ import (
 	_ "github.com/lyft/protoc-gen-validate/validate"
 	io "io"
 	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -365,14 +366,7 @@ func (m *FractionalPercent) Size() (n int) {
 }
 
 func sovPercent(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozPercent(x uint64) (n int) {
 	return sovPercent(uint64((x << 1) ^ uint64((int64(x) >> 63))))

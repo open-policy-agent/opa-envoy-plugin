@@ -12,8 +12,11 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	_ "github.com/lyft/protoc-gen-validate/validate"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	io "io"
 	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -456,6 +459,14 @@ type AuthorizationServer interface {
 	Check(context.Context, *CheckRequest) (*CheckResponse, error)
 }
 
+// UnimplementedAuthorizationServer can be embedded to have forward compatible implementations.
+type UnimplementedAuthorizationServer struct {
+}
+
+func (*UnimplementedAuthorizationServer) Check(ctx context.Context, req *CheckRequest) (*CheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Check not implemented")
+}
+
 func RegisterAuthorizationServer(s *grpc.Server, srv AuthorizationServer) {
 	s.RegisterService(&_Authorization_serviceDesc, srv)
 }
@@ -784,14 +795,7 @@ func (m *CheckResponse_OkResponse) Size() (n int) {
 }
 
 func sovExternalAuth(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozExternalAuth(x uint64) (n int) {
 	return sovExternalAuth(uint64((x << 1) ^ uint64((int64(x) >> 63))))

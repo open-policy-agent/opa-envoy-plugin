@@ -482,6 +482,7 @@ func New() *Generator {
 	g.Request = new(plugin.CodeGeneratorRequest)
 	g.Response = new(plugin.CodeGeneratorResponse)
 	g.writtenImports = make(map[string]bool)
+	g.addedImports = make(map[GoImportPath]bool)
 	return g
 }
 
@@ -3302,13 +3303,13 @@ func (g *Generator) generateMessage(message *Descriptor) {
 			// when we've computed any disambiguation.
 
 			dname := "is" + goTypeName + "_" + fname
-			tag := `protobuf_oneof:"` + odp.GetName() + `"`
+			oneOftag := `protobuf_oneof:"` + odp.GetName() + `"`
 			of := oneofField{
 				fieldCommon: fieldCommon{
 					goName:     fname,
 					getterName: gname,
 					goType:     dname,
-					tags:       tag,
+					tags:       oneOftag,
 					protoName:  odp.GetName(),
 					fullPath:   oneofFullPath,
 					protoField: field,
