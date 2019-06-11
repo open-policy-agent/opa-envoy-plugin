@@ -66,19 +66,14 @@ func (s *Server) applyChanges(ctx context.Context, params *protocol.DidChangeTex
 	}
 
 	uri := span.NewURI(params.TextDocument.URI)
-	fc := s.session.ReadFile(uri)
-	if fc.Error != nil {
+	content, _, err := s.session.GetFile(uri).Read(ctx)
+	if err != nil {
 		return "", jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "file not found")
 	}
-	content := fc.Data
 	fset := s.session.Cache().FileSet()
-	filename, err := uri.Filename()
-	if err != nil {
-		return "", jsonrpc2.NewErrorf(jsonrpc2.CodeInternalError, "no filename for %s", uri)
-	}
 	for _, change := range params.ContentChanges {
 		// Update column mapper along with the content.
-		m := protocol.NewColumnMapper(uri, filename, fset, nil, content)
+		m := protocol.NewColumnMapper(uri, uri.Filename(), fset, nil, content)
 
 		spn, err := m.RangeSpan(*change.Range)
 		if err != nil {
@@ -101,9 +96,8 @@ func (s *Server) applyChanges(ctx context.Context, params *protocol.DidChangeTex
 }
 
 func (s *Server) didSave(ctx context.Context, params *protocol.DidSaveTextDocumentParams) error {
-	uri := span.NewURI(params.TextDocument.URI)
-	s.session.DidSave(uri)
-	return nil // ignore
+	s.session.DidSave(span.NewURI(params.TextDocument.URI))
+	return nil
 }
 
 func (s *Server) didClose(ctx context.Context, params *protocol.DidCloseTextDocumentParams) error {

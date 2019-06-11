@@ -69,6 +69,7 @@ func (s *Server) initialize(ctx context.Context, params *protocol.InitializePara
 			HoverProvider:              true,
 			DocumentHighlightProvider:  true,
 			DocumentLinkProvider:       &protocol.DocumentLinkOptions{},
+			ReferencesProvider:         true,
 			SignatureHelpProvider: &protocol.SignatureHelpOptions{
 				TriggerCharacters: []string{"(", ","},
 			},
@@ -186,6 +187,15 @@ func (s *Server) processConfig(view source.View, config interface{}) error {
 	// Check if user has disabled documentation on hover.
 	if noDocsOnHover, ok := c["noDocsOnHover"].(bool); ok {
 		s.noDocsOnHover = noDocsOnHover
+	}
+	// Check if the user has explicitly disabled any analyses.
+	if disabledAnalyses, ok := c["experimentalDisabledAnalyses"].([]interface{}); ok {
+		s.disabledAnalyses = make(map[string]struct{})
+		for _, a := range disabledAnalyses {
+			if a, ok := a.(string); ok {
+				s.disabledAnalyses[a] = struct{}{}
+			}
+		}
 	}
 	return nil
 }

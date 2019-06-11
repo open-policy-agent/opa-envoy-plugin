@@ -22,29 +22,30 @@ type importer struct {
 
 	// seen maintains the set of previously imported packages.
 	// If we have seen a package that is already in this map, we have a circular import.
-	seen map[string]struct{}
+	seen map[packagePath]struct{}
 
-	// topLevelPkgPath is the path of the package from which type-checking began.
-	topLevelPkgPath string
+	// topLevelPkgID is the ID of the package from which type-checking began.
+	topLevelPkgID packageID
 
 	ctx  context.Context
 	fset *token.FileSet
 }
 
 func (imp *importer) Import(pkgPath string) (*types.Package, error) {
-	pkg, err := imp.getPkg(pkgPath)
+	pkg, err := imp.getPkg(packagePath(pkgPath))
 	if err != nil {
 		return nil, err
 	}
 	return pkg.types, nil
 }
 
-func (imp *importer) getPkg(pkgPath string) (*pkg, error) {
+func (imp *importer) getPkg(pkgPath packagePath) (*pkg, error) {
 	if _, ok := imp.seen[pkgPath]; ok {
 		return nil, fmt.Errorf("circular import detected")
 	}
 	imp.view.pcache.mu.Lock()
 	e, ok := imp.view.pcache.packages[pkgPath]
+
 	if ok {
 		// cache hit
 		imp.view.pcache.mu.Unlock()
@@ -61,30 +62,34 @@ func (imp *importer) getPkg(pkgPath string) (*pkg, error) {
 		e.pkg, e.err = imp.typeCheck(pkgPath)
 		close(e.ready)
 	}
+
 	if e.err != nil {
+		// If the import had been previously canceled, and that error cached, try again.
+		if e.err == context.Canceled && imp.ctx.Err() == nil {
+			imp.view.pcache.mu.Lock()
+			// Clear out canceled cache entry if it is still there.
+			if imp.view.pcache.packages[pkgPath] == e {
+				delete(imp.view.pcache.packages, pkgPath)
+			}
+			imp.view.pcache.mu.Unlock()
+			return imp.getPkg(pkgPath)
+		}
 		return nil, e.err
 	}
+
 	return e.pkg, nil
 }
 
-func (imp *importer) typeCheck(pkgPath string) (*pkg, error) {
+func (imp *importer) typeCheck(pkgPath packagePath) (*pkg, error) {
 	meta, ok := imp.view.mcache.packages[pkgPath]
 	if !ok {
 		return nil, fmt.Errorf("no metadata for %v", pkgPath)
-	}
-	// Use the default type information for the unsafe package.
-	var typ *types.Package
-	if meta.pkgPath == "unsafe" {
-		typ = types.Unsafe
-	} else {
-		typ = types.NewPackage(meta.pkgPath, meta.name)
 	}
 	pkg := &pkg{
 		id:         meta.id,
 		pkgPath:    meta.pkgPath,
 		files:      meta.files,
-		imports:    make(map[string]*pkg),
-		types:      typ,
+		imports:    make(map[packagePath]*pkg),
 		typesSizes: meta.typesSizes,
 		typesInfo: &types.Info{
 			Types:      make(map[ast.Expr]types.TypeAndValue),
@@ -96,36 +101,49 @@ func (imp *importer) typeCheck(pkgPath string) (*pkg, error) {
 		},
 		analyses: make(map[*analysis.Analyzer]*analysisEntry),
 	}
-	appendError := func(err error) {
+	// Ignore function bodies for any dependency packages.
+	ignoreFuncBodies := imp.topLevelPkgID != pkg.id
+	files, parseErrs, err := imp.parseFiles(meta.files, ignoreFuncBodies)
+	if err != nil {
+		return nil, err
+	}
+	for _, err := range parseErrs {
 		imp.view.appendPkgError(pkg, err)
 	}
 
-	// Don't type-check function bodies if we are not in the top-level package.
-	files, errs := imp.parseFiles(meta.files, imp.ignoreFuncBodies(pkg.pkgPath))
-	for _, err := range errs {
-		appendError(err)
+	// Use the default type information for the unsafe package.
+	if meta.pkgPath == "unsafe" {
+		pkg.types = types.Unsafe
+	} else if len(files) == 0 { // not the unsafe package, no parsed files
+		return nil, fmt.Errorf("no parsed files for package %s", pkg.pkgPath)
+	} else {
+		pkg.types = types.NewPackage(string(meta.pkgPath), meta.name)
 	}
+
 	pkg.syntax = files
 
 	// Handle circular imports by copying previously seen imports.
-	seen := make(map[string]struct{})
+	seen := make(map[packagePath]struct{})
 	for k, v := range imp.seen {
 		seen[k] = v
 	}
 	seen[pkgPath] = struct{}{}
 
 	cfg := &types.Config{
-		Error: appendError,
+		Error: func(err error) {
+			imp.view.appendPkgError(pkg, err)
+		},
+		IgnoreFuncBodies: ignoreFuncBodies,
 		Importer: &importer{
-			view:            imp.view,
-			ctx:             imp.ctx,
-			fset:            imp.fset,
-			topLevelPkgPath: imp.topLevelPkgPath,
-			seen:            seen,
+			view:          imp.view,
+			ctx:           imp.ctx,
+			fset:          imp.fset,
+			topLevelPkgID: imp.topLevelPkgID,
+			seen:          seen,
 		},
 	}
 	check := types.NewChecker(cfg, imp.fset, pkg.types, pkg.typesInfo)
-	check.Files(pkg.syntax)
+	check.Files(pkg.GetSyntax())
 
 	// Add every file in this package to our cache.
 	imp.cachePackage(imp.ctx, pkg, meta)
@@ -134,15 +152,15 @@ func (imp *importer) typeCheck(pkgPath string) (*pkg, error) {
 }
 
 func (imp *importer) cachePackage(ctx context.Context, pkg *pkg, meta *metadata) {
-	for _, file := range pkg.GetSyntax() {
+	for _, fAST := range pkg.syntax {
 		// TODO: If a file is in multiple packages, which package do we store?
-		if !file.Pos().IsValid() {
-			imp.view.Session().Logger().Errorf(ctx, "invalid position for file %v", file.Name)
+		if !fAST.file.Pos().IsValid() {
+			imp.view.Session().Logger().Errorf(ctx, "invalid position for file %v", fAST.file.Name)
 			continue
 		}
-		tok := imp.view.Session().Cache().FileSet().File(file.Pos())
+		tok := imp.view.Session().Cache().FileSet().File(fAST.file.Pos())
 		if tok == nil {
-			imp.view.Session().Logger().Errorf(ctx, "no token.File for %v", file.Name)
+			imp.view.Session().Logger().Errorf(ctx, "no token.File for %v", fAST.file.Name)
 			continue
 		}
 		fURI := span.FileURI(tok.Name())
@@ -153,15 +171,12 @@ func (imp *importer) cachePackage(ctx context.Context, pkg *pkg, meta *metadata)
 		}
 		gof, ok := f.(*goFile)
 		if !ok {
-			imp.view.Session().Logger().Errorf(ctx, "not a go file: %v", f.URI())
+			imp.view.Session().Logger().Errorf(ctx, "%v is not a Go file", f.URI())
 			continue
 		}
 		gof.token = tok
-		gof.ast = &astFile{
-			file:      file,
-			isTrimmed: imp.ignoreFuncBodies(pkg.pkgPath),
-		}
-		gof.imports = file.Imports
+		gof.ast = fAST
+		gof.imports = fAST.file.Imports
 		gof.pkg = pkg
 	}
 
@@ -206,8 +221,4 @@ func (v *view) appendPkgError(pkg *pkg, err error) {
 		})
 	}
 	pkg.errors = append(pkg.errors, errs...)
-}
-
-func (imp *importer) ignoreFuncBodies(pkgPath string) bool {
-	return imp.topLevelPkgPath != pkgPath
 }

@@ -95,7 +95,7 @@ data:
     }]
 
     opa_container = {
-      "image": "openpolicyagent/opa:0.11.0-istio",
+      "image": "openpolicyagent/opa:0.12.0-istio",
       "name": "opa-istio",
       "args": [
         "--plugin-dir=.",
