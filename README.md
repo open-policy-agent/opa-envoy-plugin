@@ -264,6 +264,9 @@ The `input` value defined for your policy will resemble the JSON below:
 }
 ```
 
+## Issue Management
+Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
+
 ## Dependencies
 
 Dependencies are managed with [Glide](https://github.com/Masterminds/glide).
