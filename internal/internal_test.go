@@ -50,6 +50,18 @@ const exampleAllowedRequest = `{
 	}
   }`
 
+const exampleAllowedRequestParsedPath = `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "id": "13359530607844510314",
+		  "method": "GET",
+		  "path": "/my/test/path"
+		}
+	  }
+	}
+  }`
+
 // Identical to the request above except authorization header is different.
 const exampleDeniedRequest = `{
 	"attributes": {
@@ -89,6 +101,24 @@ func TestCheckAllow(t *testing.T) {
 
 	var req v2.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(&testPlugin{})
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
+func TestCheckAllowParsedPath(t *testing.T) {
+
+	var req v2.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
 		panic(err)
 	}
 
@@ -235,6 +265,10 @@ func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 	allow {
 		roles_for_user[r]
 		required_roles[r]
+	}
+
+	allow {
+		input.parsed_path = ["my", "test", "path"]
 	}
 
 	roles_for_user[r] {

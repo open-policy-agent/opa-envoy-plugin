@@ -5,6 +5,9 @@
 This repository contains an extended version of OPA (**OPA-Istio**) that allows you to enforce OPA
 policies at the Istio Proxy layer.
 
+## Issue Management
+Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
+
 ## Overview
 
 OPA-Istio extends OPA with a gRPC server that implements the [Envoy External
@@ -209,6 +212,7 @@ The `input` value defined for your policy will resemble the JSON below:
 
 ```json
 {
+  "parsed_path": ["api", "v1", "products"],
   "attributes": {
     "source": {
       "address": {
@@ -264,8 +268,17 @@ The `input` value defined for your policy will resemble the JSON below:
 }
 ```
 
-## Issue Management
-Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
+The `parsed_path` field in the input is generated from the `path` field in the HTTP request which is included in the Envoy External Authorization `CheckRequest` message type. This field provides the request path as a string array which can help policy authors perform pattern matching on the HTTP request path. The below sample policy allows anyone to access the path `/api/v1/products`.
+
+```ruby
+package istio.authz
+
+default allow = false
+
+allow {
+   input.parsed_path = ["api", "v1", "products"]
+}
+```
 
 ## Dependencies
 

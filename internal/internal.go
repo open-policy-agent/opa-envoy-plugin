@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	ctx "golang.org/x/net/context"
@@ -133,12 +134,14 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		return nil, err
 	}
 
-	var input interface{}
+	var input map[string]interface{}
 
 	err = util.UnmarshalJSON(bs, &input)
 	if err != nil {
 		return nil, err
 	}
+
+	input["parsed_path"] = getParsedPath(req)
 
 	inputValue, err := ast.InterfaceToValue(input)
 	if err != nil {
@@ -284,4 +287,14 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 		return "", fmt.Errorf("bad revision")
 	}
 	return revision, nil
+}
+
+func getParsedPath(req *ext_authz.CheckRequest) []interface{} {
+	path := req.GetAttributes().GetRequest().GetHttp().GetPath()
+	parsedPath := strings.Split(strings.TrimLeft(path, "/"), "/")
+	parsedPathInterface := make([]interface{}, len(parsedPath))
+	for i, v := range parsedPath {
+		parsedPathInterface[i] = v
+	}
+	return parsedPathInterface
 }
