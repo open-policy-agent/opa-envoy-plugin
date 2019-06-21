@@ -1,4 +1,4 @@
-##  Instructions to build the OPA-Istio plugin as a Go plugin:
+##  Instructions to load the OPA-Istio plugin using `GOPATH` OPA:
 
 1. Clone OPA in your `GOPATH`.
    
