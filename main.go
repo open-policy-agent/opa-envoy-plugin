@@ -25,6 +25,7 @@ func (Factory) Validate(m *plugins.Manager, config []byte) (interface{}, error) 
 
 // Init register plugin factory with OPA.
 func Init() error {
-	runtime.RegisterPlugin("envoy.ext_authz.grpc", Factory{})
+	runtime.RegisterPlugin("envoy.ext_authz.grpc", Factory{}) // for backwards compatibility
+	runtime.RegisterPlugin("envoy_ext_authz_grpc", Factory{})
 	return nil
 }
