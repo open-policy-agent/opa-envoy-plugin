@@ -1,7 +1,7 @@
 ##  Instructions to build the OPA-Istio plugin as a Go plugin:
 
 1. Clone OPA in your `GOPATH`.
-   
+
    ```bash
    git clone git@github.com:open-policy-agent/opa.git
    ```
@@ -29,7 +29,7 @@
 
     ```yaml
     plugins:
-        envoy.ext_authz.grpc:
+        envoy_ext_authz_grpc:
             addr: :9191
             query: data.istio.authz.allow
     ```
@@ -44,7 +44,7 @@
 
    ```bash
    cd $GOPATH/src/github.com/open-policy-agent/opa-istio-plugin
-   
+
    glide up -v
 
    # Generate protos

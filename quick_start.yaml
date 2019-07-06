@@ -220,7 +220,7 @@ metadata:
 data:
   config.yaml: |
     plugins:
-      envoy.ext_authz.grpc:
+      envoy_ext_authz_grpc:
         addr: :9191
         query: data.istio.authz.allow
 ---
