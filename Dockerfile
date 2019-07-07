@@ -2,7 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-FROM ubuntu:16.04
+FROM gcr.io/distroless/base
 
 MAINTAINER Ashutosh Narkar  <anarkar4387@gmail.com>
 
