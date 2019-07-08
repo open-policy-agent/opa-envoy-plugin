@@ -14,7 +14,6 @@ import (
 	github_com_gogo_protobuf_protoc_gen_gogo_descriptor "github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -2112,9 +2111,9 @@ func (m *SampleOneOf) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.TestOneof != nil {
-		nn1, err1 := m.TestOneof.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		nn1, err := m.TestOneof.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn1
 	}
@@ -2252,9 +2251,9 @@ func (m *SampleOneOf_SubMessage) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1
 		i++
 		i = encodeVarintOne(dAtA, i, uint64(m.SubMessage.Size()))
-		n2, err2 := m.SubMessage.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		n2, err := m.SubMessage.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n2
 	}
@@ -2686,7 +2685,14 @@ func (m *SampleOneOf_SubMessage) Size() (n int) {
 }
 
 func sovOne(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozOne(x uint64) (n int) {
 	return sovOne(uint64((x << 1) ^ uint64((int64(x) >> 63))))

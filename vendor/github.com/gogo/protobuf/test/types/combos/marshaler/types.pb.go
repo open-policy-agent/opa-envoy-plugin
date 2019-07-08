@@ -11,7 +11,6 @@ import (
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	types "github.com/gogo/protobuf/types"
 	math "math"
-	math_bits "math/bits"
 	time "time"
 )
 
@@ -6892,9 +6891,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Dur.Size()))
-		n1, err1 := m.Dur.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		n1, err := m.Dur.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n1
 	}
@@ -6902,9 +6901,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Ts.Size()))
-		n2, err2 := m.Ts.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		n2, err := m.Ts.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n2
 	}
@@ -6912,9 +6911,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Dbl.Size()))
-		n3, err3 := m.Dbl.MarshalTo(dAtA[i:])
-		if err3 != nil {
-			return 0, err3
+		n3, err := m.Dbl.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n3
 	}
@@ -6922,9 +6921,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Flt.Size()))
-		n4, err4 := m.Flt.MarshalTo(dAtA[i:])
-		if err4 != nil {
-			return 0, err4
+		n4, err := m.Flt.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n4
 	}
@@ -6932,9 +6931,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.I64.Size()))
-		n5, err5 := m.I64.MarshalTo(dAtA[i:])
-		if err5 != nil {
-			return 0, err5
+		n5, err := m.I64.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n5
 	}
@@ -6942,9 +6941,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.U64.Size()))
-		n6, err6 := m.U64.MarshalTo(dAtA[i:])
-		if err6 != nil {
-			return 0, err6
+		n6, err := m.U64.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n6
 	}
@@ -6952,9 +6951,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.I32.Size()))
-		n7, err7 := m.I32.MarshalTo(dAtA[i:])
-		if err7 != nil {
-			return 0, err7
+		n7, err := m.I32.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n7
 	}
@@ -6962,9 +6961,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.U32.Size()))
-		n8, err8 := m.U32.MarshalTo(dAtA[i:])
-		if err8 != nil {
-			return 0, err8
+		n8, err := m.U32.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n8
 	}
@@ -6972,9 +6971,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Bool.Size()))
-		n9, err9 := m.Bool.MarshalTo(dAtA[i:])
-		if err9 != nil {
-			return 0, err9
+		n9, err := m.Bool.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n9
 	}
@@ -6982,9 +6981,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Str.Size()))
-		n10, err10 := m.Str.MarshalTo(dAtA[i:])
-		if err10 != nil {
-			return 0, err10
+		n10, err := m.Str.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n10
 	}
@@ -6992,9 +6991,9 @@ func (m *KnownTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Bytes.Size()))
-		n11, err11 := m.Bytes.MarshalTo(dAtA[i:])
-		if err11 != nil {
-			return 0, err11
+		n11, err := m.Bytes.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n11
 	}
@@ -7023,9 +7022,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableTimestamp.Size()))
-		n12, err12 := m.NullableTimestamp.MarshalTo(dAtA[i:])
-		if err12 != nil {
-			return 0, err12
+		n12, err := m.NullableTimestamp.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n12
 	}
@@ -7033,9 +7032,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableDuration.Size()))
-		n13, err13 := m.NullableDuration.MarshalTo(dAtA[i:])
-		if err13 != nil {
-			return 0, err13
+		n13, err := m.NullableDuration.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n13
 	}
@@ -7043,9 +7042,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableDouble.Size()))
-		n14, err14 := m.NullableDouble.MarshalTo(dAtA[i:])
-		if err14 != nil {
-			return 0, err14
+		n14, err := m.NullableDouble.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n14
 	}
@@ -7053,9 +7052,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableFloat.Size()))
-		n15, err15 := m.NullableFloat.MarshalTo(dAtA[i:])
-		if err15 != nil {
-			return 0, err15
+		n15, err := m.NullableFloat.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n15
 	}
@@ -7063,9 +7062,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableInt64.Size()))
-		n16, err16 := m.NullableInt64.MarshalTo(dAtA[i:])
-		if err16 != nil {
-			return 0, err16
+		n16, err := m.NullableInt64.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n16
 	}
@@ -7073,9 +7072,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableUInt64.Size()))
-		n17, err17 := m.NullableUInt64.MarshalTo(dAtA[i:])
-		if err17 != nil {
-			return 0, err17
+		n17, err := m.NullableUInt64.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n17
 	}
@@ -7083,9 +7082,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableInt32.Size()))
-		n18, err18 := m.NullableInt32.MarshalTo(dAtA[i:])
-		if err18 != nil {
-			return 0, err18
+		n18, err := m.NullableInt32.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n18
 	}
@@ -7093,9 +7092,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableUInt32.Size()))
-		n19, err19 := m.NullableUInt32.MarshalTo(dAtA[i:])
-		if err19 != nil {
-			return 0, err19
+		n19, err := m.NullableUInt32.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n19
 	}
@@ -7103,9 +7102,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableBool.Size()))
-		n20, err20 := m.NullableBool.MarshalTo(dAtA[i:])
-		if err20 != nil {
-			return 0, err20
+		n20, err := m.NullableBool.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n20
 	}
@@ -7113,9 +7112,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableString.Size()))
-		n21, err21 := m.NullableString.MarshalTo(dAtA[i:])
-		if err21 != nil {
-			return 0, err21
+		n21, err := m.NullableString.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n21
 	}
@@ -7123,42 +7122,42 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.NullableBytes.Size()))
-		n22, err22 := m.NullableBytes.MarshalTo(dAtA[i:])
-		if err22 != nil {
-			return 0, err22
+		n22, err := m.NullableBytes.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n22
 	}
 	dAtA[i] = 0x62
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.Timestamp.Size()))
-	n23, err23 := m.Timestamp.MarshalTo(dAtA[i:])
-	if err23 != nil {
-		return 0, err23
+	n23, err := m.Timestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n23
 	dAtA[i] = 0x6a
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.Duration.Size()))
-	n24, err24 := m.Duration.MarshalTo(dAtA[i:])
-	if err24 != nil {
-		return 0, err24
+	n24, err := m.Duration.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n24
 	dAtA[i] = 0x72
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullDouble.Size()))
-	n25, err25 := m.NonnullDouble.MarshalTo(dAtA[i:])
-	if err25 != nil {
-		return 0, err25
+	n25, err := m.NonnullDouble.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n25
 	dAtA[i] = 0x7a
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullFloat.Size()))
-	n26, err26 := m.NonnullFloat.MarshalTo(dAtA[i:])
-	if err26 != nil {
-		return 0, err26
+	n26, err := m.NonnullFloat.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n26
 	dAtA[i] = 0x82
@@ -7166,9 +7165,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullInt64.Size()))
-	n27, err27 := m.NonnullInt64.MarshalTo(dAtA[i:])
-	if err27 != nil {
-		return 0, err27
+	n27, err := m.NonnullInt64.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n27
 	dAtA[i] = 0x8a
@@ -7176,9 +7175,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullUInt64.Size()))
-	n28, err28 := m.NonnullUInt64.MarshalTo(dAtA[i:])
-	if err28 != nil {
-		return 0, err28
+	n28, err := m.NonnullUInt64.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n28
 	dAtA[i] = 0x92
@@ -7186,9 +7185,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullInt32.Size()))
-	n29, err29 := m.NonnullInt32.MarshalTo(dAtA[i:])
-	if err29 != nil {
-		return 0, err29
+	n29, err := m.NonnullInt32.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n29
 	dAtA[i] = 0x9a
@@ -7196,9 +7195,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullUInt32.Size()))
-	n30, err30 := m.NonnullUInt32.MarshalTo(dAtA[i:])
-	if err30 != nil {
-		return 0, err30
+	n30, err := m.NonnullUInt32.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n30
 	dAtA[i] = 0xa2
@@ -7206,9 +7205,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullBool.Size()))
-	n31, err31 := m.NonnullBool.MarshalTo(dAtA[i:])
-	if err31 != nil {
-		return 0, err31
+	n31, err := m.NonnullBool.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n31
 	dAtA[i] = 0xaa
@@ -7216,9 +7215,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullString.Size()))
-	n32, err32 := m.NonnullString.MarshalTo(dAtA[i:])
-	if err32 != nil {
-		return 0, err32
+	n32, err := m.NonnullString.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n32
 	dAtA[i] = 0xb2
@@ -7226,9 +7225,9 @@ func (m *ProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.NonnullBytes.Size()))
-	n33, err33 := m.NonnullBytes.MarshalTo(dAtA[i:])
-	if err33 != nil {
-		return 0, err33
+	n33, err := m.NonnullBytes.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n33
 	if m.XXX_unrecognized != nil {
@@ -7256,9 +7255,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.NullableTimestamp)))
-		n34, err34 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.NullableTimestamp, dAtA[i:])
-		if err34 != nil {
-			return 0, err34
+		n34, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.NullableTimestamp, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n34
 	}
@@ -7266,9 +7265,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(*m.NullableDuration)))
-		n35, err35 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.NullableDuration, dAtA[i:])
-		if err35 != nil {
-			return 0, err35
+		n35, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.NullableDuration, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n35
 	}
@@ -7276,9 +7275,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDouble(*m.NullableDouble)))
-		n36, err36 := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*m.NullableDouble, dAtA[i:])
-		if err36 != nil {
-			return 0, err36
+		n36, err := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*m.NullableDouble, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n36
 	}
@@ -7286,9 +7285,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdFloat(*m.NullableFloat)))
-		n37, err37 := github_com_gogo_protobuf_types.StdFloatMarshalTo(*m.NullableFloat, dAtA[i:])
-		if err37 != nil {
-			return 0, err37
+		n37, err := github_com_gogo_protobuf_types.StdFloatMarshalTo(*m.NullableFloat, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n37
 	}
@@ -7296,9 +7295,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt64(*m.NullableInt64)))
-		n38, err38 := github_com_gogo_protobuf_types.StdInt64MarshalTo(*m.NullableInt64, dAtA[i:])
-		if err38 != nil {
-			return 0, err38
+		n38, err := github_com_gogo_protobuf_types.StdInt64MarshalTo(*m.NullableInt64, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n38
 	}
@@ -7306,9 +7305,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt64(*m.NullableUInt64)))
-		n39, err39 := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*m.NullableUInt64, dAtA[i:])
-		if err39 != nil {
-			return 0, err39
+		n39, err := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*m.NullableUInt64, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n39
 	}
@@ -7316,9 +7315,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt32(*m.NullableInt32)))
-		n40, err40 := github_com_gogo_protobuf_types.StdInt32MarshalTo(*m.NullableInt32, dAtA[i:])
-		if err40 != nil {
-			return 0, err40
+		n40, err := github_com_gogo_protobuf_types.StdInt32MarshalTo(*m.NullableInt32, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n40
 	}
@@ -7326,9 +7325,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt32(*m.NullableUInt32)))
-		n41, err41 := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*m.NullableUInt32, dAtA[i:])
-		if err41 != nil {
-			return 0, err41
+		n41, err := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*m.NullableUInt32, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n41
 	}
@@ -7336,9 +7335,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBool(*m.NullableBool)))
-		n42, err42 := github_com_gogo_protobuf_types.StdBoolMarshalTo(*m.NullableBool, dAtA[i:])
-		if err42 != nil {
-			return 0, err42
+		n42, err := github_com_gogo_protobuf_types.StdBoolMarshalTo(*m.NullableBool, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n42
 	}
@@ -7346,9 +7345,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdString(*m.NullableString)))
-		n43, err43 := github_com_gogo_protobuf_types.StdStringMarshalTo(*m.NullableString, dAtA[i:])
-		if err43 != nil {
-			return 0, err43
+		n43, err := github_com_gogo_protobuf_types.StdStringMarshalTo(*m.NullableString, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n43
 	}
@@ -7356,42 +7355,42 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBytes(*m.NullableBytes)))
-		n44, err44 := github_com_gogo_protobuf_types.StdBytesMarshalTo(*m.NullableBytes, dAtA[i:])
-		if err44 != nil {
-			return 0, err44
+		n44, err := github_com_gogo_protobuf_types.StdBytesMarshalTo(*m.NullableBytes, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n44
 	}
 	dAtA[i] = 0x62
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
-	n45, err45 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
-	if err45 != nil {
-		return 0, err45
+	n45, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n45
 	dAtA[i] = 0x6a
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.Duration)))
-	n46, err46 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.Duration, dAtA[i:])
-	if err46 != nil {
-		return 0, err46
+	n46, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.Duration, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n46
 	dAtA[i] = 0x72
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDouble(m.NonnullDouble)))
-	n47, err47 := github_com_gogo_protobuf_types.StdDoubleMarshalTo(m.NonnullDouble, dAtA[i:])
-	if err47 != nil {
-		return 0, err47
+	n47, err := github_com_gogo_protobuf_types.StdDoubleMarshalTo(m.NonnullDouble, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n47
 	dAtA[i] = 0x7a
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdFloat(m.NonnullFloat)))
-	n48, err48 := github_com_gogo_protobuf_types.StdFloatMarshalTo(m.NonnullFloat, dAtA[i:])
-	if err48 != nil {
-		return 0, err48
+	n48, err := github_com_gogo_protobuf_types.StdFloatMarshalTo(m.NonnullFloat, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n48
 	dAtA[i] = 0x82
@@ -7399,9 +7398,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt64(m.NonnullInt64)))
-	n49, err49 := github_com_gogo_protobuf_types.StdInt64MarshalTo(m.NonnullInt64, dAtA[i:])
-	if err49 != nil {
-		return 0, err49
+	n49, err := github_com_gogo_protobuf_types.StdInt64MarshalTo(m.NonnullInt64, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n49
 	dAtA[i] = 0x8a
@@ -7409,9 +7408,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt64(m.NonnullUInt64)))
-	n50, err50 := github_com_gogo_protobuf_types.StdUInt64MarshalTo(m.NonnullUInt64, dAtA[i:])
-	if err50 != nil {
-		return 0, err50
+	n50, err := github_com_gogo_protobuf_types.StdUInt64MarshalTo(m.NonnullUInt64, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n50
 	dAtA[i] = 0x92
@@ -7419,9 +7418,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt32(m.NonnullInt32)))
-	n51, err51 := github_com_gogo_protobuf_types.StdInt32MarshalTo(m.NonnullInt32, dAtA[i:])
-	if err51 != nil {
-		return 0, err51
+	n51, err := github_com_gogo_protobuf_types.StdInt32MarshalTo(m.NonnullInt32, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n51
 	dAtA[i] = 0x9a
@@ -7429,9 +7428,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt32(m.NonnullUInt32)))
-	n52, err52 := github_com_gogo_protobuf_types.StdUInt32MarshalTo(m.NonnullUInt32, dAtA[i:])
-	if err52 != nil {
-		return 0, err52
+	n52, err := github_com_gogo_protobuf_types.StdUInt32MarshalTo(m.NonnullUInt32, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n52
 	dAtA[i] = 0xa2
@@ -7439,9 +7438,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBool(m.NonnullBool)))
-	n53, err53 := github_com_gogo_protobuf_types.StdBoolMarshalTo(m.NonnullBool, dAtA[i:])
-	if err53 != nil {
-		return 0, err53
+	n53, err := github_com_gogo_protobuf_types.StdBoolMarshalTo(m.NonnullBool, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n53
 	dAtA[i] = 0xaa
@@ -7449,9 +7448,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdString(m.NonnullString)))
-	n54, err54 := github_com_gogo_protobuf_types.StdStringMarshalTo(m.NonnullString, dAtA[i:])
-	if err54 != nil {
-		return 0, err54
+	n54, err := github_com_gogo_protobuf_types.StdStringMarshalTo(m.NonnullString, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n54
 	dAtA[i] = 0xb2
@@ -7459,9 +7458,9 @@ func (m *StdTypes) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBytes(m.NonnullBytes)))
-	n55, err55 := github_com_gogo_protobuf_types.StdBytesMarshalTo(m.NonnullBytes, dAtA[i:])
-	if err55 != nil {
-		return 0, err55
+	n55, err := github_com_gogo_protobuf_types.StdBytesMarshalTo(m.NonnullBytes, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n55
 	if m.XXX_unrecognized != nil {
@@ -8102,9 +8101,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n56, err56 := v.MarshalTo(dAtA[i:])
-				if err56 != nil {
-					return 0, err56
+				n56, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n56
 			}
@@ -8128,9 +8127,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n57, err57 := (&v).MarshalTo(dAtA[i:])
-			if err57 != nil {
-				return 0, err57
+			n57, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n57
 		}
@@ -8154,9 +8153,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n58, err58 := v.MarshalTo(dAtA[i:])
-				if err58 != nil {
-					return 0, err58
+				n58, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n58
 			}
@@ -8180,9 +8179,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n59, err59 := (&v).MarshalTo(dAtA[i:])
-			if err59 != nil {
-				return 0, err59
+			n59, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n59
 		}
@@ -8206,9 +8205,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n60, err60 := v.MarshalTo(dAtA[i:])
-				if err60 != nil {
-					return 0, err60
+				n60, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n60
 			}
@@ -8232,9 +8231,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n61, err61 := (&v).MarshalTo(dAtA[i:])
-			if err61 != nil {
-				return 0, err61
+			n61, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n61
 		}
@@ -8258,9 +8257,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n62, err62 := v.MarshalTo(dAtA[i:])
-				if err62 != nil {
-					return 0, err62
+				n62, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n62
 			}
@@ -8284,9 +8283,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n63, err63 := (&v).MarshalTo(dAtA[i:])
-			if err63 != nil {
-				return 0, err63
+			n63, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n63
 		}
@@ -8310,9 +8309,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n64, err64 := v.MarshalTo(dAtA[i:])
-				if err64 != nil {
-					return 0, err64
+				n64, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n64
 			}
@@ -8336,9 +8335,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n65, err65 := (&v).MarshalTo(dAtA[i:])
-			if err65 != nil {
-				return 0, err65
+			n65, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n65
 		}
@@ -8362,9 +8361,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n66, err66 := v.MarshalTo(dAtA[i:])
-				if err66 != nil {
-					return 0, err66
+				n66, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n66
 			}
@@ -8388,9 +8387,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n67, err67 := (&v).MarshalTo(dAtA[i:])
-			if err67 != nil {
-				return 0, err67
+			n67, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n67
 		}
@@ -8414,9 +8413,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n68, err68 := v.MarshalTo(dAtA[i:])
-				if err68 != nil {
-					return 0, err68
+				n68, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n68
 			}
@@ -8440,9 +8439,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n69, err69 := (&v).MarshalTo(dAtA[i:])
-			if err69 != nil {
-				return 0, err69
+			n69, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n69
 		}
@@ -8466,9 +8465,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n70, err70 := v.MarshalTo(dAtA[i:])
-				if err70 != nil {
-					return 0, err70
+				n70, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n70
 			}
@@ -8494,9 +8493,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n71, err71 := (&v).MarshalTo(dAtA[i:])
-			if err71 != nil {
-				return 0, err71
+			n71, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n71
 		}
@@ -8522,9 +8521,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n72, err72 := v.MarshalTo(dAtA[i:])
-				if err72 != nil {
-					return 0, err72
+				n72, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n72
 			}
@@ -8550,9 +8549,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n73, err73 := (&v).MarshalTo(dAtA[i:])
-			if err73 != nil {
-				return 0, err73
+			n73, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n73
 		}
@@ -8578,9 +8577,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n74, err74 := v.MarshalTo(dAtA[i:])
-				if err74 != nil {
-					return 0, err74
+				n74, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n74
 			}
@@ -8606,9 +8605,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n75, err75 := (&v).MarshalTo(dAtA[i:])
-			if err75 != nil {
-				return 0, err75
+			n75, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n75
 		}
@@ -8634,9 +8633,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(v.Size()))
-				n76, err76 := v.MarshalTo(dAtA[i:])
-				if err76 != nil {
-					return 0, err76
+				n76, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n76
 			}
@@ -8662,9 +8661,9 @@ func (m *MapProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64((&v).Size()))
-			n77, err77 := (&v).MarshalTo(dAtA[i:])
-			if err77 != nil {
-				return 0, err77
+			n77, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n77
 		}
@@ -8709,9 +8708,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*v)))
-				n78, err78 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*v, dAtA[i:])
-				if err78 != nil {
-					return 0, err78
+				n78, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n78
 			}
@@ -8735,9 +8734,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*(&v))))
-			n79, err79 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*(&v), dAtA[i:])
-			if err79 != nil {
-				return 0, err79
+			n79, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n79
 		}
@@ -8761,9 +8760,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(*v)))
-				n80, err80 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*v, dAtA[i:])
-				if err80 != nil {
-					return 0, err80
+				n80, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n80
 			}
@@ -8787,9 +8786,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(*(&v))))
-			n81, err81 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*(&v), dAtA[i:])
-			if err81 != nil {
-				return 0, err81
+			n81, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n81
 		}
@@ -8813,9 +8812,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDouble(*v)))
-				n82, err82 := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*v, dAtA[i:])
-				if err82 != nil {
-					return 0, err82
+				n82, err := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n82
 			}
@@ -8839,9 +8838,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDouble(*(&v))))
-			n83, err83 := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*(&v), dAtA[i:])
-			if err83 != nil {
-				return 0, err83
+			n83, err := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n83
 		}
@@ -8865,9 +8864,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdFloat(*v)))
-				n84, err84 := github_com_gogo_protobuf_types.StdFloatMarshalTo(*v, dAtA[i:])
-				if err84 != nil {
-					return 0, err84
+				n84, err := github_com_gogo_protobuf_types.StdFloatMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n84
 			}
@@ -8891,9 +8890,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdFloat(*(&v))))
-			n85, err85 := github_com_gogo_protobuf_types.StdFloatMarshalTo(*(&v), dAtA[i:])
-			if err85 != nil {
-				return 0, err85
+			n85, err := github_com_gogo_protobuf_types.StdFloatMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n85
 		}
@@ -8917,9 +8916,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt64(*v)))
-				n86, err86 := github_com_gogo_protobuf_types.StdInt64MarshalTo(*v, dAtA[i:])
-				if err86 != nil {
-					return 0, err86
+				n86, err := github_com_gogo_protobuf_types.StdInt64MarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n86
 			}
@@ -8943,9 +8942,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt64(*(&v))))
-			n87, err87 := github_com_gogo_protobuf_types.StdInt64MarshalTo(*(&v), dAtA[i:])
-			if err87 != nil {
-				return 0, err87
+			n87, err := github_com_gogo_protobuf_types.StdInt64MarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n87
 		}
@@ -8969,9 +8968,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt64(*v)))
-				n88, err88 := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*v, dAtA[i:])
-				if err88 != nil {
-					return 0, err88
+				n88, err := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n88
 			}
@@ -8995,9 +8994,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt64(*(&v))))
-			n89, err89 := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*(&v), dAtA[i:])
-			if err89 != nil {
-				return 0, err89
+			n89, err := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n89
 		}
@@ -9021,9 +9020,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt32(*v)))
-				n90, err90 := github_com_gogo_protobuf_types.StdInt32MarshalTo(*v, dAtA[i:])
-				if err90 != nil {
-					return 0, err90
+				n90, err := github_com_gogo_protobuf_types.StdInt32MarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n90
 			}
@@ -9047,9 +9046,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt32(*(&v))))
-			n91, err91 := github_com_gogo_protobuf_types.StdInt32MarshalTo(*(&v), dAtA[i:])
-			if err91 != nil {
-				return 0, err91
+			n91, err := github_com_gogo_protobuf_types.StdInt32MarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n91
 		}
@@ -9073,9 +9072,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt32(*v)))
-				n92, err92 := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*v, dAtA[i:])
-				if err92 != nil {
-					return 0, err92
+				n92, err := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n92
 			}
@@ -9101,9 +9100,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt32(*(&v))))
-			n93, err93 := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*(&v), dAtA[i:])
-			if err93 != nil {
-				return 0, err93
+			n93, err := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n93
 		}
@@ -9129,9 +9128,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBool(*v)))
-				n94, err94 := github_com_gogo_protobuf_types.StdBoolMarshalTo(*v, dAtA[i:])
-				if err94 != nil {
-					return 0, err94
+				n94, err := github_com_gogo_protobuf_types.StdBoolMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n94
 			}
@@ -9157,9 +9156,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBool(*(&v))))
-			n95, err95 := github_com_gogo_protobuf_types.StdBoolMarshalTo(*(&v), dAtA[i:])
-			if err95 != nil {
-				return 0, err95
+			n95, err := github_com_gogo_protobuf_types.StdBoolMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n95
 		}
@@ -9185,9 +9184,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdString(*v)))
-				n96, err96 := github_com_gogo_protobuf_types.StdStringMarshalTo(*v, dAtA[i:])
-				if err96 != nil {
-					return 0, err96
+				n96, err := github_com_gogo_protobuf_types.StdStringMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n96
 			}
@@ -9213,9 +9212,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdString(*(&v))))
-			n97, err97 := github_com_gogo_protobuf_types.StdStringMarshalTo(*(&v), dAtA[i:])
-			if err97 != nil {
-				return 0, err97
+			n97, err := github_com_gogo_protobuf_types.StdStringMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n97
 		}
@@ -9241,9 +9240,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBytes(*v)))
-				n98, err98 := github_com_gogo_protobuf_types.StdBytesMarshalTo(*v, dAtA[i:])
-				if err98 != nil {
-					return 0, err98
+				n98, err := github_com_gogo_protobuf_types.StdBytesMarshalTo(*v, dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n98
 			}
@@ -9269,9 +9268,9 @@ func (m *MapStdTypes) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBytes(*(&v))))
-			n99, err99 := github_com_gogo_protobuf_types.StdBytesMarshalTo(*(&v), dAtA[i:])
-			if err99 != nil {
-				return 0, err99
+			n99, err := github_com_gogo_protobuf_types.StdBytesMarshalTo(*(&v), dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n99
 		}
@@ -9298,9 +9297,9 @@ func (m *OneofProtoTypes) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.OneOfProtoTimes != nil {
-		nn100, err100 := m.OneOfProtoTimes.MarshalTo(dAtA[i:])
-		if err100 != nil {
-			return 0, err100
+		nn100, err := m.OneOfProtoTimes.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn100
 	}
@@ -9316,9 +9315,9 @@ func (m *OneofProtoTypes_Timestamp) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Timestamp.Size()))
-		n101, err101 := m.Timestamp.MarshalTo(dAtA[i:])
-		if err101 != nil {
-			return 0, err101
+		n101, err := m.Timestamp.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n101
 	}
@@ -9330,9 +9329,9 @@ func (m *OneofProtoTypes_Duration) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.Duration.Size()))
-		n102, err102 := m.Duration.MarshalTo(dAtA[i:])
-		if err102 != nil {
-			return 0, err102
+		n102, err := m.Duration.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n102
 	}
@@ -9344,9 +9343,9 @@ func (m *OneofProtoTypes_RepDouble) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepDouble.Size()))
-		n103, err103 := m.RepDouble.MarshalTo(dAtA[i:])
-		if err103 != nil {
-			return 0, err103
+		n103, err := m.RepDouble.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n103
 	}
@@ -9358,9 +9357,9 @@ func (m *OneofProtoTypes_RepFloat) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepFloat.Size()))
-		n104, err104 := m.RepFloat.MarshalTo(dAtA[i:])
-		if err104 != nil {
-			return 0, err104
+		n104, err := m.RepFloat.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n104
 	}
@@ -9372,9 +9371,9 @@ func (m *OneofProtoTypes_RepInt64) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepInt64.Size()))
-		n105, err105 := m.RepInt64.MarshalTo(dAtA[i:])
-		if err105 != nil {
-			return 0, err105
+		n105, err := m.RepInt64.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n105
 	}
@@ -9386,9 +9385,9 @@ func (m *OneofProtoTypes_RepUInt64) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepUInt64.Size()))
-		n106, err106 := m.RepUInt64.MarshalTo(dAtA[i:])
-		if err106 != nil {
-			return 0, err106
+		n106, err := m.RepUInt64.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n106
 	}
@@ -9400,9 +9399,9 @@ func (m *OneofProtoTypes_RepInt32) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepInt32.Size()))
-		n107, err107 := m.RepInt32.MarshalTo(dAtA[i:])
-		if err107 != nil {
-			return 0, err107
+		n107, err := m.RepInt32.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n107
 	}
@@ -9414,9 +9413,9 @@ func (m *OneofProtoTypes_RepUInt32) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepUInt32.Size()))
-		n108, err108 := m.RepUInt32.MarshalTo(dAtA[i:])
-		if err108 != nil {
-			return 0, err108
+		n108, err := m.RepUInt32.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n108
 	}
@@ -9428,9 +9427,9 @@ func (m *OneofProtoTypes_RepBool) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepBool.Size()))
-		n109, err109 := m.RepBool.MarshalTo(dAtA[i:])
-		if err109 != nil {
-			return 0, err109
+		n109, err := m.RepBool.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n109
 	}
@@ -9442,9 +9441,9 @@ func (m *OneofProtoTypes_RepString) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepString.Size()))
-		n110, err110 := m.RepString.MarshalTo(dAtA[i:])
-		if err110 != nil {
-			return 0, err110
+		n110, err := m.RepString.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n110
 	}
@@ -9456,9 +9455,9 @@ func (m *OneofProtoTypes_RepBytes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(m.RepBytes.Size()))
-		n111, err111 := m.RepBytes.MarshalTo(dAtA[i:])
-		if err111 != nil {
-			return 0, err111
+		n111, err := m.RepBytes.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n111
 	}
@@ -9480,9 +9479,9 @@ func (m *OneofStdTypes) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.OneOfStdTimes != nil {
-		nn112, err112 := m.OneOfStdTimes.MarshalTo(dAtA[i:])
-		if err112 != nil {
-			return 0, err112
+		nn112, err := m.OneOfStdTimes.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn112
 	}
@@ -9498,9 +9497,9 @@ func (m *OneofStdTypes_Timestamp) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Timestamp)))
-		n113, err113 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Timestamp, dAtA[i:])
-		if err113 != nil {
-			return 0, err113
+		n113, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Timestamp, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n113
 	}
@@ -9512,9 +9511,9 @@ func (m *OneofStdTypes_Duration) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Duration)))
-		n114, err114 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.Duration, dAtA[i:])
-		if err114 != nil {
-			return 0, err114
+		n114, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.Duration, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n114
 	}
@@ -9526,9 +9525,9 @@ func (m *OneofStdTypes_RepDouble) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDouble(*m.RepDouble)))
-		n115, err115 := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*m.RepDouble, dAtA[i:])
-		if err115 != nil {
-			return 0, err115
+		n115, err := github_com_gogo_protobuf_types.StdDoubleMarshalTo(*m.RepDouble, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n115
 	}
@@ -9540,9 +9539,9 @@ func (m *OneofStdTypes_RepFloat) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdFloat(*m.RepFloat)))
-		n116, err116 := github_com_gogo_protobuf_types.StdFloatMarshalTo(*m.RepFloat, dAtA[i:])
-		if err116 != nil {
-			return 0, err116
+		n116, err := github_com_gogo_protobuf_types.StdFloatMarshalTo(*m.RepFloat, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n116
 	}
@@ -9554,9 +9553,9 @@ func (m *OneofStdTypes_RepInt64) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt64(*m.RepInt64)))
-		n117, err117 := github_com_gogo_protobuf_types.StdInt64MarshalTo(*m.RepInt64, dAtA[i:])
-		if err117 != nil {
-			return 0, err117
+		n117, err := github_com_gogo_protobuf_types.StdInt64MarshalTo(*m.RepInt64, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n117
 	}
@@ -9568,9 +9567,9 @@ func (m *OneofStdTypes_RepUInt64) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt64(*m.RepUInt64)))
-		n118, err118 := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*m.RepUInt64, dAtA[i:])
-		if err118 != nil {
-			return 0, err118
+		n118, err := github_com_gogo_protobuf_types.StdUInt64MarshalTo(*m.RepUInt64, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n118
 	}
@@ -9582,9 +9581,9 @@ func (m *OneofStdTypes_RepInt32) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdInt32(*m.RepInt32)))
-		n119, err119 := github_com_gogo_protobuf_types.StdInt32MarshalTo(*m.RepInt32, dAtA[i:])
-		if err119 != nil {
-			return 0, err119
+		n119, err := github_com_gogo_protobuf_types.StdInt32MarshalTo(*m.RepInt32, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n119
 	}
@@ -9596,9 +9595,9 @@ func (m *OneofStdTypes_RepUInt32) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdUInt32(*m.RepUInt32)))
-		n120, err120 := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*m.RepUInt32, dAtA[i:])
-		if err120 != nil {
-			return 0, err120
+		n120, err := github_com_gogo_protobuf_types.StdUInt32MarshalTo(*m.RepUInt32, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n120
 	}
@@ -9610,9 +9609,9 @@ func (m *OneofStdTypes_RepBool) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBool(*m.RepBool)))
-		n121, err121 := github_com_gogo_protobuf_types.StdBoolMarshalTo(*m.RepBool, dAtA[i:])
-		if err121 != nil {
-			return 0, err121
+		n121, err := github_com_gogo_protobuf_types.StdBoolMarshalTo(*m.RepBool, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n121
 	}
@@ -9624,9 +9623,9 @@ func (m *OneofStdTypes_RepString) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdString(*m.RepString)))
-		n122, err122 := github_com_gogo_protobuf_types.StdStringMarshalTo(*m.RepString, dAtA[i:])
-		if err122 != nil {
-			return 0, err122
+		n122, err := github_com_gogo_protobuf_types.StdStringMarshalTo(*m.RepString, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n122
 	}
@@ -9638,9 +9637,9 @@ func (m *OneofStdTypes_RepBytes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdBytes(*m.RepBytes)))
-		n123, err123 := github_com_gogo_protobuf_types.StdBytesMarshalTo(*m.RepBytes, dAtA[i:])
-		if err123 != nil {
-			return 0, err123
+		n123, err := github_com_gogo_protobuf_types.StdBytesMarshalTo(*m.RepBytes, dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n123
 	}
@@ -12045,7 +12044,14 @@ func (m *OneofStdTypes_RepBytes) Size() (n int) {
 }
 
 func sovTypes(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozTypes(x uint64) (n int) {
 	return sovTypes(uint64((x << 1) ^ uint64((int64(x) >> 63))))

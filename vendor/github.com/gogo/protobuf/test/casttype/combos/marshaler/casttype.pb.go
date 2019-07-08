@@ -16,7 +16,6 @@ import (
 	github_com_gogo_protobuf_test_casttype "github.com/gogo/protobuf/test/casttype"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -1192,9 +1191,9 @@ func (m *Castaway) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintCasttype(dAtA, i, uint64(v.Size()))
-				n1, err1 := v.MarshalTo(dAtA[i:])
-				if err1 != nil {
-					return 0, err1
+				n1, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n1
 			}
@@ -1218,9 +1217,9 @@ func (m *Castaway) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintCasttype(dAtA, i, uint64((&v).Size()))
-			n2, err2 := (&v).MarshalTo(dAtA[i:])
-			if err2 != nil {
-				return 0, err2
+			n2, err := (&v).MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n2
 		}
@@ -1561,7 +1560,14 @@ func (m *Wilson) Size() (n int) {
 }
 
 func sovCasttype(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozCasttype(x uint64) (n int) {
 	return sovCasttype(uint64((x << 1) ^ uint64((int64(x) >> 63))))

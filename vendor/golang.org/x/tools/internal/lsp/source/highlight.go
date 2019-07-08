@@ -6,29 +6,31 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"go/ast"
 	"go/token"
 
 	"golang.org/x/tools/go/ast/astutil"
+	"golang.org/x/tools/internal/lsp/telemetry/trace"
 	"golang.org/x/tools/internal/span"
 )
 
-func Highlight(ctx context.Context, f GoFile, pos token.Pos) []span.Span {
+func Highlight(ctx context.Context, f GoFile, pos token.Pos) ([]span.Span, error) {
+	ctx, ts := trace.StartSpan(ctx, "source.Highlight")
+	defer ts.End()
 	file := f.GetAST(ctx)
 	if file == nil {
-		return nil
+		return nil, fmt.Errorf("no AST for %s", f.URI())
 	}
 	fset := f.FileSet()
 	path, _ := astutil.PathEnclosingInterval(file, pos, pos)
 	if len(path) == 0 {
-		return nil
+		return nil, fmt.Errorf("no enclosing position found for %s", fset.Position(pos))
 	}
-
 	id, ok := path[0].(*ast.Ident)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("%s is not an identifier", fset.Position(pos))
 	}
-
 	var result []span.Span
 	if id.Obj != nil {
 		ast.Inspect(path[len(path)-1], func(n ast.Node) bool {
@@ -41,5 +43,5 @@ func Highlight(ctx context.Context, f GoFile, pos token.Pos) []span.Span {
 			return true
 		})
 	}
-	return result
+	return result, nil
 }

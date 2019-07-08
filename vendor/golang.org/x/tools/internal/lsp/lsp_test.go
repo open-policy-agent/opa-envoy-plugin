@@ -51,12 +51,18 @@ func testLSP(t *testing.T, exporter packagestest.Exporter) {
 		server: &Server{
 			session:     session,
 			undelivered: make(map[span.URI][]source.Diagnostic),
+			supportedCodeActions: map[protocol.CodeActionKind]bool{
+				protocol.SourceOrganizeImports: true,
+				protocol.QuickFix:              true,
+			},
+			hoverKind: source.SynopsisDocumentation,
 		},
 		data: data,
 	}
 	tests.Run(t, r, data)
 }
 
+// TODO: Actually test the LSP diagnostics function in this test.
 func (r *runner) Diagnostics(t *testing.T, data tests.Diagnostics) {
 	v := r.server.session.View(viewName)
 	for uri, want := range data {
@@ -144,11 +150,15 @@ func summarizeDiagnostics(i int, want []source.Diagnostic, got []source.Diagnost
 }
 
 func (r *runner) Completion(t *testing.T, data tests.Completions, snippets tests.CompletionSnippets, items tests.CompletionItems) {
+	defer func() { r.server.useDeepCompletions = false }()
+
 	for src, itemList := range data {
 		var want []source.CompletionItem
 		for _, pos := range itemList {
 			want = append(want, *items[pos])
 		}
+
+		r.server.useDeepCompletions = strings.Contains(string(src.URI()), "deepcomplete")
 
 		list := r.runCompletion(t, src)
 
@@ -177,6 +187,8 @@ func (r *runner) Completion(t *testing.T, data tests.Completions, snippets tests
 		r.server.usePlaceholders = usePlaceholders
 
 		for src, want := range snippets {
+			r.server.useDeepCompletions = strings.Contains(string(src.URI()), "deepcomplete")
+
 			list := r.runCompletion(t, src)
 
 			wantItem := items[want.CompletionItem]
@@ -463,13 +475,16 @@ func (r *runner) Reference(t *testing.T, data tests.References) {
 
 		want := make(map[protocol.Location]bool)
 		for _, pos := range itemList {
-			loc, err := sm.Location(pos)
+			m, err := r.mapper(pos.URI())
+			if err != nil {
+				t.Fatal(err)
+			}
+			loc, err := m.Location(pos)
 			if err != nil {
 				t.Fatalf("failed for %v: %v", src, err)
 			}
 			want[loc] = true
 		}
-
 		params := &protocol.ReferenceParams{
 			TextDocumentPositionParams: protocol.TextDocumentPositionParams{
 				TextDocument: protocol.TextDocumentIdentifier{URI: loc.URI},
@@ -481,15 +496,106 @@ func (r *runner) Reference(t *testing.T, data tests.References) {
 			t.Fatalf("failed for %v: %v", src, err)
 		}
 
-		if len(got) != len(itemList) {
-			t.Errorf("references failed: different lengths got %v want %v", len(got), len(itemList))
+		if len(got) != len(want) {
+			t.Errorf("references failed: different lengths got %v want %v", len(got), len(want))
 		}
 		for _, loc := range got {
 			if !want[loc] {
-				t.Errorf("references failed: incorrect references got %v want %v", got, want)
+				t.Errorf("references failed: incorrect references got %v want %v", loc, want)
 			}
 		}
 	}
+}
+
+func (r *runner) Rename(t *testing.T, data tests.Renames) {
+	ctx := context.Background()
+	for spn, newText := range data {
+		tag := fmt.Sprintf("%s-rename", newText)
+
+		uri := spn.URI()
+		filename := uri.Filename()
+		sm, err := r.mapper(uri)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loc, err := sm.Location(spn)
+		if err != nil {
+			t.Fatalf("failed for %v: %v", spn, err)
+		}
+
+		workspaceEdits, err := r.server.Rename(ctx, &protocol.RenameParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: protocol.NewURI(uri),
+			},
+			Position: loc.Range.Start,
+			NewName:  newText,
+		})
+		if err != nil {
+			renamed := string(r.data.Golden(tag, filename, func() ([]byte, error) {
+				return []byte(err.Error()), nil
+			}))
+			if err.Error() != renamed {
+				t.Errorf("rename failed for %s, expected:\n%v\ngot:\n%v\n", newText, renamed, err)
+			}
+			continue
+		}
+
+		_, m, err := getSourceFile(ctx, r.server.session.ViewOf(uri), uri)
+		if err != nil {
+			t.Error(err)
+		}
+
+		changes := *workspaceEdits.Changes
+		if len(changes) != 1 { // Renames must only affect a single file in these tests.
+			t.Errorf("rename failed for %s, edited %d files, wanted 1 file", newText, len(*workspaceEdits.Changes))
+			continue
+		}
+
+		edits := changes[string(uri)]
+		if edits == nil {
+			t.Errorf("rename failed for %s, did not edit %s", newText, filename)
+			continue
+		}
+		sedits, err := FromProtocolEdits(m, edits)
+		if err != nil {
+			t.Error(err)
+		}
+
+		got := applyEdits(string(m.Content), sedits)
+
+		gorenamed := string(r.data.Golden(tag, filename, func() ([]byte, error) {
+			return []byte(got), nil
+		}))
+
+		if gorenamed != got {
+			t.Errorf("rename failed for %s, expected:\n%v\ngot:\n%v", newText, gorenamed, got)
+		}
+	}
+}
+
+func applyEdits(contents string, edits []source.TextEdit) string {
+	res := contents
+	sortSourceTextEdits(edits)
+
+	// Apply the edits from the end of the file forward
+	// to preserve the offsets
+	for i := len(edits) - 1; i >= 0; i-- {
+		edit := edits[i]
+		start := edit.Span.Start().Offset()
+		end := edit.Span.End().Offset()
+		tmp := res[0:start] + edit.NewText
+		res = tmp + res[end:]
+	}
+	return res
+}
+
+func sortSourceTextEdits(d []source.TextEdit) {
+	sort.Slice(d, func(i int, j int) bool {
+		if r := span.Compare(d[i].Span, d[j].Span); r != 0 {
+			return r < 0
+		}
+		return d[i].NewText < d[j].NewText
+	})
 }
 
 func (r *runner) Symbol(t *testing.T, data tests.Symbols) {
@@ -582,16 +688,25 @@ func (r *runner) SignatureHelp(t *testing.T, data tests.Signatures) {
 			Position: loc.Range.Start,
 		})
 		if err != nil {
-			t.Fatal(err)
+			// Only fail if we got an error we did not expect.
+			if expectedSignatures != nil {
+				t.Fatal(err)
+			}
+			continue
 		}
-
+		if expectedSignatures == nil {
+			if gotSignatures != nil {
+				t.Errorf("expected no signature, got %v", gotSignatures)
+			}
+			continue
+		}
 		if diff := diffSignatures(spn, expectedSignatures, gotSignatures); diff != "" {
 			t.Error(diff)
 		}
 	}
 }
 
-func diffSignatures(spn span.Span, want source.SignatureInformation, got *protocol.SignatureHelp) string {
+func diffSignatures(spn span.Span, want *source.SignatureInformation, got *protocol.SignatureHelp) string {
 	decorate := func(f string, args ...interface{}) string {
 		return fmt.Sprintf("Invalid signature at %s: %s", spn, fmt.Sprintf(f, args...))
 	}
@@ -698,10 +813,10 @@ func TestBytesOffset(t *testing.T) {
 		{text: `a𐐀b`, pos: protocol.Position{Line: 0, Character: 4}, want: 6},
 		{text: `a𐐀b`, pos: protocol.Position{Line: 0, Character: 5}, want: -1},
 		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 0, Character: 3}, want: 3},
-		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 0, Character: 4}, want: -1},
+		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 0, Character: 4}, want: 3},
 		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 1, Character: 0}, want: 4},
 		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 1, Character: 3}, want: 7},
-		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 1, Character: 4}, want: -1},
+		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 1, Character: 4}, want: 7},
 		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 2, Character: 0}, want: 8},
 		{text: "aaa\nbbb\n", pos: protocol.Position{Line: 2, Character: 1}, want: -1},
 		{text: "aaa\nbbb\n\n", pos: protocol.Position{Line: 2, Character: 0}, want: 8},

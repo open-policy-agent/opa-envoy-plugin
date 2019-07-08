@@ -10,7 +10,6 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1020,9 +1019,9 @@ func (m *NestedOrderedMap) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintDeterministic(dAtA, i, uint64(m.NestedMap.Size()))
-		n1, err1 := m.NestedMap.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		n1, err := m.NestedMap.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n1
 	}
@@ -1111,9 +1110,9 @@ func (m *NestedUnorderedMap) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintDeterministic(dAtA, i, uint64(m.NestedMap.Size()))
-		n2, err2 := m.NestedMap.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		n2, err := m.NestedMap.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n2
 	}
@@ -1319,7 +1318,14 @@ func (m *NestedMap2) Size() (n int) {
 }
 
 func sovDeterministic(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozDeterministic(x uint64) (n int) {
 	return sovDeterministic(uint64((x << 1) ^ uint64((int64(x) >> 63))))

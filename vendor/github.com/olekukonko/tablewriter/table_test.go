@@ -131,7 +131,7 @@ func TestCSVInfo(t *testing.T) {
 
 	got := buf.String()
 	want := `   FIELD   |     TYPE     | NULL | KEY | DEFAULT |     EXTRA       
------------+--------------+------+-----+---------+-----------------
++----------+--------------+------+-----+---------+----------------+
   user_id  | smallint(5)  | NO   | PRI | NULL    | auto_increment  
   username | varchar(10)  | NO   |     | NULL    |                 
   password | varchar(100) | NO   |     | NULL    |                 
@@ -187,7 +187,7 @@ func TestNoBorder(t *testing.T) {
 	table.Render()
 
 	want := `    DATE   |       DESCRIPTION        |  CV2  | AMOUNT   
------------+--------------------------+-------+----------
++----------+--------------------------+-------+---------+
   1/1/2014 | Domain name              |  2233 | $10.98   
   1/1/2014 | January Hosting          |  2233 | $54.95   
            |     (empty)              |       |          
@@ -195,9 +195,9 @@ func TestNoBorder(t *testing.T) {
   1/4/2014 | February Hosting         |  2233 | $51.00   
   1/4/2014 | February Extra Bandwidth |  2233 | $30.00   
   1/4/2014 |     (Discount)           |  2233 | -$1.00   
------------+--------------------------+-------+----------
++----------+--------------------------+-------+---------+
                                         TOTAL | $145.93  
-                                      --------+----------
+                                      +-------+---------+
 `
 
 	checkEqual(t, buf.String(), want, "border table rendering failed")
@@ -395,14 +395,14 @@ func TestPrintCaptionWithFooter(t *testing.T) {
 	table.Render()
 
 	want := `    DATE   |       DESCRIPTION        |  CV2  | AMOUNT   
------------+--------------------------+-------+----------
++----------+--------------------------+-------+---------+
   1/1/2014 | Domain name              |  2233 | $10.98   
   1/1/2014 | January Hosting          |  2233 | $54.95   
   1/4/2014 | February Hosting         |  2233 | $51.00   
   1/4/2014 | February Extra Bandwidth |  2233 | $30.00   
------------+--------------------------+-------+----------
++----------+--------------------------+-------+---------+
                                         TOTAL | $146.93  
-                                      --------+----------
+                                      +-------+---------+
 This is a very long caption. The text should wrap to the
 width of the table.
 `
@@ -841,40 +841,14 @@ func TestAutoMergeRows(t *testing.T) {
 | NAME |              SIGN              | RATING |
 +------+--------------------------------+--------+
 | A    | The Good                       |    500 |
-+      +--------------------------------+--------+
-|      | The Very very very very very   |    288 |
++------+--------------------------------+--------+
+| A    | The Very very very very very   |    288 |
 |      | Bad Man                        |        |
 +------+                                +--------+
 | B    |                                |    120 |
 |      |                                |        |
 +------+--------------------------------+--------+
 | C    | The Very very Bad Man          |    200 |
-+------+--------------------------------+--------+
-`
-	checkEqual(t, buf.String(), want)
-
-	buf.Reset()
-	table = NewWriter(&buf)
-	table.SetHeader([]string{"Name", "Sign", "Rating"})
-
-	dataWithlongText2 := [][]string{
-		{"A", "The Good", "500"},
-		{"A", "The Very very very very very Bad Man", "288"},
-		{"B", "The Very very Bad Man", "120"},
-	}
-	table.AppendBulk(dataWithlongText2)
-	table.SetAutoMergeCells(true)
-	table.SetRowLine(true)
-	table.Render()
-	want = `+------+--------------------------------+--------+
-| NAME |              SIGN              | RATING |
-+------+--------------------------------+--------+
-| A    | The Good                       |    500 |
-+      +--------------------------------+--------+
-|      | The Very very very very very   |    288 |
-|      | Bad Man                        |        |
-+------+--------------------------------+--------+
-| B    | The Very very Bad Man          |    120 |
 +------+--------------------------------+--------+
 `
 	checkEqual(t, buf.String(), want)
