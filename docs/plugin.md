@@ -45,9 +45,6 @@
    ```bash
    cd $GOPATH/src/github.com/open-policy-agent/opa-istio-plugin
 
-   glide up -v
-
-   # Generate protos
-   ./build/gen-protos.sh
+   dep ensure
    ```
 
