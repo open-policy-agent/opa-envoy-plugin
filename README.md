@@ -107,7 +107,7 @@ To deploy OPA-Istio include the following container in your Kubernetes Deploymen
 
 ```yaml
 containers:
-- image: openpolicyagent/opa:0.12.0-istio
+- image: openpolicyagent/opa:0.12.1-istio
   imagePullPolicy: IfNotPresent
   name: opa-istio
   volumeMounts:
@@ -282,11 +282,7 @@ allow {
 
 ## Dependencies
 
-Dependencies are managed with [Glide](https://github.com/Masterminds/glide).
-If you need to add or update dependencies, modify the `glide.yaml` file and
-then run `glide update --strip-vendor` and then commit all changes to the
-repository. You will need to have Glide v0.13 or newer installed.
-
-If you update any of the gRPC, protobuf, or
-`github.com/envoyproxy/data-plane-api` dependencies, you should regenerate
-the Go code that depends on them by running `gen-protos.sh` in this directory.
+Dependencies are managed with [dep](https://golang.github.io/dep/).
+If you need to add or update dependencies, modify the `Gopkg.toml` file and
+then use the `dep ensure` command. Finally commit all changes to the
+repository.
