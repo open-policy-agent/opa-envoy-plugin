@@ -16,7 +16,7 @@ import (
 
 	ctx "golang.org/x/net/context"
 
-	ext_authz "github.com/envoyproxy/data-plane-api/envoy/service/auth/v2"
+	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
