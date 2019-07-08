@@ -193,6 +193,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 	err := storage.Txn(ctx, p.manager.Store, storage.TransactionParams{}, func(txn storage.Transaction) error {
 
 		var err error
+		var decision, ok bool
 
 		result.revision, err = getRevision(ctx, p.manager.Store, txn)
 		if err != nil {
@@ -227,12 +228,11 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			return err
 		} else if len(rs) == 0 {
 			return fmt.Errorf("undefined decision")
-		} else if b, ok := rs[0].Expressions[0].Value.(bool); !ok || len(rs) > 1 {
+		} else if decision, ok = rs[0].Expressions[0].Value.(bool); !ok || len(rs) > 1 {
 			return fmt.Errorf("non-boolean decision")
-		} else {
-			result.decision = b
 		}
 
+		result.decision = decision
 		return nil
 	})
 

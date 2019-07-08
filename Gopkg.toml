@@ -2,7 +2,8 @@ required = [
   "golang.org/x/lint/golint",
   "golang.org/x/tools/cmd/goimports",
   "github.com/spf13/pflag",
-  "github.com/spf13/cobra/cobra"
+  "github.com/spf13/cobra/cobra",
+  "github.com/golang/lint/golint"
 ]
 
 [[constraint]]
