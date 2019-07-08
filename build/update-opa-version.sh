@@ -16,11 +16,11 @@ if [ $# -eq 0 ]
     exit 1
 fi
 
-# Update the OPA verison in glide.yaml
-sed -i "/opa/{N;s/version: .*/version: $1/;}" glide.yaml
+# Update the OPA verison in Gopkg.toml
+sed -i "/opa/{N;s/version = .*/version = \"$1\"/;}" Gopkg.toml
 
 # Check if OPA version has changed
-git status |  grep  glide.yaml
+git status |  grep  Gopkg.toml
 if [ $? -eq 0 ]; then
 
   tag=$(echo $1 | cut -c 2-)   # Remove 'v' in Tag. Eg. v0.8.0 -> 0.8.0
@@ -31,11 +31,8 @@ if [ $? -eq 0 ]; then
   # update plugin image version in quick_start.yaml
   sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
 
-  # run glide update
-  glide up -v
-
-  # generate protos
-  ./build/gen-protos.sh
+  # update OPA
+  dep ensure -update github.com/open-policy-agent/opa
 
   # add changes
   git add .

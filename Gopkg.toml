@@ -1,0 +1,34 @@
+required = [
+  "golang.org/x/lint/golint",
+  "golang.org/x/tools/cmd/goimports",
+  "github.com/spf13/pflag",
+  "github.com/spf13/cobra/cobra"
+]
+
+[[constraint]]
+  name = "golang.org/x/net"
+  revision = "da137c7871d730100384dbcf36e6f8fa493aef5b"
+
+[[constraint]]
+  name = "github.com/open-policy-agent/opa"
+  version = "v0.12.1"
+
+[[constraint]]
+  name = "github.com/sirupsen/logrus"
+  version = "v1.4.2"
+
+[[constraint]]
+  name = "github.com/envoyproxy/go-control-plane"
+  version = "v0.8.1"
+
+[[constraint]]
+  name = "github.com/gogo/googleapis"
+  revision = "d31c731455cb061f42baff3bda55bad0118b126b"
+
+[[constraint]]
+  name = "google.golang.org/grpc"
+  version = "1.10.0"
+
+[[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "https://github.com/fsnotify/fsnotify.git"
