@@ -10,7 +10,6 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -271,9 +270,9 @@ func (m *OneofTest) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Union != nil {
-		nn1, err1 := m.Union.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		nn1, err := m.Union.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn1
 	}
@@ -419,7 +418,14 @@ func (m *OneofTest_I) Size() (n int) {
 }
 
 func sovIssue322(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozIssue322(x uint64) (n int) {
 	return sovIssue322(uint64((x << 1) ^ uint64((int64(x) >> 63))))

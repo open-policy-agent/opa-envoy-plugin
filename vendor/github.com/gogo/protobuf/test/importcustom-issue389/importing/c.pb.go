@@ -12,7 +12,6 @@ import (
 	github_com_gogo_protobuf_test_importcustom_issue389_imported "github.com/gogo/protobuf/test/importcustom-issue389/imported"
 	io "io"
 	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -138,9 +137,9 @@ func (m *C) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintC(dAtA, i, uint64(m.F2.Size()))
-		n1, err1 := m.F2.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		n1, err := m.F2.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n1
 	}
@@ -259,7 +258,14 @@ func (m *C) Size() (n int) {
 }
 
 func sovC(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozC(x uint64) (n int) {
 	return sovC(uint64((x << 1) ^ uint64((int64(x) >> 63))))

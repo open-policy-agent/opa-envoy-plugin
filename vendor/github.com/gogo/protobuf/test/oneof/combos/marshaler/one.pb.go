@@ -16,7 +16,6 @@ import (
 	github_com_gogo_protobuf_test_custom "github.com/gogo/protobuf/test/custom"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -3459,9 +3458,9 @@ func (m *AllTypesOneOf) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.TestOneof != nil {
-		nn1, err1 := m.TestOneof.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		nn1, err := m.TestOneof.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn1
 	}
@@ -3599,9 +3598,9 @@ func (m *AllTypesOneOf_SubMessage) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1
 		i++
 		i = encodeVarintOne(dAtA, i, uint64(m.SubMessage.Size()))
-		n2, err2 := m.SubMessage.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		n2, err := m.SubMessage.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n2
 	}
@@ -3623,16 +3622,16 @@ func (m *TwoOneofs) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.One != nil {
-		nn3, err3 := m.One.MarshalTo(dAtA[i:])
-		if err3 != nil {
-			return 0, err3
+		nn3, err := m.One.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn3
 	}
 	if m.Two != nil {
-		nn4, err4 := m.Two.MarshalTo(dAtA[i:])
-		if err4 != nil {
-			return 0, err4
+		nn4, err := m.Two.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn4
 	}
@@ -3695,9 +3694,9 @@ func (m *TwoOneofs_SubMessage2) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2
 		i++
 		i = encodeVarintOne(dAtA, i, uint64(m.SubMessage2.Size()))
-		n5, err5 := m.SubMessage2.MarshalTo(dAtA[i:])
-		if err5 != nil {
-			return 0, err5
+		n5, err := m.SubMessage2.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n5
 	}
@@ -3719,9 +3718,9 @@ func (m *CustomOneof) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Custom != nil {
-		nn6, err6 := m.Custom.MarshalTo(dAtA[i:])
-		if err6 != nil {
-			return 0, err6
+		nn6, err := m.Custom.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn6
 	}
@@ -3748,9 +3747,9 @@ func (m *CustomOneof_CustomType) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x2
 	i++
 	i = encodeVarintOne(dAtA, i, uint64(m.CustomType.Size()))
-	n7, err7 := m.CustomType.MarshalTo(dAtA[i:])
-	if err7 != nil {
-		return 0, err7
+	n7, err := m.CustomType.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n7
 	return i, nil
@@ -4446,7 +4445,14 @@ func (m *CustomOneof_MyCustomName) Size() (n int) {
 }
 
 func sovOne(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozOne(x uint64) (n int) {
 	return sovOne(uint64((x << 1) ^ uint64((int64(x) >> 63))))

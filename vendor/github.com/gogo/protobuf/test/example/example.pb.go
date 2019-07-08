@@ -16,7 +16,6 @@ import (
 	io "io"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -1339,9 +1338,9 @@ func (m *A) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1a
 	i++
 	i = encodeVarintExample(dAtA, i, uint64(m.Id.Size()))
-	n1, err1 := m.Id.MarshalTo(dAtA[i:])
-	if err1 != nil {
-		return 0, err1
+	n1, err := m.Id.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n1
 	if m.XXX_unrecognized != nil {
@@ -1368,9 +1367,9 @@ func (m *B) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintExample(dAtA, i, uint64(m.A.Size()))
-	n2, err2 := m.A.MarshalTo(dAtA[i:])
-	if err2 != nil {
-		return 0, err2
+	n2, err := m.A.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
 	i += n2
 	if len(m.G) > 0 {
@@ -1436,9 +1435,9 @@ func (m *U) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintExample(dAtA, i, uint64(m.A.Size()))
-		n3, err3 := m.A.MarshalTo(dAtA[i:])
-		if err3 != nil {
-			return 0, err3
+		n3, err := m.A.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n3
 	}
@@ -1446,9 +1445,9 @@ func (m *U) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintExample(dAtA, i, uint64(m.B.Size()))
-		n4, err4 := m.B.MarshalTo(dAtA[i:])
-		if err4 != nil {
-			return 0, err4
+		n4, err := m.B.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n4
 	}
@@ -1830,7 +1829,14 @@ func (m *CastType) Size() (n int) {
 }
 
 func sovExample(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozExample(x uint64) (n int) {
 	return sovExample(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1876,8 +1882,8 @@ func (this *U) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&U{`,
-		`A:` + strings.Replace(this.A.String(), "A", "A", 1) + `,`,
-		`B:` + strings.Replace(this.B.String(), "B", "B", 1) + `,`,
+		`A:` + strings.Replace(fmt.Sprintf("%v", this.A), "A", "A", 1) + `,`,
+		`B:` + strings.Replace(fmt.Sprintf("%v", this.B), "B", "B", 1) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")

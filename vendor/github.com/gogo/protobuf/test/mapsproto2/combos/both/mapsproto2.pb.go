@@ -18,7 +18,6 @@ import (
 	io "io"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strconv "strconv"
 	strings "strings"
@@ -2489,9 +2488,9 @@ func (m *CustomMap) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintMapsproto2(dAtA, i, uint64(v.Size()))
-				n1, err1 := v.MarshalTo(dAtA[i:])
-				if err1 != nil {
-					return 0, err1
+				n1, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n1
 			}
@@ -2514,9 +2513,9 @@ func (m *CustomMap) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintMapsproto2(dAtA, i, uint64(v.Size()))
-			n2, err2 := v.MarshalTo(dAtA[i:])
-			if err2 != nil {
-				return 0, err2
+			n2, err := v.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n2
 		}
@@ -2541,9 +2540,9 @@ func (m *CustomMap) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintMapsproto2(dAtA, i, uint64(v.Size()))
-				n3, err3 := v.MarshalTo(dAtA[i:])
-				if err3 != nil {
-					return 0, err3
+				n3, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n3
 			}
@@ -2566,9 +2565,9 @@ func (m *CustomMap) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 			i++
 			i = encodeVarintMapsproto2(dAtA, i, uint64(v.Size()))
-			n4, err4 := v.MarshalTo(dAtA[i:])
-			if err4 != nil {
-				return 0, err4
+			n4, err := v.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
 			}
 			i += n4
 		}
@@ -2891,9 +2890,9 @@ func (m *AllMaps) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintMapsproto2(dAtA, i, uint64(v.Size()))
-				n5, err5 := v.MarshalTo(dAtA[i:])
-				if err5 != nil {
-					return 0, err5
+				n5, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n5
 			}
@@ -3302,9 +3301,9 @@ func (m *AllMapsOrdered) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintMapsproto2(dAtA, i, uint64(v.Size()))
-				n6, err6 := v.MarshalTo(dAtA[i:])
-				if err6 != nil {
-					return 0, err6
+				n6, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n6
 			}
@@ -4176,7 +4175,14 @@ func (m *AllMapsOrdered) Size() (n int) {
 }
 
 func sovMapsproto2(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozMapsproto2(x uint64) (n int) {
 	return sovMapsproto2(uint64((x << 1) ^ uint64((int64(x) >> 63))))

@@ -12,7 +12,6 @@ import (
 	_ "github.com/gogo/protobuf/types"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 	time "time"
@@ -4949,7 +4948,14 @@ func (m *OneofStdTypes_RepBytes) Size() (n int) {
 }
 
 func sovStdtypes(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozStdtypes(x uint64) (n int) {
 	return sovStdtypes(uint64((x << 1) ^ uint64((int64(x) >> 63))))

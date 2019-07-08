@@ -26,12 +26,20 @@ func (s *Server) initialize(ctx context.Context, params *protocol.InitializePara
 	}
 	s.isInitialized = true // mark server as initialized now
 
-	// TODO(iancottrell): Change this default to protocol.Incremental and remove the option
-	s.textDocumentSyncKind = protocol.Full
+	// TODO: Remove the option once we are certain there are no issues here.
+	s.textDocumentSyncKind = protocol.Incremental
 	if opts, ok := params.InitializationOptions.(map[string]interface{}); ok {
-		if opt, ok := opts["incrementalSync"].(bool); ok && opt {
-			s.textDocumentSyncKind = protocol.Incremental
+		if opt, ok := opts["noIncrementalSync"].(bool); ok && opt {
+			s.textDocumentSyncKind = protocol.Full
 		}
+	}
+
+	// Default to using synopsis as a default for hover information.
+	s.hoverKind = source.SynopsisDocumentation
+
+	s.supportedCodeActions = map[protocol.CodeActionKind]bool{
+		protocol.SourceOrganizeImports: true,
+		protocol.QuickFix:              true,
 	}
 
 	s.setClientCapabilities(params.Capabilities)
@@ -70,12 +78,16 @@ func (s *Server) initialize(ctx context.Context, params *protocol.InitializePara
 			DocumentHighlightProvider:  true,
 			DocumentLinkProvider:       &protocol.DocumentLinkOptions{},
 			ReferencesProvider:         true,
+			RenameProvider:             true,
 			SignatureHelpProvider: &protocol.SignatureHelpOptions{
 				TriggerCharacters: []string{"(", ","},
 			},
 			TextDocumentSync: &protocol.TextDocumentSyncOptions{
 				Change:    s.textDocumentSyncKind,
 				OpenClose: true,
+				Save: &protocol.SaveOptions{
+					IncludeText: false,
+				},
 			},
 			TypeDefinitionProvider: true,
 			Workspace: &struct {
@@ -136,7 +148,7 @@ func (s *Server) initialized(ctx context.Context, params *protocol.InitializedPa
 			if err != nil {
 				return err
 			}
-			if err := s.processConfig(view, config[0]); err != nil {
+			if err := s.processConfig(ctx, view, config[0]); err != nil {
 				return err
 			}
 		}
@@ -147,7 +159,7 @@ func (s *Server) initialized(ctx context.Context, params *protocol.InitializedPa
 	return nil
 }
 
-func (s *Server) processConfig(view source.View, config interface{}) error {
+func (s *Server) processConfig(ctx context.Context, view source.View, config interface{}) error {
 	// TODO: We should probably store and process more of the config.
 	if config == nil {
 		return nil // ignore error if you don't have a config
@@ -184,9 +196,23 @@ func (s *Server) processConfig(view source.View, config interface{}) error {
 	if usePlaceholders, ok := c["usePlaceholders"].(bool); ok {
 		s.usePlaceholders = usePlaceholders
 	}
-	// Check if user has disabled documentation on hover.
-	if noDocsOnHover, ok := c["noDocsOnHover"].(bool); ok {
-		s.noDocsOnHover = noDocsOnHover
+	// Set the hover kind.
+	if hoverKind, ok := c["hoverKind"].(string); ok {
+		switch hoverKind {
+		case "NoDocumentation":
+			s.hoverKind = source.NoDocumentation
+		case "SynopsisDocumentation":
+			s.hoverKind = source.SynopsisDocumentation
+		case "FullDocumentation":
+			s.hoverKind = source.FullDocumentation
+		default:
+			view.Session().Logger().Errorf(ctx, "unsupported hover kind %s", hoverKind)
+			// The default value is already be set to synopsis.
+		}
+	}
+	// Check if the user wants to see suggested fixes from go/analysis.
+	if wantSuggestedFixes, ok := c["wantSuggestedFixes"].(bool); ok {
+		s.wantSuggestedFixes = wantSuggestedFixes
 	}
 	// Check if the user has explicitly disabled any analyses.
 	if disabledAnalyses, ok := c["experimentalDisabledAnalyses"].([]interface{}); ok {
@@ -196,6 +222,10 @@ func (s *Server) processConfig(view source.View, config interface{}) error {
 				s.disabledAnalyses[a] = struct{}{}
 			}
 		}
+	}
+	// Check if deep completions are enabled.
+	if useDeepCompletions, ok := c["useDeepCompletions"].(bool); ok {
+		s.useDeepCompletions = useDeepCompletions
 	}
 	return nil
 }

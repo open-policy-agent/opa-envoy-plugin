@@ -9,7 +9,6 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -915,9 +914,9 @@ func (m *Api) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintApi(dAtA, i, uint64(m.SourceContext.Size()))
-		n1, err1 := m.SourceContext.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		n1, err := m.SourceContext.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n1
 	}
@@ -1305,7 +1304,14 @@ func (m *Mixin) Size() (n int) {
 }
 
 func sovApi(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozApi(x uint64) (n int) {
 	return sovApi(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1314,28 +1320,13 @@ func (this *Api) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForMethods := "[]*Method{"
-	for _, f := range this.Methods {
-		repeatedStringForMethods += strings.Replace(f.String(), "Method", "Method", 1) + ","
-	}
-	repeatedStringForMethods += "}"
-	repeatedStringForOptions := "[]*Option{"
-	for _, f := range this.Options {
-		repeatedStringForOptions += strings.Replace(fmt.Sprintf("%v", f), "Option", "Option", 1) + ","
-	}
-	repeatedStringForOptions += "}"
-	repeatedStringForMixins := "[]*Mixin{"
-	for _, f := range this.Mixins {
-		repeatedStringForMixins += strings.Replace(f.String(), "Mixin", "Mixin", 1) + ","
-	}
-	repeatedStringForMixins += "}"
 	s := strings.Join([]string{`&Api{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
-		`Methods:` + repeatedStringForMethods + `,`,
-		`Options:` + repeatedStringForOptions + `,`,
+		`Methods:` + strings.Replace(fmt.Sprintf("%v", this.Methods), "Method", "Method", 1) + `,`,
+		`Options:` + strings.Replace(fmt.Sprintf("%v", this.Options), "Option", "Option", 1) + `,`,
 		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
 		`SourceContext:` + strings.Replace(fmt.Sprintf("%v", this.SourceContext), "SourceContext", "SourceContext", 1) + `,`,
-		`Mixins:` + repeatedStringForMixins + `,`,
+		`Mixins:` + strings.Replace(fmt.Sprintf("%v", this.Mixins), "Mixin", "Mixin", 1) + `,`,
 		`Syntax:` + fmt.Sprintf("%v", this.Syntax) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
@@ -1346,18 +1337,13 @@ func (this *Method) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForOptions := "[]*Option{"
-	for _, f := range this.Options {
-		repeatedStringForOptions += strings.Replace(fmt.Sprintf("%v", f), "Option", "Option", 1) + ","
-	}
-	repeatedStringForOptions += "}"
 	s := strings.Join([]string{`&Method{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
 		`RequestTypeUrl:` + fmt.Sprintf("%v", this.RequestTypeUrl) + `,`,
 		`RequestStreaming:` + fmt.Sprintf("%v", this.RequestStreaming) + `,`,
 		`ResponseTypeUrl:` + fmt.Sprintf("%v", this.ResponseTypeUrl) + `,`,
 		`ResponseStreaming:` + fmt.Sprintf("%v", this.ResponseStreaming) + `,`,
-		`Options:` + repeatedStringForOptions + `,`,
+		`Options:` + strings.Replace(fmt.Sprintf("%v", this.Options), "Option", "Option", 1) + `,`,
 		`Syntax:` + fmt.Sprintf("%v", this.Syntax) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,

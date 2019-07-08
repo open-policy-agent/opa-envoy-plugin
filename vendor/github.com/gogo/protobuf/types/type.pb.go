@@ -9,7 +9,6 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strconv "strconv"
 	strings "strings"
@@ -1466,9 +1465,9 @@ func (m *Type) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintType(dAtA, i, uint64(m.SourceContext.Size()))
-		n1, err1 := m.SourceContext.MarshalTo(dAtA[i:])
-		if err1 != nil {
-			return 0, err1
+		n1, err := m.SourceContext.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n1
 	}
@@ -1619,9 +1618,9 @@ func (m *Enum) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintType(dAtA, i, uint64(m.SourceContext.Size()))
-		n2, err2 := m.SourceContext.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		n2, err := m.SourceContext.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n2
 	}
@@ -1705,9 +1704,9 @@ func (m *Option) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintType(dAtA, i, uint64(m.Value.Size()))
-		n3, err3 := m.Value.MarshalTo(dAtA[i:])
-		if err3 != nil {
-			return 0, err3
+		n3, err := m.Value.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n3
 	}
@@ -2090,7 +2089,14 @@ func (m *Option) Size() (n int) {
 }
 
 func sovType(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozType(x uint64) (n int) {
 	return sovType(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -2099,21 +2105,11 @@ func (this *Type) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForFields := "[]*Field{"
-	for _, f := range this.Fields {
-		repeatedStringForFields += strings.Replace(f.String(), "Field", "Field", 1) + ","
-	}
-	repeatedStringForFields += "}"
-	repeatedStringForOptions := "[]*Option{"
-	for _, f := range this.Options {
-		repeatedStringForOptions += strings.Replace(f.String(), "Option", "Option", 1) + ","
-	}
-	repeatedStringForOptions += "}"
 	s := strings.Join([]string{`&Type{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
-		`Fields:` + repeatedStringForFields + `,`,
+		`Fields:` + strings.Replace(fmt.Sprintf("%v", this.Fields), "Field", "Field", 1) + `,`,
 		`Oneofs:` + fmt.Sprintf("%v", this.Oneofs) + `,`,
-		`Options:` + repeatedStringForOptions + `,`,
+		`Options:` + strings.Replace(fmt.Sprintf("%v", this.Options), "Option", "Option", 1) + `,`,
 		`SourceContext:` + strings.Replace(fmt.Sprintf("%v", this.SourceContext), "SourceContext", "SourceContext", 1) + `,`,
 		`Syntax:` + fmt.Sprintf("%v", this.Syntax) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
@@ -2125,11 +2121,6 @@ func (this *Field) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForOptions := "[]*Option{"
-	for _, f := range this.Options {
-		repeatedStringForOptions += strings.Replace(f.String(), "Option", "Option", 1) + ","
-	}
-	repeatedStringForOptions += "}"
 	s := strings.Join([]string{`&Field{`,
 		`Kind:` + fmt.Sprintf("%v", this.Kind) + `,`,
 		`Cardinality:` + fmt.Sprintf("%v", this.Cardinality) + `,`,
@@ -2138,7 +2129,7 @@ func (this *Field) String() string {
 		`TypeUrl:` + fmt.Sprintf("%v", this.TypeUrl) + `,`,
 		`OneofIndex:` + fmt.Sprintf("%v", this.OneofIndex) + `,`,
 		`Packed:` + fmt.Sprintf("%v", this.Packed) + `,`,
-		`Options:` + repeatedStringForOptions + `,`,
+		`Options:` + strings.Replace(fmt.Sprintf("%v", this.Options), "Option", "Option", 1) + `,`,
 		`JsonName:` + fmt.Sprintf("%v", this.JsonName) + `,`,
 		`DefaultValue:` + fmt.Sprintf("%v", this.DefaultValue) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
@@ -2150,20 +2141,10 @@ func (this *Enum) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForEnumvalue := "[]*EnumValue{"
-	for _, f := range this.Enumvalue {
-		repeatedStringForEnumvalue += strings.Replace(f.String(), "EnumValue", "EnumValue", 1) + ","
-	}
-	repeatedStringForEnumvalue += "}"
-	repeatedStringForOptions := "[]*Option{"
-	for _, f := range this.Options {
-		repeatedStringForOptions += strings.Replace(f.String(), "Option", "Option", 1) + ","
-	}
-	repeatedStringForOptions += "}"
 	s := strings.Join([]string{`&Enum{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
-		`Enumvalue:` + repeatedStringForEnumvalue + `,`,
-		`Options:` + repeatedStringForOptions + `,`,
+		`Enumvalue:` + strings.Replace(fmt.Sprintf("%v", this.Enumvalue), "EnumValue", "EnumValue", 1) + `,`,
+		`Options:` + strings.Replace(fmt.Sprintf("%v", this.Options), "Option", "Option", 1) + `,`,
 		`SourceContext:` + strings.Replace(fmt.Sprintf("%v", this.SourceContext), "SourceContext", "SourceContext", 1) + `,`,
 		`Syntax:` + fmt.Sprintf("%v", this.Syntax) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
@@ -2175,15 +2156,10 @@ func (this *EnumValue) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForOptions := "[]*Option{"
-	for _, f := range this.Options {
-		repeatedStringForOptions += strings.Replace(f.String(), "Option", "Option", 1) + ","
-	}
-	repeatedStringForOptions += "}"
 	s := strings.Join([]string{`&EnumValue{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
 		`Number:` + fmt.Sprintf("%v", this.Number) + `,`,
-		`Options:` + repeatedStringForOptions + `,`,
+		`Options:` + strings.Replace(fmt.Sprintf("%v", this.Options), "Option", "Option", 1) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")

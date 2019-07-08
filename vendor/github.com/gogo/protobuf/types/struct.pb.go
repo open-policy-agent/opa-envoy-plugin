@@ -11,7 +11,6 @@ import (
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	io "io"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strconv "strconv"
 	strings "strings"
@@ -879,9 +878,9 @@ func (m *Struct) MarshalTo(dAtA []byte) (int, error) {
 				dAtA[i] = 0x12
 				i++
 				i = encodeVarintStruct(dAtA, i, uint64(v.Size()))
-				n1, err1 := v.MarshalTo(dAtA[i:])
-				if err1 != nil {
-					return 0, err1
+				n1, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
 				}
 				i += n1
 			}
@@ -909,9 +908,9 @@ func (m *Value) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Kind != nil {
-		nn2, err2 := m.Kind.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		nn2, err := m.Kind.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += nn2
 	}
@@ -962,9 +961,9 @@ func (m *Value_StructValue) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintStruct(dAtA, i, uint64(m.StructValue.Size()))
-		n3, err3 := m.StructValue.MarshalTo(dAtA[i:])
-		if err3 != nil {
-			return 0, err3
+		n3, err := m.StructValue.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n3
 	}
@@ -976,9 +975,9 @@ func (m *Value_ListValue) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintStruct(dAtA, i, uint64(m.ListValue.Size()))
-		n4, err4 := m.ListValue.MarshalTo(dAtA[i:])
-		if err4 != nil {
-			return 0, err4
+		n4, err := m.ListValue.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n4
 	}
@@ -1304,7 +1303,14 @@ func (m *ListValue) Size() (n int) {
 }
 
 func sovStruct(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozStruct(x uint64) (n int) {
 	return sovStruct(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1405,13 +1411,8 @@ func (this *ListValue) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForValues := "[]*Value{"
-	for _, f := range this.Values {
-		repeatedStringForValues += strings.Replace(f.String(), "Value", "Value", 1) + ","
-	}
-	repeatedStringForValues += "}"
 	s := strings.Join([]string{`&ListValue{`,
-		`Values:` + repeatedStringForValues + `,`,
+		`Values:` + strings.Replace(fmt.Sprintf("%v", this.Values), "Value", "Value", 1) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")

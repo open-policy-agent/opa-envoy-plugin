@@ -13,7 +13,6 @@ import (
 	github_com_gogo_protobuf_protoc_gen_gogo_descriptor "github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -568,7 +567,14 @@ func (m *M) Size() (n int) {
 }
 
 func sovFileDot(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozFileDot(x uint64) (n int) {
 	return sovFileDot(uint64((x << 1) ^ uint64((int64(x) >> 63))))

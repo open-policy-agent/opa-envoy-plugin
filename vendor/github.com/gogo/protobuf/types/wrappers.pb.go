@@ -10,7 +10,6 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -1804,7 +1803,14 @@ func (m *BytesValue) Size() (n int) {
 }
 
 func sovWrappers(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozWrappers(x uint64) (n int) {
 	return sovWrappers(uint64((x << 1) ^ uint64((int64(x) >> 63))))

@@ -141,7 +141,6 @@ type size struct {
 	atleastOne bool
 	localName  string
 	typesPkg   generator.Single
-	bitsPkg    generator.Single
 }
 
 func NewSize() *size {
@@ -189,7 +188,14 @@ func keySize(fieldNumber int32, wireType int) int {
 func (p *size) sizeVarint() {
 	p.P(`
 	func sov`, p.localName, `(x uint64) (n int) {
-                return (`, p.bitsPkg.Use(), `.Len64(x | 1) + 6)/ 7
+		for {
+			n++
+			x >>= 7
+			if x == 0 {
+				break
+			}
+		}
+		return n
 	}`)
 }
 
@@ -583,7 +589,6 @@ func (p *size) Generate(file *generator.FileDescriptor) {
 	p.localName = generator.FileName(file)
 	p.typesPkg = p.NewImport("github.com/gogo/protobuf/types")
 	protoPkg := p.NewImport("github.com/gogo/protobuf/proto")
-	p.bitsPkg = p.NewImport("math/bits")
 	if !gogoproto.ImportsGoGoProto(file.FileDescriptorProto) {
 		protoPkg = p.NewImport("github.com/golang/protobuf/proto")
 	}

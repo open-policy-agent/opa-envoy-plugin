@@ -15,7 +15,6 @@ import (
 	io "io"
 	io_ioutil "io/ioutil"
 	math "math"
-	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -1126,9 +1125,9 @@ func (m *NewNoGroup) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintUnrecognizedgroup(dAtA, i, uint64(m.A.Size()))
-		n2, err2 := m.A.MarshalTo(dAtA[i:])
-		if err2 != nil {
-			return 0, err2
+		n2, err := m.A.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
 		}
 		i += n2
 	}
@@ -1414,7 +1413,14 @@ func (m *A) Size() (n int) {
 }
 
 func sovUnrecognizedgroup(x uint64) (n int) {
-	return (math_bits.Len64(x|1) + 6) / 7
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }
 func sozUnrecognizedgroup(x uint64) (n int) {
 	return sovUnrecognizedgroup(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1426,7 +1432,7 @@ func (this *NewNoGroup) String() string {
 	s := strings.Join([]string{`&NewNoGroup{`,
 		`Field1:` + valueToStringUnrecognizedgroup(this.Field1) + `,`,
 		`Field3:` + fmt.Sprintf("%v", this.Field3) + `,`,
-		`A:` + strings.Replace(this.A.String(), "A", "A", 1) + `,`,
+		`A:` + strings.Replace(fmt.Sprintf("%v", this.A), "A", "A", 1) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
