@@ -92,17 +92,6 @@
   version = "v1.2.1"
 
 [[projects]]
-  branch = "travis-1.9"
-  digest = "1:d45f5fe0f8bf6cd0bc592502e7e8ec647d769e55387fe326eb624d67282a7d15"
-  name = "github.com/golang/lint"
-  packages = [
-    ".",
-    "golint",
-  ]
-  pruneopts = ""
-  revision = "883fe33ffc4344bad1ecd881f61afd5ec5d80e0a"
-
-[[projects]]
   digest = "1:529d738b7976c3848cae5cf3a8036440166835e389c1f617af701eeb12a0518d"
   name = "github.com/golang/protobuf"
   packages = [
@@ -572,7 +561,6 @@
   input-imports = [
     "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2",
     "github.com/gogo/googleapis/google/rpc",
-    "github.com/golang/lint/golint",
     "github.com/open-policy-agent/opa/ast",
     "github.com/open-policy-agent/opa/cmd",
     "github.com/open-policy-agent/opa/metrics",
