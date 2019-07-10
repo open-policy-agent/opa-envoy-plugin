@@ -104,7 +104,7 @@ func TestCheckAllow(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{})
+	server := testAuthzServer(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -122,7 +122,7 @@ func TestCheckAllowParsedPath(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{})
+	server := testAuthzServer(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -146,7 +146,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(customLogger)
+	server := testAuthzServer(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -177,7 +177,7 @@ func TestCheckDeny(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{})
+	server := testAuthzServer(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -185,6 +185,27 @@ func TestCheckDeny(t *testing.T) {
 	}
 	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
 		t.Fatal("Expected request to be denied but got:", output)
+	}
+}
+
+func TestCheckDenyWithDryRunTrue(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(&testPlugin{}, true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected exampleDeniedRequest to be allowed because dry-run=true but got:", output)
 	}
 }
 
@@ -201,7 +222,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(customLogger)
+	server := testAuthzServer(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -235,7 +256,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	// create custom logger
 	customLogger := &testPluginError{}
 
-	server := testAuthzServer(customLogger)
+	server := testAuthzServer(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -251,7 +272,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	}
 }
 
-func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
+func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 	ctx := context.Background()
 
 	// Define a RBAC policy to allow or deny requests based on user roles
@@ -331,7 +352,7 @@ func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 		cfg: Config{
 			Addr:        ":50052",
 			Query:       query,
-			DryRun:      false,
+			DryRun:      dryRun,
 			parsedQuery: parsedQuery,
 		},
 		manager: m,
