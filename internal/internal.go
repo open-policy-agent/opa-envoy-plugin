@@ -230,12 +230,16 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 
 		rs, err := rego.New(opts...).Eval(ctx)
 
-		if err != nil {
-			return err
-		} else if len(rs) == 0 {
-			return fmt.Errorf("undefined decision")
-		} else if decision, ok = rs[0].Expressions[0].Value.(bool); !ok || len(rs) > 1 {
-			return fmt.Errorf("non-boolean decision")
+		// In "dry-run" mode, ignore all failure conditions
+		// even ones that would typically be considered an error
+		if !p.cfg.DryRun {
+			if err != nil {
+				return err
+			} else if len(rs) == 0 {
+				return fmt.Errorf("undefined decision")
+			} else if decision, ok = rs[0].Expressions[0].Value.(bool); !ok || len(rs) > 1 {
+				return fmt.Errorf("non-boolean decision")
+			}
 		}
 
 		result.decision = decision
