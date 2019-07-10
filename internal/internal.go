@@ -32,6 +32,7 @@ import (
 
 const defaultAddr = ":9191"
 const defaultQuery = "data.istio.authz.allow"
+const defaultDryRun = false
 
 var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
 
@@ -51,6 +52,7 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 	cfg := Config{
 		Addr:  defaultAddr,
 		Query: defaultQuery,
+		DryRun: defaultDryRun,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -84,6 +86,7 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 type Config struct {
 	Addr        string `json:"addr"`
 	Query       string `json:"query"`
+	DryRun      bool   `json:"dry-run"`
 	parsedQuery ast.Body
 }
 
@@ -117,6 +120,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	logrus.WithFields(logrus.Fields{
 		"addr":  p.cfg.Addr,
 		"query": p.cfg.Query,
+		"dry-run": p.cfg.DryRun,
 	}).Infof("Starting gRPC server.")
 
 	if err := p.server.Serve(l); err != nil {
@@ -155,7 +159,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	status := int32(google_rpc.PERMISSION_DENIED)
 
-	if result.decision {
+	if p.cfg.DryRun || result.decision {
 		status = int32(google_rpc.OK)
 	}
 
@@ -176,6 +180,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	logrus.WithFields(logrus.Fields{
 		"query":               p.cfg.Query,
+		"dry-run":             p.cfg.DryRun,
 		"decision":            result.decision,
 		"err":                 err,
 		"txn":                 result.txnID,
@@ -210,6 +215,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 		logrus.WithFields(logrus.Fields{
 			"input": input,
 			"query": p.cfg.Query,
+			"dry-run": p.cfg.DryRun,
 			"txn":   result.txnID,
 		}).Infof("Executing policy query.")
 

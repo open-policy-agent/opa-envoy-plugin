@@ -32,6 +32,7 @@
         envoy_ext_authz_grpc:
             addr: :9191
             query: data.istio.authz.allow
+            dry-run: false
     ```
 
 6. Run OPA

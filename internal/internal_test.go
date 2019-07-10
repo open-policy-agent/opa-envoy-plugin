@@ -331,6 +331,7 @@ func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 		cfg: Config{
 			Addr:        ":50052",
 			Query:       query,
+			DryRun:      false,
 			parsedQuery: parsedQuery,
 		},
 		manager: m,
