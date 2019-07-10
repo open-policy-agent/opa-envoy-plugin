@@ -104,7 +104,7 @@ func TestCheckAllow(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{}, false)
+	server := testAuthzServer(&testPlugin{}, "data.istio.authz.allow", false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -122,7 +122,7 @@ func TestCheckAllowParsedPath(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{}, false)
+	server := testAuthzServer(&testPlugin{}, "data.istio.authz.allow", false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -146,7 +146,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(customLogger, false)
+	server := testAuthzServer(customLogger, "data.istio.authz.allow", false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -177,7 +177,7 @@ func TestCheckDeny(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{}, false)
+	server := testAuthzServer(&testPlugin{}, "data.istio.authz.allow", false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestCheckDeny(t *testing.T) {
 	}
 }
 
-func TestCheckDenyWithDryRunTrue(t *testing.T) {
+func TestCheckDenyWithDryRunTrueAndBooleanDecision(t *testing.T) {
 
 	// Example Mixer Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
@@ -198,7 +198,28 @@ func TestCheckDenyWithDryRunTrue(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{}, true)
+	server := testAuthzServer(&testPlugin{}, "data.istio.authz.allow", true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected exampleDeniedRequest to be allowed because dry-run=true but got:", output)
+	}
+}
+
+func TestCheckDenyWithDryRunTrueAndNonBooleanDecision(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(&testPlugin{}, "data.istio.authz", true)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -222,7 +243,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(customLogger, false)
+	server := testAuthzServer(customLogger, "data.istio.authz.allow", false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -256,7 +277,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	// create custom logger
 	customLogger := &testPluginError{}
 
-	server := testAuthzServer(customLogger, false)
+	server := testAuthzServer(customLogger, "data.istio.authz.allow", false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -272,7 +293,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	}
 }
 
-func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+func testAuthzServer(customLogger plugins.Plugin, query string, dryRun bool) *envoyExtAuthzGrpcServer {
 	ctx := context.Background()
 
 	// Define a RBAC policy to allow or deny requests based on user roles
@@ -342,7 +363,6 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 		panic(err)
 	}
 
-	query := "data.istio.authz.allow"
 	parsedQuery, err := ast.ParseBody(query)
 	if err != nil {
 		panic(err)
