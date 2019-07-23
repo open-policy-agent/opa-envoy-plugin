@@ -6,9 +6,11 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
+	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
@@ -50,18 +52,6 @@ const exampleAllowedRequest = `{
 	}
   }`
 
-const exampleAllowedRequestParsedPath = `{
-	"attributes": {
-	  "request": {
-		"http": {
-		  "id": "13359530607844510314",
-		  "method": "GET",
-		  "path": "/my/test/path"
-		}
-	  }
-	}
-  }`
-
 // Identical to the request above except authorization header is different.
 const exampleDeniedRequest = `{
 	"attributes": {
@@ -89,6 +79,18 @@ const exampleDeniedRequest = `{
 		  "path": "/api/v1/products",
 		  "host": "192.168.99.100:31380",
 		  "protocol": "HTTP/1.1"
+		}
+	  }
+	}
+  }`
+
+const exampleAllowedRequestParsedPath = `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "id": "13359530607844510314",
+		  "method": "GET",
+		  "path": "/my/test/path"
 		}
 	  }
 	}
@@ -251,73 +253,366 @@ func TestCheckWithLoggerError(t *testing.T) {
 	}
 }
 
-func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
+func TestConfigValid(t *testing.T) {
+
+	m, err := plugins.New([]byte{}, "test", inmem.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in := `{"addr": ":9292", "query": "data.test"}`
+	config, err := Validate(m, []byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.Addr != ":9292" {
+		t.Fatalf("Expected address :9292 but got %v", config.Addr)
+	}
+
+	if config.parsedQuery.String() != "data.test" {
+		t.Fatalf("Expected query data.test but got %v", config.Query)
+	}
+}
+
+func TestConfigValidDefault(t *testing.T) {
+
+	m, err := plugins.New([]byte{}, "test", inmem.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := Validate(m, []byte{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.Addr != defaultAddr {
+		t.Fatalf("Expected address %v but got %v", defaultAddr, config.Addr)
+	}
+
+	if config.parsedQuery.String() != defaultQuery {
+		t.Fatalf("Expected query %v but got %v", defaultQuery, config.parsedQuery.String())
+	}
+}
+
+func TestCheckAllowObjectDecision(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServerWithObjectDecision(&testPlugin{})
 	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	headers := response.GetHeaders()
+	if len(headers) != 2 {
+		t.Fatalf("Expected two headers but got %v", len(headers))
+	}
+
+	expectedHeaders := make(map[string]string)
+	expectedHeaders["x"] = "hello"
+	expectedHeaders["y"] = "world"
+
+	assertHeaders(t, headers, expectedHeaders)
+}
+
+func TestCheckDenyObjectDecision(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServerWithObjectDecision(&testPlugin{})
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("Result is %v\n", output)
+
+	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+		t.Fatalf("Expected request to be denied but got: %v", output)
+	}
+
+	response := output.GetDeniedResponse()
+	if response == nil {
+		t.Fatal("Expected DeniedHttpResponse struct but got nil")
+	}
+
+	headers := response.GetHeaders()
+	if len(headers) != 2 {
+		t.Fatalf("Expected two headers but got %v", len(headers))
+	}
+
+	expectedHeaders := make(map[string]string)
+	expectedHeaders["foo"] = "bar"
+	expectedHeaders["baz"] = "taz"
+
+	assertHeaders(t, headers, expectedHeaders)
+
+	if response.GetBody() != "Unauthorized Request" {
+		t.Fatalf("Expected response body \"Unauthorized Request\" but got %v", response.GetBody())
+	}
+
+	actualHTTPStatusCode := response.GetStatus().GetCode().String()
+	if actualHTTPStatusCode != "MovedPermanently" {
+		t.Fatalf("Expected http status code \"MovedPermanently\" but got %v", actualHTTPStatusCode)
+	}
+}
+
+func TestGetResponseStatus(t *testing.T) {
+
+	input := make(map[string]interface{})
+	var err error
+
+	_, err = getResponseStatus(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["allowed"] = 1
+	_, err = getResponseStatus(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["allowed"] = true
+	var result int32
+	result, err = getResponseStatus(input)
+
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if result != int32(google_rpc.OK) {
+		t.Fatalf("Expected result %v but got %v", int32(google_rpc.OK), result)
+	}
+}
+
+func TestGetResponeHeaders(t *testing.T) {
+	input := make(map[string]interface{})
+
+	result, err := getResponseHeaders(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Fatal("Expected no headers")
+	}
+
+	badHeader := "test"
+	input["headers"] = badHeader
+
+	_, err = getResponseHeaders(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	testHeaders := make(map[string]interface{})
+	testHeaders["foo"] = "bar"
+	input["headers"] = testHeaders
+
+	result, err = getResponseHeaders(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("Expected one header but got %v", len(result))
+	}
+
+	testHeaders["baz"] = 1
+
+	_, err = getResponseHeaders(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+}
+
+func TestGetResponseBody(t *testing.T) {
+	input := make(map[string]interface{})
+
+	result, err := getResponseBody(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if result != "" {
+		t.Fatalf("Expected empty body but got %v", result)
+	}
+
+	input["body"] = "hello"
+	result, err = getResponseBody(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if result != "hello" {
+		t.Fatalf("Expected result \"hello\" but got %v", result)
+	}
+
+	input["body"] = 123
+	result, err = getResponseBody(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil", err)
+	}
+}
+
+func TestGetResponseHttpStatus(t *testing.T) {
+	input := make(map[string]interface{})
+
+	result, err := getResponseHTTPStatus(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if result != nil {
+		t.Fatalf("Expected no status but got %v", result)
+	}
+
+	input["http_status"] = true
+	result, err = getResponseHTTPStatus(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["http_status"] = json.Number(301)
+	result, err = getResponseHTTPStatus(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["http_status"] = json.Number("9999")
+	result, err = getResponseHTTPStatus(input)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["http_status"] = json.Number("400")
+	result, err = getResponseHTTPStatus(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if result.GetCode().String() != "BadRequest" {
+		t.Fatalf("Expected http status code \"BadRequest\" but got %v", result.GetCode().String())
+	}
+}
+
+func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 
 	// Define a RBAC policy to allow or deny requests based on user roles
 	module := `
-	package istio.authz
+		package istio.authz
 
-	import input.attributes.request.http as http_request
+		import input.attributes.request.http as http_request
 
-	default allow = false
+		default allow = false
 
-	allow {
-		roles_for_user[r]
-		required_roles[r]
-	}
+		allow {
+			roles_for_user[r]
+			required_roles[r]
+		}
 
-	allow {
-		input.parsed_path = ["my", "test", "path"]
-	}
+		allow {
+			input.parsed_path = ["my", "test", "path"]
+		}
 
-	roles_for_user[r] {
-		r := user_roles[user_name][_]
-	}
+		roles_for_user[r] {
+			r := user_roles[user_name][_]
+		}
 
-	required_roles[r] {
-		perm := role_perms[r][_]
-		perm.method = http_request.method
-		perm.path = http_request.path
-	}
+		required_roles[r] {
+			perm := role_perms[r][_]
+			perm.method = http_request.method
+			perm.path = http_request.path
+		}
 
-	user_name = parsed {
-		[_, encoded] := split(http_request.headers.authorization, " ")
-		[parsed, _] := split(base64url.decode(encoded), ":")
-	}
+		user_name = parsed {
+			[_, encoded] := split(http_request.headers.authorization, " ")
+			[parsed, _] := split(base64url.decode(encoded), ":")
+		}
 
-	user_roles = {
-		"alice": ["guest"],
-		"bob": ["admin"]
-	}
+		user_roles = {
+			"alice": ["guest"],
+			"bob": ["admin"]
+		}
 
-	role_perms = {
-		"guest": [
-			{"method": "GET",  "path": "/productpage"},
-		],
-		"admin": [
-			{"method": "GET",  "path": "/productpage"},
-			{"method": "GET",  "path": "/api/v1/products"},
-		],
-	}`
+		role_perms = {
+			"guest": [
+				{"method": "GET",  "path": "/productpage"},
+			],
+			"admin": [
+				{"method": "GET",  "path": "/productpage"},
+				{"method": "GET",  "path": "/api/v1/products"},
+			],
+		}`
 
-	store := inmem.New()
-	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
-	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
-	store.Commit(ctx, txn)
-
-	m, err := plugins.New([]byte{}, "test", store)
+	m, err := getPluginManager(module, customLogger)
 	if err != nil {
 		panic(err)
 	}
 
-	m.Register("test_plugin", customLogger)
-	config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin"}`), nil, []string{"test_plugin"})
+	query := "data.istio.authz.allow"
+	parsedQuery, err := ast.ParseBody(query)
+	if err != nil {
+		panic(err)
+	}
 
-	plugin := logs.New(config, m)
-	m.Register(logs.Name, plugin)
+	s := &envoyExtAuthzGrpcServer{
+		cfg: Config{
+			Addr:        ":50052",
+			Query:       query,
+			parsedQuery: parsedQuery,
+		},
+		manager: m,
+	}
+	return s
+}
 
-	if err := m.Start(ctx); err != nil {
+func testAuthzServerWithObjectDecision(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
+
+	module := `
+		package istio.authz
+
+		default allow = {
+		  "allowed": false,
+		  "headers": {"foo": "bar", "baz": "taz"},
+		  "body": "Unauthorized Request",
+		  "http_status": 301
+		}
+
+		allow = response {
+			input.parsed_path = ["my", "test", "path"]
+		    response := {
+				"allowed": true,
+				"headers": {"x": "hello", "y": "world"}
+		    }
+		}`
+
+	m, err := getPluginManager(module, customLogger)
+	if err != nil {
 		panic(err)
 	}
 
@@ -337,6 +632,55 @@ func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 	}
 
 	return s
+}
+
+func getPluginManager(module string, customLogger plugins.Plugin) (*plugins.Manager, error) {
+	ctx := context.Background()
+	store := inmem.New()
+	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
+	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
+	store.Commit(ctx, txn)
+
+	m, err := plugins.New([]byte{}, "test", store)
+	if err != nil {
+		return nil, err
+	}
+
+	m.Register("test_plugin", customLogger)
+	config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin"}`), nil, []string{"test_plugin"})
+	if err != nil {
+		return nil, err
+	}
+
+	plugin := logs.New(config, m)
+	m.Register(logs.Name, plugin)
+
+	if err := m.Start(ctx); err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
+func assertHeaders(t *testing.T, actualHeaders []*ext_core.HeaderValueOption, expectedHeaders map[string]string) {
+	t.Helper()
+
+	for _, header := range actualHeaders {
+		key := header.GetHeader().GetKey()
+		value := header.GetHeader().GetValue()
+
+		var expVal string
+		var ok bool
+
+		if expVal, ok = expectedHeaders[key]; !ok {
+			t.Fatalf("Expected header \"%v\" does not exist in map", key)
+		} else {
+			if expVal != value {
+				t.Fatalf("Expected value for header \"%v\" is \"%v\" but got \"%v\"", key, expVal, value)
+			}
+		}
+	}
+
 }
 
 type testPlugin struct {
