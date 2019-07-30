@@ -106,7 +106,7 @@ func TestCheckAllow(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{})
+	server := testAuthzServer(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestCheckAllowParsedPath(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{})
+	server := testAuthzServer(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -148,7 +148,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(customLogger)
+	server := testAuthzServer(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -179,7 +179,7 @@ func TestCheckDeny(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{})
+	server := testAuthzServer(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -187,6 +187,54 @@ func TestCheckDeny(t *testing.T) {
 	}
 	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
 		t.Fatal("Expected request to be denied but got:", output)
+	}
+}
+
+func TestCheckAllowWithDryRunTrue(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger, true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
+func TestCheckDenyWithDryRunTrue(t *testing.T) {
+
+	// Example Mixer Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger, true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed since config.DryRun is true, but got:", output)
 	}
 }
 
@@ -203,7 +251,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(customLogger)
+	server := testAuthzServer(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -237,7 +285,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	// create custom logger
 	customLogger := &testPluginError{}
 
-	server := testAuthzServer(customLogger)
+	server := testAuthzServer(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -306,7 +354,7 @@ func TestCheckAllowObjectDecision(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServerWithObjectDecision(&testPlugin{})
+	server := testAuthzServerWithObjectDecision(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -341,7 +389,7 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 		panic(err)
 	}
 
-	server := testAuthzServerWithObjectDecision(&testPlugin{})
+	server := testAuthzServerWithObjectDecision(&testPlugin{}, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -378,6 +426,65 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 	if actualHTTPStatusCode != "MovedPermanently" {
 		t.Fatalf("Expected http status code \"MovedPermanently\" but got %v", actualHTTPStatusCode)
 	}
+}
+
+func TestCheckDenyWithDryRunObjectDecision(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServerWithObjectDecision(&testPlugin{}, true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatalf("Expected request to be allowed since config.DryRun is true, but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+}
+
+func TestCheckAllowWithDryRunObjectDecision(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServerWithObjectDecision(&testPlugin{}, true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	headers := response.GetHeaders()
+	if len(headers) != 2 {
+		t.Fatalf("Expected two headers but got %v", len(headers))
+	}
+
+	expectedHeaders := make(map[string]string)
+	expectedHeaders["x"] = "hello"
+	expectedHeaders["y"] = "world"
+
+	assertHeaders(t, headers, expectedHeaders)
 }
 
 func TestGetResponseStatus(t *testing.T) {
@@ -520,7 +627,7 @@ func TestGetResponseHttpStatus(t *testing.T) {
 	}
 }
 
-func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
+func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
 	// Define a RBAC policy to allow or deny requests based on user roles
 	module := `
@@ -584,6 +691,7 @@ func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 		cfg: Config{
 			Addr:        ":50052",
 			Query:       query,
+			DryRun:      dryRun,
 			parsedQuery: parsedQuery,
 		},
 		manager: m,
@@ -591,7 +699,7 @@ func testAuthzServer(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
 	return s
 }
 
-func testAuthzServerWithObjectDecision(customLogger plugins.Plugin) *envoyExtAuthzGrpcServer {
+func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
 	module := `
 		package istio.authz
@@ -626,6 +734,7 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin) *envoyExtAut
 		cfg: Config{
 			Addr:        ":50052",
 			Query:       query,
+			DryRun:      dryRun,
 			parsedQuery: parsedQuery,
 		},
 		manager: m,

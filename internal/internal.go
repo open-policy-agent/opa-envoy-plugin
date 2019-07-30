@@ -35,6 +35,7 @@ import (
 
 const defaultAddr = ":9191"
 const defaultQuery = "data.istio.authz.allow"
+const defaultDryRun = false
 
 var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
 
@@ -52,8 +53,9 @@ type evalResult struct {
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 	cfg := Config{
-		Addr:  defaultAddr,
-		Query: defaultQuery,
+		Addr:   defaultAddr,
+		Query:  defaultQuery,
+		DryRun: defaultDryRun,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -88,6 +90,7 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 type Config struct {
 	Addr        string `json:"addr"`
 	Query       string `json:"query"`
+	DryRun      bool   `json:"dry-run"`
 	parsedQuery ast.Body
 }
 
@@ -119,8 +122,9 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"addr":  p.cfg.Addr,
-		"query": p.cfg.Query,
+		"addr":    p.cfg.Addr,
+		"query":   p.cfg.Query,
+		"dry-run": p.cfg.DryRun,
 	}).Infof("Starting gRPC server.")
 
 	if err := p.server.Serve(l); err != nil {
@@ -212,6 +216,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 	}
 
 	err = p.log(ctx, input, result, err)
+
 	if err != nil {
 		resp := &ext_authz.CheckResponse{
 			Status: &google_rpc.Status{
@@ -224,12 +229,24 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	logrus.WithFields(logrus.Fields{
 		"query":               p.cfg.Query,
+		"dry-run":             p.cfg.DryRun,
 		"decision":            result.decision,
 		"err":                 err,
 		"txn":                 result.txnID,
 		"metrics":             result.metrics.All(),
 		"total_decision_time": time.Since(start),
 	}).Info("Returning policy decision.")
+
+	// If dry-run mode, override the Status code to unconditionally Allow the request
+	// DecisionLogging should reflect what "would" have happened
+	if p.cfg.DryRun {
+		if resp.Status.Code != int32(google_rpc.OK) {
+			resp.Status = &google_rpc.Status{Code: int32(google_rpc.OK)}
+			resp.HttpResponse = &ext_authz.CheckResponse_OkResponse{
+				OkResponse: &ext_authz.OkHttpResponse{},
+			}
+		}
+	}
 
 	return resp, nil
 }
@@ -255,9 +272,10 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 		result.txnID = txn.ID()
 
 		logrus.WithFields(logrus.Fields{
-			"input": input,
-			"query": p.cfg.Query,
-			"txn":   result.txnID,
+			"input":   input,
+			"query":   p.cfg.Query,
+			"dry-run": p.cfg.DryRun,
+			"txn":     result.txnID,
 		}).Infof("Executing policy query.")
 
 		opts = append(opts,
