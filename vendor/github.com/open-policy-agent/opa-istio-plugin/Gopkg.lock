@@ -198,7 +198,7 @@
   version = "v0.0.1"
 
 [[projects]]
-  digest = "1:bde07714efe58da7364c80cf0900272fad1ef4be5f02180d6bf16abacbbbedf4"
+  digest = "1:75672dedfedb7461bf472f1a8686e0719e5541f9b0f9d5c1105f9ac5f89bdb67"
   name = "github.com/open-policy-agent/opa"
   packages = [
     "ast",
@@ -255,15 +255,7 @@
     "watch",
   ]
   pruneopts = ""
-  revision = "c9fd1569ef2c7d05ea4362b739baba4d39719d97"
-  version = "v0.12.2"
-
-[[projects]]
-  digest = "1:fa381e7bbe891f4f3935dda42584ce1802196695f8dba90806254e4eede249e6"
-  name = "github.com/open-policy-agent/opa-istio-plugin"
-  packages = ["internal"]
-  pruneopts = ""
-  revision = "70be7399ebf8ee98d876d6b2328c01833479b1bc"
+  revision = "2799e14807344d4082cd75ec1e2fdf09ee9b53c5"
   version = "v0.12.1"
 
 [[projects]]
@@ -567,11 +559,8 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/envoyproxy/go-control-plane/envoy/api/v2/core",
     "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2",
-    "github.com/envoyproxy/go-control-plane/envoy/type",
     "github.com/gogo/googleapis/google/rpc",
-    "github.com/open-policy-agent/opa-istio-plugin/internal",
     "github.com/open-policy-agent/opa/ast",
     "github.com/open-policy-agent/opa/cmd",
     "github.com/open-policy-agent/opa/metrics",
@@ -583,7 +572,6 @@
     "github.com/open-policy-agent/opa/storage",
     "github.com/open-policy-agent/opa/storage/inmem",
     "github.com/open-policy-agent/opa/util",
-    "github.com/pkg/errors",
     "github.com/sirupsen/logrus",
     "github.com/spf13/cobra/cobra",
     "github.com/spf13/pflag",
