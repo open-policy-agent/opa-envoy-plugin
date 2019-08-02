@@ -107,7 +107,7 @@ To deploy OPA-Istio include the following container in your Kubernetes Deploymen
 
 ```yaml
 containers:
-- image: openpolicyagent/opa:0.12.2-istio
+- image: openpolicyagent/opa:0.12.1-istio
   imagePullPolicy: IfNotPresent
   name: opa-istio
   volumeMounts:
@@ -133,14 +133,7 @@ The OPA-Istio plugin supports the following configuration fields:
 | Field | Required | Description |
 | --- | --- | --- |
 | `plugins["envoy_ext_authz_grpc"].addr` | No | Set listening address of Envoy External Authorization gRPC server. This must match the value configured in the Envoy Filter resource. Default: `:9191`. |
-| `plugins["envoy_ext_authz_grpc"].query` | No | Specifies the name of the policy decision to query. The policy decision can either be a `boolean` or an `object`. If boolean, `true` indicates the request should be allowed and `false` indicates the request should be denied. If the policy decision is an object, it **must** contain the `allowed` key set to either `true` or `false` to indicate if the request is allowed or not respectively. It can optionally contain a `headers` field to send custom headers to the downstream client or upstream. An optional `body` field can be included in the policy decision to send a response body data to the downstream client. Also an optional `http_status` field can be included to send a HTTP response status code to the downstream client other than `403 (Forbidden)`. Default: `data.istio.authz.allow`.|
-| `plugins["envoy_ext_authz_grpc"].dry-run` | No | Configures the Envoy External Authorization gRPC server to unconditionally return an `ext_authz.CheckResponse.Status` of `google_rpc.Status{Code: google_rpc.OK}`. Default: `false`. |
-
-If the configuration does not specify the `query` field, `data.istio.authz.allow` will be considered as the default name of the policy decision to query.
-
-The `dry-run` parameter is provided to enable you to test out new policies. You can set `dry-run: true` which will unconditionally allow requests. Decision logs can be monitored to see what "would" have happened. This is especially useful for initial integration of OPA or when policies undergo large refactoring.
-
-An example of a rule that returns an object that not only indicates if a request is allowed or not but also provides optional response headers, body and HTTP status that can be sent to the downstream client or upstream can be seen below in the [Example Policy with Object Response](#example-policy-with-object-response) section.
+| `plugins["envoy_ext_authz_grpc"].query` | No | Specifies the name of the policy decision to query. The policy decision must be return a `boolean` value. `true` indicates the request should be allowed and `false` indicates the request should be denied. Default: `data.istio.authz.allow`. |
 
 In the [Quick Start](#quick-start) section an OPA policy is loaded via a volume-mounted ConfigMap. For production deployments, we recommend serving policy [Bundles](http://www.openpolicyagent.org/docs/bundles.html) from a remote HTTP server. For example:
 
@@ -159,9 +152,8 @@ bundle:
   service: bundle_service
 plugins:
     envoy_ext_authz_grpc:
-        addr:    :9191
-        query:   data.istio.authz.allow
-        dry-run: false
+        addr: :9191
+        query: data.istio.authz.allow
 ```
 
 ## Example Policy
@@ -285,29 +277,6 @@ default allow = false
 
 allow {
    input.parsed_path = ["api", "v1", "products"]
-}
-```
-
-## Example Policy with Object Response
-
-The `allow` rule in the below policy when queried generates an `object` that provides the status of the request (ie. `allowed` or `denied`) alongwith some headers, body data and HTTP status which will be included in the response that is sent back to the downstream client or upstream.
-
-```ruby
-package istio.authz
-
-default allow = {
-  "allowed": false,
-  "headers": {"x-ext-auth-allow": "no"},
-  "body": "Unauthorized Request",
-  "http_status": 301
-}
-
-allow = response {
-  input.attributes.request.http.method == "GET"
-  response := {
-    "allowed": true,
-    "headers": {"x-ext-auth-allow": "yes"}
-  }
 }
 ```
 
