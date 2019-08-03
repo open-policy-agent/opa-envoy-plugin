@@ -313,7 +313,6 @@ allow = response {
 
 ## Dependencies
 
-Dependencies are managed with [dep](https://golang.github.io/dep/).
-If you need to add or update dependencies, modify the `Gopkg.toml` file and
-then use the `dep ensure` command. Finally commit all changes to the
-repository.
+Dependencies are managed with [Modules](https://github.com/golang/go/wiki/Modules).
+If you need to add or update dependencies, modify the `go.mod` file or
+use `go get`. More information is available [here](https://github.com/golang/go/wiki/Modules#how-to-upgrade-and-downgrade-dependencies). Finally commit all changes to the repository.

@@ -16,11 +16,11 @@ if [ $# -eq 0 ]
     exit 1
 fi
 
-# Update the OPA verison in Gopkg.toml
-sed -i "/opa/{N;s/version = .*/version = \"$1\"/;}" Gopkg.toml
+# Update OPA version
+go get github.com/open-policy-agent/opa@$1
 
 # Check if OPA version has changed
-git status |  grep  Gopkg.toml
+git status |  grep  go.mod
 if [ $? -eq 0 ]; then
 
   tag=$(echo $1 | cut -c 2-)   # Remove 'v' in Tag. Eg. v0.8.0 -> 0.8.0
@@ -31,8 +31,12 @@ if [ $? -eq 0 ]; then
   # update plugin image version in quick_start.yaml
   sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
 
-  # update OPA
-  dep ensure -update github.com/open-policy-agent/opa
+  # update vendor
+  go mod vendor
+
+  # reverse changes to golang tools
+  # Issue: https://github.com/golang/go/issues/25922 and https://github.com/golang/go/issues/30515
+  git checkout vendor/golang.org/x/
 
   # add changes
   git add .
