@@ -12,7 +12,7 @@ Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to requ
 
 OPA-Istio extends OPA with a gRPC server that implements the [Envoy External
 Authorization
-API](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/ext_authz_filter).
+API](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/security/ext_authz_filter.html).
 You can use this version of OPA to enforce fine-grained, context-aware access
 control policies at the Istio Proxy layer without modifying your microservice.
 
