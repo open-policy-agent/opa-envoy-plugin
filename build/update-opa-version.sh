@@ -17,7 +17,7 @@ if [ $# -eq 0 ]
 fi
 
 # Update OPA version
-go get github.com/open-policy-agent/opa@$1
+env GO111MODULE=on go get github.com/open-policy-agent/opa@$1
 
 # Check if OPA version has changed
 git status |  grep  go.mod
@@ -32,7 +32,7 @@ if [ $? -eq 0 ]; then
   sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
 
   # update vendor
-  go mod vendor
+  env GO111MODULE=on go mod vendor
 
   # reverse changes to golang tools
   # Issue: https://github.com/golang/go/issues/25922 and https://github.com/golang/go/issues/30515
