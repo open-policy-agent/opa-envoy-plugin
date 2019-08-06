@@ -7,6 +7,7 @@ package logs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -35,18 +36,24 @@ type Logger interface {
 
 // EventV1 represents a decision log event.
 type EventV1 struct {
-	Labels      map[string]string      `json:"labels"`
-	DecisionID  string                 `json:"decision_id"`
-	Revision    string                 `json:"revision,omitempty"`
-	Path        string                 `json:"path,omitempty"`
-	Query       string                 `json:"query,omitempty"`
-	Input       *interface{}           `json:"input,omitempty"`
-	Result      *interface{}           `json:"result,omitempty"`
-	Erased      []string               `json:"erased,omitempty"`
-	Error       error                  `json:"error,omitempty"`
-	RequestedBy string                 `json:"requested_by"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Metrics     map[string]interface{} `json:"metrics,omitempty"`
+	Labels      map[string]string       `json:"labels"`
+	DecisionID  string                  `json:"decision_id"`
+	Revision    string                  `json:"revision,omitempty"` // Deprecated: Use Bundles instead
+	Bundles     map[string]BundleInfoV1 `json:"bundles,omitempty"`
+	Path        string                  `json:"path,omitempty"`
+	Query       string                  `json:"query,omitempty"`
+	Input       *interface{}            `json:"input,omitempty"`
+	Result      *interface{}            `json:"result,omitempty"`
+	Erased      []string                `json:"erased,omitempty"`
+	Error       error                   `json:"error,omitempty"`
+	RequestedBy string                  `json:"requested_by"`
+	Timestamp   time.Time               `json:"timestamp"`
+	Metrics     map[string]interface{}  `json:"metrics,omitempty"`
+}
+
+// BundleInfoV1 describes a bundle associated with a decision log event.
+type BundleInfoV1 struct {
+	Revision string `json:"revision,omitempty"`
 }
 
 const (
@@ -74,6 +81,7 @@ type Config struct {
 	PartitionName string          `json:"partition_name,omitempty"`
 	Reporting     ReportingConfig `json:"reporting"`
 	MaskDecision  *string         `json:"mask_decision"`
+	ConsoleLogs   bool            `json:"console"`
 
 	maskDecisionRef ast.Ref
 }
@@ -91,9 +99,13 @@ func (c *Config) validateAndInjectDefaults(services []string, plugins []string) 
 		if !found {
 			return fmt.Errorf("invalid plugin name %q in decision_logs", *c.Plugin)
 		}
-	} else if c.Service == "" && len(services) != 0 {
+	} else if c.Service == "" && len(services) != 0 && !c.ConsoleLogs {
+		// For backwards compatibility allow defaulting to the first
+		// service listed, but only if console logging is disabled. If enabled
+		// we can't tell if the deployer wanted to use only console logs or
+		// both console logs and the default service option.
 		c.Service = services[0]
-	} else {
+	} else if c.Service != "" {
 		found := false
 
 		for _, svc := range services {
@@ -106,6 +118,10 @@ func (c *Config) validateAndInjectDefaults(services []string, plugins []string) 
 		if !found {
 			return fmt.Errorf("invalid service name %q in decision_logs", c.Service)
 		}
+	}
+
+	if c.Plugin == nil && c.Service == "" && !c.ConsoleLogs {
+		return fmt.Errorf("invalid decision_log config, must have a `service`, `plugin`, or `console` logging enabled")
 	}
 
 	min := defaultMinDelaySeconds
@@ -233,14 +249,14 @@ func Lookup(manager *plugins.Manager) *Plugin {
 
 // Start starts the plugin.
 func (p *Plugin) Start(ctx context.Context) error {
-	p.logInfo("Starting decision log uploader.")
+	p.logInfo("Starting decision logger.")
 	go p.loop()
 	return nil
 }
 
 // Stop stops the plugin.
 func (p *Plugin) Stop(ctx context.Context) {
-	p.logInfo("Stopping decision log uploader.")
+	p.logInfo("Stopping decision logger.")
 	done := make(chan struct{})
 	p.stop <- done
 	_ = <-done
@@ -251,10 +267,16 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 
 	path := strings.Replace(strings.TrimPrefix(decision.Path, "data."), ".", "/", -1)
 
+	bundles := map[string]BundleInfoV1{}
+	for name, info := range decision.Bundles {
+		bundles[name] = BundleInfoV1{Revision: info.Revision}
+	}
+
 	event := EventV1{
 		Labels:      p.manager.Labels(),
 		DecisionID:  decision.DecisionID,
 		Revision:    decision.Revision,
+		Bundles:     bundles,
 		Path:        path,
 		Query:       decision.Query,
 		Input:       decision.Input,
@@ -271,6 +293,20 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 		event.Error = decision.Error
 	}
 
+	err := p.maskEvent(ctx, decision.Txn, &event)
+	if err != nil {
+		// TODO(tsandall): see note below about error handling.
+		p.logError("Log event masking failed: %v.", err)
+		return nil
+	}
+
+	if p.config.ConsoleLogs {
+		err := p.logEvent(ctx, event)
+		if err != nil {
+			p.logError("Failed to log to console: %v.", err)
+		}
+	}
+
 	if p.config.Plugin != nil {
 		proxy, ok := p.manager.Plugin(*p.config.Plugin).(Logger)
 		if !ok {
@@ -279,27 +315,22 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 		return proxy.Log(ctx, event)
 	}
 
-	err := p.maskEvent(ctx, decision.Txn, &event)
-	if err != nil {
-		// TODO(tsandall): see note below about error handling.
-		p.logError("Log event masking failed: %v.", err)
-		return nil
-	}
+	if p.config.Service != "" {
+		p.mtx.Lock()
+		defer p.mtx.Unlock()
 
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
+		result, err := p.enc.Write(event)
+		if err != nil {
+			// TODO(tsandall): revisit this now that we have an API that
+			// can return an error. Should the default behaviour be to
+			// fail-closed as we do for plugins?
+			p.logError("Log encoding failed: %v.", err)
+			return nil
+		}
 
-	result, err := p.enc.Write(event)
-	if err != nil {
-		// TODO(tsandall): revisit this now that we have an API that
-		// can return an error. Should the default behaviour be to
-		// fail-closed as we do for plugins?
-		p.logError("Log encoding failed: %v.", err)
-		return nil
-	}
-
-	if result != nil {
-		p.bufferChunk(p.buffer, result)
+		if result != nil {
+			p.bufferChunk(p.buffer, result)
+		}
 	}
 
 	return nil
@@ -336,7 +367,7 @@ func (p *Plugin) loop() {
 	for {
 		var err error
 
-		if p.config.Plugin == nil {
+		if p.config.Service != "" {
 			var uploaded bool
 			uploaded, err = p.oneShot(ctx)
 
@@ -359,7 +390,7 @@ func (p *Plugin) loop() {
 			delay = util.DefaultBackoff(float64(minRetryDelay), float64(*p.config.Reporting.MaxDelaySeconds), retry)
 		}
 
-		if p.config.Plugin == nil {
+		if p.config.Service != "" {
 			p.logDebug("Waiting %v before next upload/retry.", delay)
 		}
 
@@ -543,4 +574,18 @@ func (p *Plugin) logrusFields() logrus.Fields {
 	return logrus.Fields{
 		"plugin": Name,
 	}
+}
+
+func (p *Plugin) logEvent(ctx context.Context, event EventV1) error {
+	eventBuf, err := json.Marshal(&event)
+	if err != nil {
+		return err
+	}
+	fields := logrus.Fields{}
+	err = util.UnmarshalJSON(eventBuf, &fields)
+	if err != nil {
+		return err
+	}
+	logrus.WithFields(fields).Info("Decision Log")
+	return nil
 }

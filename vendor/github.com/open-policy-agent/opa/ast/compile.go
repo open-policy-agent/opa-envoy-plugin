@@ -7,6 +7,7 @@ package ast
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/open-policy-agent/opa/metrics"
@@ -77,6 +78,7 @@ type Compiler struct {
 	// TypeEnv holds type information for values inferred by the compiler.
 	TypeEnv *TypeEnv
 
+	localvargen  *localVarGenerator
 	moduleLoader ModuleLoader
 	ruleIndices  *util.HashMap
 	stages       []struct {
@@ -89,6 +91,10 @@ type Compiler struct {
 	pathExists func([]string) (bool, error)
 	after      map[string][]CompilerStageDefinition
 	metrics    metrics.Metrics
+
+	// This is a set of unsafe built-in functions that we are not allowed to
+	// use.
+	unsafeBuiltinsMap map[string]struct{}
 }
 
 // CompilerStage defines the interface for stages in the compiler.
@@ -198,8 +204,9 @@ func NewCompiler() *Compiler {
 		}, func(x util.T) int {
 			return x.(Ref).Hash()
 		}),
-		maxErrs: CompileErrorLimitDefault,
-		after:   map[string][]CompilerStageDefinition{},
+		maxErrs:           CompileErrorLimitDefault,
+		after:             map[string][]CompilerStageDefinition{},
+		unsafeBuiltinsMap: map[string]struct{}{},
 	}
 
 	c.ModuleTree = NewModuleTree(nil)
@@ -217,6 +224,12 @@ func NewCompiler() *Compiler {
 		// load additional modules. If any stages run before resolution, they
 		// need to be re-run after resolution.
 		{"ResolveRefs", "compile_stage_resolve_refs", c.resolveAllRefs},
+
+		// The local variable generator must be initialized after references are
+		// resolved and the dynamic module loader has run but before subsequent
+		// stages that need to generate variables.
+		{"InitLocalVarGen", "compile_stage_init_local_var_gen", c.initLocalVarGen},
+
 		{"RewriteLocalVars", "compile_stage_rewrite_local_vars", c.rewriteLocalVars},
 		{"RewriteExprTerms", "compile_stage_rewrite_expr_terms", c.rewriteExprTerms},
 		{"SetModuleTree", "compile_stage_set_module_tree", c.setModuleTree},
@@ -232,6 +245,7 @@ func NewCompiler() *Compiler {
 		{"RewriteDynamicTerms", "compile_stage_rewrite_dynamic_terms", c.rewriteDynamicTerms},
 		{"CheckRecursion", "compile_stage_check_recursion", c.checkRecursion},
 		{"CheckTypes", "compile_stage_check_types", c.checkTypes},
+		{"CheckUnsafeBuiltins", "compile_state_check_unsafe_builtins", c.checkUnsafeBuiltins},
 		{"BuildRuleIndices", "compile_stage_rebuild_indices", c.buildRuleIndices},
 	}
 
@@ -267,6 +281,14 @@ func (c *Compiler) WithMetrics(metrics metrics.Metrics) *Compiler {
 	return c
 }
 
+// WithUnsafeBuiltins will add all built-ins in the map to the "blacklist".
+func (c *Compiler) WithUnsafeBuiltins(unsafeBuiltins map[string]struct{}) *Compiler {
+	for name := range unsafeBuiltins {
+		c.unsafeBuiltinsMap[name] = struct{}{}
+	}
+	return c
+}
+
 // QueryCompiler returns a new QueryCompiler object.
 func (c *Compiler) QueryCompiler() QueryCompiler {
 	return newQueryCompiler(c)
@@ -277,11 +299,14 @@ func (c *Compiler) QueryCompiler() QueryCompiler {
 // compiler. If the compilation process fails for any reason, the compiler will
 // contain a slice of errors.
 func (c *Compiler) Compile(modules map[string]*Module) {
+
 	c.Modules = make(map[string]*Module, len(modules))
+
 	for k, v := range modules {
 		c.Modules[k] = v.Copy()
 		c.sorted = append(c.sorted, k)
 	}
+
 	sort.Strings(c.sorted)
 
 	c.compile()
@@ -594,15 +619,15 @@ func (c *Compiler) checkSafetyRuleBodies() {
 		WalkRules(m, func(r *Rule) bool {
 			safe := ReservedVars.Copy()
 			safe.Update(r.Head.Args.Vars())
-			r.Body = c.checkBodySafety(safe, m, r.Body, r.Loc())
+			r.Body = c.checkBodySafety(safe, m, r.Body)
 			return false
 		})
 	}
 }
 
-func (c *Compiler) checkBodySafety(safe VarSet, m *Module, b Body, l *Location) Body {
+func (c *Compiler) checkBodySafety(safe VarSet, m *Module, b Body) Body {
 	reordered, unsafe := reorderBodyForSafety(c.GetArity, safe, b)
-	if errs := safetyErrorSlice(l, unsafe); len(errs) > 0 {
+	if errs := safetyErrorSlice(unsafe); len(errs) > 0 {
 		for _, err := range errs {
 			c.err(err)
 		}
@@ -647,6 +672,15 @@ func (c *Compiler) checkTypes() {
 		c.err(err)
 	}
 	c.TypeEnv = env
+}
+
+func (c *Compiler) checkUnsafeBuiltins() {
+	for _, name := range c.sorted {
+		errs := checkUnsafeBuiltins(c.unsafeBuiltinsMap, c.Modules[name])
+		for _, err := range errs {
+			c.err(err)
+		}
+	}
 }
 
 func (c *Compiler) runStage(metricName string, f func()) {
@@ -778,10 +812,14 @@ func (c *Compiler) resolveAllRefs() {
 	}
 }
 
+func (c *Compiler) initLocalVarGen() {
+	c.localvargen = newLocalVarGeneratorForModuleSet(c.sorted, c.Modules)
+}
+
 func (c *Compiler) rewriteComprehensionTerms() {
+	f := newEqualityFactory(c.localvargen)
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		f := newEqualityFactory(newLocalVarGenerator(mod))
 		rewriteComprehensionTerms(f, mod)
 	}
 }
@@ -789,10 +827,9 @@ func (c *Compiler) rewriteComprehensionTerms() {
 func (c *Compiler) rewriteExprTerms() {
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		gen := newLocalVarGenerator(mod)
 		WalkRules(mod, func(rule *Rule) bool {
-			rewriteExprTermsInHead(gen, rule)
-			rule.Body = rewriteExprTermsInBody(gen, rule.Body)
+			rewriteExprTermsInHead(c.localvargen, rule)
+			rule.Body = rewriteExprTermsInBody(c.localvargen, rule.Body)
 			return false
 		})
 	}
@@ -812,9 +849,9 @@ func (c *Compiler) rewriteExprTerms() {
 //
 // p[__local0__] { i < 100; __local0__ = {"foo": data.foo[i]} }
 func (c *Compiler) rewriteRefsInHead() {
+	f := newEqualityFactory(c.localvargen)
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		f := newEqualityFactory(newLocalVarGenerator(mod))
 		WalkRules(mod, func(rule *Rule) bool {
 			if requiresEval(rule.Head.Key) {
 				expr := f.Generate(rule.Head.Key)
@@ -846,9 +883,9 @@ func (c *Compiler) rewriteEquals() {
 }
 
 func (c *Compiler) rewriteDynamicTerms() {
+	f := newEqualityFactory(c.localvargen)
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		f := newEqualityFactory(newLocalVarGenerator(mod))
 		WalkRules(mod, func(rule *Rule) bool {
 			rule.Body = rewriteDynamics(f, rule.Body)
 			return false
@@ -860,7 +897,7 @@ func (c *Compiler) rewriteLocalVars() {
 
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		gen := newLocalVarGenerator(mod)
+		gen := c.localvargen
 
 		WalkRules(mod, func(rule *Rule) bool {
 
@@ -963,9 +1000,9 @@ func (c *Compiler) rewriteLocalVars() {
 }
 
 func (c *Compiler) rewriteWithModifiers() {
+	f := newEqualityFactory(c.localvargen)
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		f := newEqualityFactory(newLocalVarGenerator(mod))
 		t := NewGenericTransformer(func(x interface{}) (interface{}, error) {
 			body, ok := x.(Body)
 			if !ok {
@@ -1058,6 +1095,7 @@ func (qc *queryCompiler) Compile(query Body) (Body, error) {
 		{"CheckSafety", "query_compile_stage_check_safety", qc.checkSafety},
 		{"RewriteDynamicTerms", "query_compile_stage_rewrite_dynamic_terms", qc.rewriteDynamicTerms},
 		{"CheckTypes", "query_compile_stage_check_types", qc.checkTypes},
+		{"CheckUnsafeBuiltins", "query_compile_stage_check_unsafe_builtins", qc.checkUnsafeBuiltins},
 	}
 
 	qctx := qc.qctx.Copy()
@@ -1154,7 +1192,7 @@ func (qc *queryCompiler) rewriteLocalVars(_ *QueryContext, body Body) (Body, err
 func (qc *queryCompiler) checkSafety(_ *QueryContext, body Body) (Body, error) {
 	safe := ReservedVars.Copy()
 	reordered, unsafe := reorderBodyForSafety(qc.compiler.GetArity, safe, body)
-	if errs := safetyErrorSlice(body.Loc(), unsafe); len(errs) > 0 {
+	if errs := safetyErrorSlice(unsafe); len(errs) > 0 {
 		return nil, errs
 	}
 	return reordered, nil
@@ -1164,6 +1202,14 @@ func (qc *queryCompiler) checkTypes(qctx *QueryContext, body Body) (Body, error)
 	var errs Errors
 	checker := newTypeChecker()
 	qc.typeEnv, errs = checker.CheckBody(qc.compiler.TypeEnv, body)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+	return body, nil
+}
+
+func (qc *queryCompiler) checkUnsafeBuiltins(qctx *QueryContext, body Body) (Body, error) {
+	errs := checkUnsafeBuiltins(qc.compiler.unsafeBuiltinsMap, body)
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -1482,6 +1528,11 @@ type unsafePair struct {
 	Vars VarSet
 }
 
+type unsafeVarLoc struct {
+	Var Var
+	Loc *Location
+}
+
 type unsafeVars map[*Expr]VarSet
 
 func (vs unsafeVars) Add(e *Expr, v Var) {
@@ -1505,12 +1556,31 @@ func (vs unsafeVars) Update(o unsafeVars) {
 	}
 }
 
-func (vs unsafeVars) Vars() VarSet {
-	r := VarSet{}
-	for _, s := range vs {
-		r.Update(s)
+func (vs unsafeVars) Vars() (result []unsafeVarLoc) {
+
+	locs := map[Var]*Location{}
+
+	// If var appears in multiple sets then pick first by location.
+	for expr, vars := range vs {
+		for v := range vars {
+			if locs[v].Compare(expr.Location) > 0 {
+				locs[v] = expr.Location
+			}
+		}
 	}
-	return r
+
+	for v, loc := range locs {
+		result = append(result, unsafeVarLoc{
+			Var: v,
+			Loc: loc,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Loc.Compare(result[j].Loc) < 0
+	})
+
+	return result
 }
 
 func (vs unsafeVars) Slice() (result []unsafePair) {
@@ -1881,35 +1951,35 @@ func (f *equalityFactory) Generate(other *Term) *Expr {
 	return expr
 }
 
-const localVarFmt = "__local%d__"
-
 type localVarGenerator struct {
-	exclude   VarSet
-	generated VarSet
+	exclude VarSet
+	next    int
+}
+
+func newLocalVarGeneratorForModuleSet(sorted []string, modules map[string]*Module) *localVarGenerator {
+	exclude := NewVarSet()
+	vis := &VarVisitor{vars: exclude}
+	for _, key := range sorted {
+		Walk(vis, modules[key])
+	}
+	return &localVarGenerator{exclude: exclude, next: 0}
 }
 
 func newLocalVarGenerator(node interface{}) *localVarGenerator {
 	exclude := NewVarSet()
-	vis := &VarVisitor{
-		vars: exclude,
-	}
+	vis := &VarVisitor{vars: exclude}
 	Walk(vis, node)
-	return &localVarGenerator{exclude, NewVarSet()}
+	return &localVarGenerator{exclude: exclude, next: 0}
 }
 
 func (l *localVarGenerator) Generate() Var {
-	name := Var("")
-	x := 0
-	for len(name) == 0 || l.generated.Contains(name) || l.exclude.Contains(name) {
-		name = Var(fmt.Sprintf(localVarFmt, x))
-		x++
+	for {
+		result := Var("__local" + strconv.Itoa(l.next) + "__")
+		l.next++
+		if !l.exclude.Contains(result) {
+			return result
+		}
 	}
-	l.generated.Add(name)
-	return name
-}
-
-func (l *localVarGenerator) Generated() VarSet {
-	return l.generated
 }
 
 func getGlobals(pkg *Package, rules []Var, imports []*Import) map[Var]Ref {
@@ -2276,62 +2346,57 @@ func rewriteEquals(x interface{}) {
 //
 // foo(data.bar) = 1
 //
-// The rewritten vresion will be:
+// The rewritten version will be:
 //
 // __local0__ = data.bar; foo(__local0__) = 1
 func rewriteDynamics(f *equalityFactory, body Body) Body {
-	cpy := Body{}
+	result := make(Body, 0, len(body))
 	for _, expr := range body {
-		var exprs []*Expr
-		switch expr.Terms.(type) {
-		case []*Term:
-			if expr.IsEquality() {
-				exprs = rewriteDynamicsEqExpr(f, expr)
-			} else {
-				exprs = rewriteDynamicsCallExpr(f, expr)
-			}
-		case *Term:
-			exprs = rewriteDynamicsTermExpr(f, expr)
-		}
-		for _, expr := range exprs {
-			cpy.Append(expr)
+		if expr.IsEquality() {
+			result = rewriteDynamicsEqExpr(f, expr, result)
+		} else if expr.IsCall() {
+			result = rewriteDynamicsCallExpr(f, expr, result)
+		} else {
+			result = rewriteDynamicsTermExpr(f, expr, result)
 		}
 	}
-	return cpy
+	return result
 }
 
-func rewriteDynamicsEqExpr(f *equalityFactory, expr *Expr) []*Expr {
-	var extras []*Expr
+func appendExpr(body Body, expr *Expr) Body {
+	body.Append(expr)
+	return body
+}
+
+func rewriteDynamicsEqExpr(f *equalityFactory, expr *Expr, result Body) Body {
 	if !validEqAssignArgCount(expr) {
-		return append(extras, expr)
+		return appendExpr(result, expr)
 	}
 	terms := expr.Terms.([]*Term)
-	extras, terms[1] = rewriteDynamicsInTerm(expr, f, terms[1], nil)
-	extras, terms[2] = rewriteDynamicsInTerm(expr, f, terms[2], extras)
-	return append(extras, expr)
+	result, terms[1] = rewriteDynamicsInTerm(expr, f, terms[1], result)
+	result, terms[2] = rewriteDynamicsInTerm(expr, f, terms[2], result)
+	return appendExpr(result, expr)
 }
 
-func rewriteDynamicsCallExpr(f *equalityFactory, expr *Expr) []*Expr {
+func rewriteDynamicsCallExpr(f *equalityFactory, expr *Expr, result Body) Body {
 	terms := expr.Terms.([]*Term)
-	var extras []*Expr
 	for i := 1; i < len(terms); i++ {
-		extras, terms[i] = rewriteDynamicsOne(expr, f, terms[i], extras)
+		result, terms[i] = rewriteDynamicsOne(expr, f, terms[i], result)
 	}
-	return append(extras, expr)
+	return appendExpr(result, expr)
 }
 
-func rewriteDynamicsTermExpr(f *equalityFactory, expr *Expr) []*Expr {
+func rewriteDynamicsTermExpr(f *equalityFactory, expr *Expr, result Body) Body {
 	term := expr.Terms.(*Term)
-	var extras []*Expr
-	extras, expr.Terms = rewriteDynamicsInTerm(expr, f, term, nil)
-	return append(extras, expr)
+	result, expr.Terms = rewriteDynamicsInTerm(expr, f, term, result)
+	return appendExpr(result, expr)
 }
 
-func rewriteDynamicsInTerm(original *Expr, f *equalityFactory, term *Term, extras []*Expr) ([]*Expr, *Term) {
+func rewriteDynamicsInTerm(original *Expr, f *equalityFactory, term *Term, result Body) (Body, *Term) {
 	switch v := term.Value.(type) {
 	case Ref:
 		for i := 1; i < len(v); i++ {
-			extras, v[i] = rewriteDynamicsOne(original, f, v[i], extras)
+			result, v[i] = rewriteDynamicsOne(original, f, v[i], result)
 		}
 	case *ArrayComprehension:
 		v.Body = rewriteDynamics(f, v.Body)
@@ -2340,56 +2405,60 @@ func rewriteDynamicsInTerm(original *Expr, f *equalityFactory, term *Term, extra
 	case *ObjectComprehension:
 		v.Body = rewriteDynamics(f, v.Body)
 	default:
-		extras, term = rewriteDynamicsOne(original, f, term, extras)
+		result, term = rewriteDynamicsOne(original, f, term, result)
 	}
-	return extras, term
+	return result, term
 }
 
-func rewriteDynamicsOne(original *Expr, f *equalityFactory, term *Term, extras []*Expr) ([]*Expr, *Term) {
+func rewriteDynamicsOne(original *Expr, f *equalityFactory, term *Term, result Body) (Body, *Term) {
 	switch v := term.Value.(type) {
 	case Ref:
 		for i := 1; i < len(v); i++ {
-			extras, v[i] = rewriteDynamicsOne(original, f, v[i], extras)
+			result, v[i] = rewriteDynamicsOne(original, f, v[i], result)
 		}
 		generated := f.Generate(term)
 		generated.With = original.With
-		extras = append(extras, generated)
-		return extras, extras[len(extras)-1].Operand(0)
+		result.Append(generated)
+		return result, result[len(result)-1].Operand(0)
 	case Array:
 		for i := 0; i < len(v); i++ {
-			extras, v[i] = rewriteDynamicsOne(original, f, v[i], extras)
+			result, v[i] = rewriteDynamicsOne(original, f, v[i], result)
 		}
-		return extras, term
+		return result, term
 	case Object:
-		term.Value, _ = v.Map(func(k, v *Term) (*Term, *Term, error) {
-			extras, k = rewriteDynamicsOne(original, f, k, extras)
-			extras, v = rewriteDynamicsOne(original, f, v, extras)
-			return k, v, nil
-		})
-		return extras, term
+		cpy := NewObject()
+		for _, key := range v.Keys() {
+			value := v.Get(key)
+			result, key = rewriteDynamicsOne(original, f, key, result)
+			result, value = rewriteDynamicsOne(original, f, value, result)
+			cpy.Insert(key, value)
+		}
+		return result, NewTerm(cpy).SetLocation(term.Location)
 	case Set:
-		v, _ = v.Map(func(term *Term) (*Term, error) {
-			extras, term = rewriteDynamicsOne(original, f, term, extras)
-			return term, nil
-		})
-		return extras, NewTerm(v).SetLocation(term.Location)
+		cpy := NewSet()
+		for _, term := range v.Slice() {
+			var rw *Term
+			result, rw = rewriteDynamicsOne(original, f, term, result)
+			cpy.Add(rw)
+		}
+		return result, NewTerm(cpy).SetLocation(term.Location)
 	case *ArrayComprehension:
 		var extra *Expr
 		v.Body, extra = rewriteDynamicsComprehensionBody(original, f, v.Body, term)
-		extras = append(extras, extra)
-		return extras, extras[len(extras)-1].Operand(0)
+		result.Append(extra)
+		return result, result[len(result)-1].Operand(0)
 	case *SetComprehension:
 		var extra *Expr
 		v.Body, extra = rewriteDynamicsComprehensionBody(original, f, v.Body, term)
-		extras = append(extras, extra)
-		return extras, extras[len(extras)-1].Operand(0)
+		result.Append(extra)
+		return result, result[len(result)-1].Operand(0)
 	case *ObjectComprehension:
 		var extra *Expr
 		v.Body, extra = rewriteDynamicsComprehensionBody(original, f, v.Body, term)
-		extras = append(extras, extra)
-		return extras, extras[len(extras)-1].Operand(0)
+		result.Append(extra)
+		return result, result[len(result)-1].Operand(0)
 	}
-	return extras, term
+	return result, term
 }
 
 func rewriteDynamicsComprehensionBody(original *Expr, f *equalityFactory, body Body, term *Term) (Body, *Expr) {
@@ -2962,15 +3031,15 @@ func isDataRef(term *Term) bool {
 	return false
 }
 
-func safetyErrorSlice(l *Location, unsafe unsafeVars) (result Errors) {
+func safetyErrorSlice(unsafe unsafeVars) (result Errors) {
 
 	if len(unsafe) == 0 {
 		return
 	}
 
-	for v := range unsafe.Vars() {
-		if !v.IsGenerated() {
-			result = append(result, NewError(UnsafeVarErr, l, "var %v is unsafe", v))
+	for _, pair := range unsafe.Vars() {
+		if !pair.Var.IsGenerated() {
+			result = append(result, NewError(UnsafeVarErr, pair.Loc, "var %v is unsafe", pair.Var))
 		}
 	}
 
@@ -3003,4 +3072,18 @@ func safetyErrorSlice(l *Location, unsafe unsafeVars) (result Errors) {
 	}
 
 	return
+}
+
+func checkUnsafeBuiltins(unsafeBuiltinsMap map[string]struct{}, node interface{}) Errors {
+	errs := make(Errors, 0)
+	WalkExprs(node, func(x *Expr) bool {
+		if x.IsCall() {
+			operator := x.Operator().String()
+			if _, ok := unsafeBuiltinsMap[operator]; ok {
+				errs = append(errs, NewError(TypeErr, x.Loc(), "unsafe built-in function calls in expression: %v", operator))
+			}
+		}
+		return false
+	})
+	return errs
 }
