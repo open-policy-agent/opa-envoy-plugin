@@ -315,6 +315,7 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 		DecisionID: result.decisionID,
 		Timestamp:  time.Now(),
 		Query:      p.cfg.Query,
+		Path:       p.cfg.Query,
 		Input:      &input,
 		Error:      err,
 		Metrics:    result.metrics,
