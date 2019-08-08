@@ -164,7 +164,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || *event.Result == false {
+	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == false {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
 }
