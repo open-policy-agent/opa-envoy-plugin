@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	ctx "golang.org/x/net/context"
@@ -83,6 +84,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 	ext_authz.RegisterAuthorizationServer(plugin.server, plugin)
 
+	m.RegisterCompilerTrigger(plugin.compilerUpdated)
+
 	return plugin
 }
 
@@ -95,9 +98,11 @@ type Config struct {
 }
 
 type envoyExtAuthzGrpcServer struct {
-	cfg     Config
-	server  *grpc.Server
-	manager *plugins.Manager
+	cfg                Config
+	server             *grpc.Server
+	manager            *plugins.Manager
+	preparedQuery      *rego.PreparedEvalQuery
+	preparedQueryMutex sync.Mutex
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
@@ -111,6 +116,12 @@ func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 
 func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
 	return
+}
+
+func (p *envoyExtAuthzGrpcServer) compilerUpdated(txn storage.Transaction) {
+	p.preparedQueryMutex.Lock()
+	defer p.preparedQueryMutex.Unlock()
+	p.preparedQuery = nil
 }
 
 func (p *envoyExtAuthzGrpcServer) listen() {
@@ -279,16 +290,34 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			"txn":     result.txnID,
 		}).Infof("Executing policy query.")
 
-		opts = append(opts,
-			rego.Metrics(result.metrics),
-			rego.ParsedQuery(p.cfg.parsedQuery),
-			rego.ParsedInput(input),
-			rego.Compiler(p.manager.GetCompiler()),
-			rego.Store(p.manager.Store),
-			rego.Transaction(txn),
-			rego.Runtime(p.manager.Info))
+		p.preparedQueryMutex.Lock()
+		defer p.preparedQueryMutex.Unlock()
 
-		rs, err := rego.New(opts...).Eval(ctx)
+		if p.preparedQuery == nil {
+
+			opts = append(opts,
+				rego.Metrics(result.metrics),
+				rego.ParsedQuery(p.cfg.parsedQuery),
+				rego.Compiler(p.manager.GetCompiler()),
+				rego.Store(p.manager.Store),
+				rego.Transaction(txn),
+				rego.Runtime(p.manager.Info))
+
+			r := rego.New(opts...)
+
+			pq, err := r.PrepareForEval(ctx)
+			if err != nil {
+				return err
+			}
+
+			p.preparedQuery = &pq
+		}
+
+		rs, err := p.preparedQuery.Eval(
+			ctx,
+			rego.EvalParsedInput(input),
+			rego.EvalTransaction(txn),
+		)
 
 		result.metrics.Timer(metrics.ServerHandler).Stop()
 
