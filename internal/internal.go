@@ -254,6 +254,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opts ...func(*rego.Rego)) (*evalResult, error) {
 	result := &evalResult{}
 	result.metrics = metrics.New()
+	result.metrics.Timer(metrics.ServerHandler).Start()
 
 	err := storage.Txn(ctx, p.manager.Store, storage.TransactionParams{}, func(txn storage.Transaction) error {
 
@@ -288,6 +289,8 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			rego.Runtime(p.manager.Info))
 
 		rs, err := rego.New(opts...).Eval(ctx)
+
+		result.metrics.Timer(metrics.ServerHandler).Stop()
 
 		if err != nil {
 			return err

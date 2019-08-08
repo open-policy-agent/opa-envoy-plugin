@@ -167,6 +167,21 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == false {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
+
+	expected := []string{
+		"timer_rego_module_compile_ns",
+		"timer_rego_module_parse_ns",
+		"timer_rego_query_compile_ns",
+		"timer_rego_query_eval_ns",
+		"timer_rego_query_parse_ns",
+		"timer_server_handler_ns",
+	}
+
+	for _, key := range expected {
+		if event.Metrics[key] == nil {
+			t.Fatalf("Expected non-zero metric for %v", key)
+		}
+	}
 }
 
 func TestCheckDeny(t *testing.T) {
