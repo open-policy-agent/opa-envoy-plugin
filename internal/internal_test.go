@@ -609,8 +609,8 @@ func TestGetResponseHttpStatus(t *testing.T) {
 		t.Fatalf("Expected no error but got %v", err)
 	}
 
-	if result != nil {
-		t.Fatalf("Expected no status but got %v", result)
+	if result.GetCode().String() != "Forbidden" {
+		t.Fatalf("Expected http status code \"Forbidden\" but got %v", result.GetCode().String())
 	}
 
 	input["http_status"] = true

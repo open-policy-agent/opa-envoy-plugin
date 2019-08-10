@@ -208,18 +208,15 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 				return nil, errors.Wrap(err, "failed to get response body")
 			}
 
-			deniedResponse := &ext_authz.DeniedHttpResponse{
-				Headers: responseHeaders,
-				Body:    body,
-			}
-
 			httpStatus, err := getResponseHTTPStatus(decision)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get response http status")
 			}
 
-			if httpStatus != nil {
-				deniedResponse.Status = httpStatus
+			deniedResponse := &ext_authz.DeniedHttpResponse{
+				Headers: responseHeaders,
+				Body:    body,
+				Status:  httpStatus,
 			}
 
 			resp.HttpResponse = &ext_authz.CheckResponse_DeniedResponse{
@@ -447,10 +444,12 @@ func getResponseHTTPStatus(result map[string]interface{}) (*ext_type.HttpStatus,
 	var val interface{}
 	var statusCode json.Number
 
-	status := &ext_type.HttpStatus{}
+	status := &ext_type.HttpStatus{
+		Code: ext_type.StatusCode(ext_type.StatusCode_Forbidden),
+	}
 
 	if val, ok = result["http_status"]; !ok {
-		return nil, nil
+		return status, nil
 	}
 
 	if statusCode, ok = val.(json.Number); !ok {
