@@ -16,6 +16,9 @@ spec:
     filterType: HTTP
     filterName: "envoy.ext_authz"
     filterConfig:
+      with_request_body:
+        max_request_bytes: 8192
+        allow_partial_message: true
       grpc_service:
         # NOTE(tsandall): when this was tested with the envoy_grpc client the gRPC
         # server was receiving check requests over HTTP 1.1. The gRPC server in
