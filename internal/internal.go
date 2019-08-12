@@ -161,6 +161,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 	}
 
 	input["parsed_path"] = getParsedPath(req)
+	input["parsed_body"] = getParsedBody(req)
 
 	inputValue, err := ast.InterfaceToValue(input)
 	if err != nil {
@@ -504,4 +505,11 @@ func getParsedPath(req *ext_authz.CheckRequest) []interface{} {
 		parsedPathInterface[i] = v
 	}
 	return parsedPathInterface
+}
+
+func getParsedBody(req *ext_authz.CheckRequest) map[string]interface{} {
+	body := req.GetAttributes().GetRequest().GetHttp().GetBody()
+	var data map[string]interface{}
+	json.Unmarshal([]byte(body), &data)
+	return data
 }

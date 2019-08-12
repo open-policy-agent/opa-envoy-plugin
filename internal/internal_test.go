@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
@@ -46,7 +47,8 @@ const exampleAllowedRequest = `{
 		  },
 		  "path": "/api/v1/products",
 		  "host": "192.168.99.100:31380",
-		  "protocol": "HTTP/1.1"
+		  "protocol": "HTTP/1.1",
+		  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\"}"
 		}
 	  }
 	}
@@ -78,7 +80,8 @@ const exampleDeniedRequest = `{
 		  },
 		  "path": "/api/v1/products",
 		  "host": "192.168.99.100:31380",
-		  "protocol": "HTTP/1.1"
+		  "protocol": "HTTP/1.1",
+		  "body": "foo"
 		}
 	  }
 	}
@@ -91,6 +94,30 @@ const exampleAllowedRequestParsedPath = `{
 		  "id": "13359530607844510314",
 		  "method": "GET",
 		  "path": "/my/test/path"
+		}
+	  }
+	}
+  }`
+
+const exampleAllowedRequestParsedBody = `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "id": "13359530607844510314",
+		  "method": "GET",
+		  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\", \"dept\": {\"it\": \"eng\"}}",
+		}
+	  }
+	}
+  }`
+
+const exampleDeniedRequestParsedBody = `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "id": "13359530607844510314",
+		  "method": "GET",
+		  "body": "foo",
 		}
 	  }
 	}
@@ -121,6 +148,24 @@ func TestCheckAllowParsedPath(t *testing.T) {
 
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(&testPlugin{}, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
+func TestCheckAllowParsedBody(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedBody), &req); err != nil {
 		panic(err)
 	}
 
@@ -191,6 +236,24 @@ func TestCheckDeny(t *testing.T) {
 
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(&testPlugin{}, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+		t.Fatal("Expected request to be denied but got:", output)
+	}
+}
+
+func TestCheckDenyParsedBody(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequestParsedBody), &req); err != nil {
 		panic(err)
 	}
 
@@ -642,6 +705,36 @@ func TestGetResponseHttpStatus(t *testing.T) {
 	}
 }
 
+func TestGetParsedBodyJSON(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	result := getParsedBody(&req)
+
+	expected := map[string]interface{}{}
+	expected["firstname"] = "foo"
+	expected["lastname"] = "bar"
+
+	if !reflect.DeepEqual(expected, result) {
+		t.Fatalf("Expected result %v but got %v", expected, result)
+	}
+}
+
+func TestGetParsedBodyNotJSON(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	result := getParsedBody(&req)
+
+	if len(result) != 0 {
+		t.Fatalf("Expected empty result but got %v", result)
+	}
+}
+
 func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
 	// Define a RBAC policy to allow or deny requests based on user roles
@@ -659,6 +752,12 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 
 		allow {
 			input.parsed_path = ["my", "test", "path"]
+		}
+
+		allow {
+			input.parsed_body.firstname == "foo"
+			input.parsed_body.lastname == "bar"
+			input.parsed_body.dept.it == "eng"
 		}
 
 		roles_for_user[r] {

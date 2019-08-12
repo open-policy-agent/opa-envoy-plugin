@@ -221,6 +221,7 @@ The `input` value defined for your policy will resemble the JSON below:
 ```json
 {
   "parsed_path": ["api", "v1", "products"],
+  "parsed_body":  {"id": "ext1", "name": "opa_authz"},
   "attributes": {
     "source": {
       "address": {
@@ -269,7 +270,8 @@ The `input` value defined for your policy will resemble the JSON below:
         },
         "path": "/api/v1/products",
         "host": "192.168.99.100:31380",
-        "protocol": "HTTP/1.1"
+        "protocol": "HTTP/1.1",
+        "body": "{\"id\": \"ext1\", \"name\": \"opa_authz\"}"
       }
     }
   }
@@ -285,6 +287,19 @@ default allow = false
 
 allow {
    input.parsed_path = ["api", "v1", "products"]
+}
+```
+
+The `parsed_body` field in the input is generated from the `body` field in the HTTP request which is included in the Envoy External Authorization `CheckRequest` message type. This field contains the deserialized JSON request body which can then be used in a policy as shown below.
+
+```ruby
+package istio.authz
+
+default allow = false
+
+allow {
+   input.parsed_body.id == "ext1"
+   input.parsed_body.name == "opa_authz"
 }
 ```
 
