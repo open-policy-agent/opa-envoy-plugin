@@ -77,9 +77,10 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 	plugin := &envoyExtAuthzGrpcServer{
-		manager: m,
-		cfg:     *cfg,
-		server:  grpc.NewServer(),
+		manager:             m,
+		cfg:                 *cfg,
+		server:              grpc.NewServer(),
+		preparedQueryDoOnce: new(sync.Once),
 	}
 
 	ext_authz.RegisterAuthorizationServer(plugin.server, plugin)
@@ -98,11 +99,11 @@ type Config struct {
 }
 
 type envoyExtAuthzGrpcServer struct {
-	cfg                Config
-	server             *grpc.Server
-	manager            *plugins.Manager
-	preparedQuery      *rego.PreparedEvalQuery
-	preparedQueryMutex sync.Mutex
+	cfg                 Config
+	server              *grpc.Server
+	manager             *plugins.Manager
+	preparedQuery       *rego.PreparedEvalQuery
+	preparedQueryDoOnce *sync.Once
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
@@ -119,9 +120,7 @@ func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interf
 }
 
 func (p *envoyExtAuthzGrpcServer) compilerUpdated(txn storage.Transaction) {
-	p.preparedQueryMutex.Lock()
-	defer p.preparedQueryMutex.Unlock()
-	p.preparedQuery = nil
+	p.preparedQueryDoOnce = new(sync.Once)
 }
 
 func (p *envoyExtAuthzGrpcServer) listen() {
@@ -293,27 +292,9 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			"txn":     result.txnID,
 		}).Infof("Executing policy query.")
 
-		p.preparedQueryMutex.Lock()
-		defer p.preparedQueryMutex.Unlock()
-
-		if p.preparedQuery == nil {
-
-			opts = append(opts,
-				rego.Metrics(result.metrics),
-				rego.ParsedQuery(p.cfg.parsedQuery),
-				rego.Compiler(p.manager.GetCompiler()),
-				rego.Store(p.manager.Store),
-				rego.Transaction(txn),
-				rego.Runtime(p.manager.Info))
-
-			r := rego.New(opts...)
-
-			pq, err := r.PrepareForEval(ctx)
-			if err != nil {
-				return err
-			}
-
-			p.preparedQuery = &pq
+		err = p.constructPreparedQuery(txn, result.metrics, opts)
+		if err != nil {
+			return err
 		}
 
 		rs, err := p.preparedQuery.Eval(
@@ -337,6 +318,28 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 	})
 
 	return result, err
+}
+
+func (p *envoyExtAuthzGrpcServer) constructPreparedQuery(txn storage.Transaction, m metrics.Metrics, opts []func(*rego.Rego)) error {
+	var err error
+	var pq rego.PreparedEvalQuery
+
+	p.preparedQueryDoOnce.Do(func() {
+		opts = append(opts,
+			rego.Metrics(m),
+			rego.ParsedQuery(p.cfg.parsedQuery),
+			rego.Compiler(p.manager.GetCompiler()),
+			rego.Store(p.manager.Store),
+			rego.Transaction(txn),
+			rego.Runtime(p.manager.Info))
+
+		r := rego.New(opts...)
+
+		pq, err = r.PrepareForEval(context.Background())
+		p.preparedQuery = &pq
+	})
+
+	return err
 }
 
 func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, result *evalResult, err error) error {
@@ -510,6 +513,6 @@ func getParsedPath(req *ext_authz.CheckRequest) []interface{} {
 func getParsedBody(req *ext_authz.CheckRequest) map[string]interface{} {
 	body := req.GetAttributes().GetRequest().GetHttp().GetBody()
 	var data map[string]interface{}
-	json.Unmarshal([]byte(body), &data)
+	util.Unmarshal([]byte(body), &data)
 	return data
 }

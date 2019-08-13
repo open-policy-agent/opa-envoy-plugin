@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
@@ -125,7 +126,7 @@ const exampleDeniedRequestParsedBody = `{
 
 func TestCheckAllow(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -141,6 +142,57 @@ func TestCheckAllow(t *testing.T) {
 	}
 	if output.Status.Code != int32(google_rpc.OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
+func TestCheckTrigger(t *testing.T) {
+
+	// Example Envoy Check Request for input:
+	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(&testPlugin{}, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	originalPreparedQuery := server.preparedQuery
+
+	output, err = server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	if !reflect.DeepEqual(originalPreparedQuery, server.preparedQuery) {
+		t.Fatal("Expected same instance of prepared query")
+	}
+
+	// call compiler trigger
+	txn := storage.NewTransactionOrDie(ctx, server.manager.Store, storage.WriteParams)
+	server.compilerUpdated(txn)
+
+	output, err = server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(google_rpc.OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	if reflect.DeepEqual(originalPreparedQuery, server.preparedQuery) {
+		t.Fatal("Expected different instance of prepared query")
 	}
 }
 
@@ -182,7 +234,7 @@ func TestCheckAllowParsedBody(t *testing.T) {
 
 func TestCheckAllowWithLogger(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -231,7 +283,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 
 func TestCheckDeny(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -270,7 +322,7 @@ func TestCheckDenyParsedBody(t *testing.T) {
 
 func TestCheckAllowWithDryRunTrue(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -294,7 +346,7 @@ func TestCheckAllowWithDryRunTrue(t *testing.T) {
 
 func TestCheckDenyWithDryRunTrue(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -318,7 +370,7 @@ func TestCheckDenyWithDryRunTrue(t *testing.T) {
 
 func TestCheckDenyWithLogger(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -352,7 +404,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 func TestCheckWithLoggerError(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -424,7 +476,7 @@ func TestConfigValidDefault(t *testing.T) {
 
 func TestCheckAllowObjectDecision(t *testing.T) {
 
-	// Example Mixer Check Request for input:
+	// Example Envoy Check Request for input:
 	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
 
 	var req ext_authz.CheckRequest
@@ -808,7 +860,8 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 			DryRun:      dryRun,
 			parsedQuery: parsedQuery,
 		},
-		manager: m,
+		manager:             m,
+		preparedQueryDoOnce: new(sync.Once),
 	}
 	return s
 }
@@ -851,8 +904,11 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 			DryRun:      dryRun,
 			parsedQuery: parsedQuery,
 		},
-		manager: m,
+		manager:             m,
+		preparedQueryDoOnce: new(sync.Once),
 	}
+
+	m.RegisterCompilerTrigger(s.compilerUpdated)
 
 	return s
 }
