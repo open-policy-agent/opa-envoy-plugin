@@ -105,6 +105,9 @@ const exampleAllowedRequestParsedBody = `{
 	  "request": {
 		"http": {
 		  "id": "13359530607844510314",
+		  "headers": {
+			"content-type": "application/json"
+		  },
 		  "method": "GET",
 		  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\", \"dept\": {\"it\": \"eng\"}}",
 		}
@@ -757,33 +760,88 @@ func TestGetResponseHttpStatus(t *testing.T) {
 	}
 }
 
-func TestGetParsedBodyJSON(t *testing.T) {
-	var req ext_authz.CheckRequest
-	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
-		panic(err)
-	}
+func TestGetParsedBody(t *testing.T) {
 
-	result := getParsedBody(&req)
+	requestNoContentType := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-length": "0"
+			  }
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeText := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "text/html"
+			  }
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeJSON := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\"}"
+			}
+		  }
+		}
+	  }`
 
 	expected := map[string]interface{}{}
 	expected["firstname"] = "foo"
 	expected["lastname"] = "bar"
 
-	if !reflect.DeepEqual(expected, result) {
-		t.Fatalf("Expected result %v but got %v", expected, result)
+	tests := map[string]struct {
+		input *ext_authz.CheckRequest
+		want  map[string]interface{}
+		err   error
+	}{
+		"no_content_type":   {input: createCheckRequest(requestNoContentType), want: map[string]interface{}{}, err: nil},
+		"content_type_text": {input: createCheckRequest(requestContentTypeText), want: map[string]interface{}{}, err: nil},
+		"content_type_json": {input: createCheckRequest(requestContentTypeJSON), want: expected, err: nil},
 	}
-}
 
-func TestGetParsedBodyNotJSON(t *testing.T) {
-	var req ext_authz.CheckRequest
-	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
-		panic(err)
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := getParsedBody(tc.input)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("expected result: %v, got: %v", tc.want, got)
+			}
+
+			if err != tc.err {
+				t.Fatalf("expected error: %v, got: %v", tc.err, err)
+			}
+		})
 	}
 
-	result := getParsedBody(&req)
+	requestContentTypeJSONInvalid := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "foo"
+			}
+		  }
+		}
+	  }`
 
-	if len(result) != 0 {
-		t.Fatalf("Expected empty result but got %v", result)
+	_, err := getParsedBody(createCheckRequest(requestContentTypeJSONInvalid))
+	if err == nil {
+		t.Fatal("Expected error but got nil")
 	}
 }
 
@@ -911,6 +969,14 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 	m.RegisterCompilerTrigger(s.compilerUpdated)
 
 	return s
+}
+
+func createCheckRequest(policy string) *ext_authz.CheckRequest {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(policy), &req); err != nil {
+		panic(err)
+	}
+	return &req
 }
 
 func getPluginManager(module string, customLogger plugins.Plugin) (*plugins.Manager, error) {
