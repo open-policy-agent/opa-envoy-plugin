@@ -32,11 +32,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 const defaultAddr = ":9191"
 const defaultQuery = "data.istio.authz.allow"
 const defaultDryRun = false
+const defaultEnableReflection = false
 
 var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
 
@@ -54,9 +56,10 @@ type evalResult struct {
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 	cfg := Config{
-		Addr:   defaultAddr,
-		Query:  defaultQuery,
-		DryRun: defaultDryRun,
+		Addr:             defaultAddr,
+		Query:            defaultQuery,
+		DryRun:           defaultDryRun,
+		EnableReflection: defaultEnableReflection,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -83,19 +86,26 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		preparedQueryDoOnce: new(sync.Once),
 	}
 
+	// Register Authorization Server
 	ext_authz.RegisterAuthorizationServer(plugin.server, plugin)
 
 	m.RegisterCompilerTrigger(plugin.compilerUpdated)
+
+	// Register reflection service on gRPC server
+	if cfg.EnableReflection {
+		reflection.Register(plugin.server)
+	}
 
 	return plugin
 }
 
 // Config represents the plugin configuration.
 type Config struct {
-	Addr        string `json:"addr"`
-	Query       string `json:"query"`
-	DryRun      bool   `json:"dry-run"`
-	parsedQuery ast.Body
+	Addr             string `json:"addr"`
+	Query            string `json:"query"`
+	DryRun           bool   `json:"dry-run"`
+	EnableReflection bool   `json:"enable-reflection"`
+	parsedQuery      ast.Body
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -132,9 +142,10 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"addr":    p.cfg.Addr,
-		"query":   p.cfg.Query,
-		"dry-run": p.cfg.DryRun,
+		"addr":              p.cfg.Addr,
+		"query":             p.cfg.Query,
+		"dry-run":           p.cfg.DryRun,
+		"enable-reflection": p.cfg.EnableReflection,
 	}).Infof("Starting gRPC server.")
 
 	if err := p.server.Serve(l); err != nil {
