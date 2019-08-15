@@ -151,6 +151,7 @@ golang.org/x/text/transform
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.22.1
 google.golang.org/grpc
+google.golang.org/grpc/reflection
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/codes
@@ -179,6 +180,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
+google.golang.org/grpc/reflection/grpc_reflection_v1alpha
 google.golang.org/grpc/balancer/base
 google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/binarylog/grpc_binarylog_v1
