@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -170,7 +171,13 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		return nil, err
 	}
 
-	input["parsed_path"] = getParsedPath(req)
+	parsedPath, parsedQuery, err := getParsedPathAndQuery(req)
+	if err != nil {
+		return nil, err
+	}
+
+	input["parsed_path"] = parsedPath
+	input["parsed_query"] = parsedQuery
 
 	parsedBody, err := getParsedBody(req)
 	if err != nil {
@@ -521,14 +528,35 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 	return revision, nil
 }
 
-func getParsedPath(req *ext_authz.CheckRequest) []interface{} {
+func getParsedPathAndQuery(req *ext_authz.CheckRequest) ([]interface{}, map[string]interface{}, error) {
 	path := req.GetAttributes().GetRequest().GetHttp().GetPath()
-	parsedPath := strings.Split(strings.TrimLeft(path, "/"), "/")
+
+	unescapedPath, err := url.PathUnescape(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parsedURL, err := url.Parse(unescapedPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parsedPath := strings.Split(strings.TrimLeft(parsedURL.Path, "/"), "/")
 	parsedPathInterface := make([]interface{}, len(parsedPath))
 	for i, v := range parsedPath {
 		parsedPathInterface[i] = v
 	}
-	return parsedPathInterface
+
+	parsedQueryInterface := make(map[string]interface{})
+	for paramKey, paramValues := range parsedURL.Query() {
+		queryValues := make([]interface{}, len(paramValues))
+		for i, v := range paramValues {
+			queryValues[i] = v
+		}
+		parsedQueryInterface[paramKey] = queryValues
+	}
+
+	return parsedPathInterface, parsedQueryInterface, nil
 }
 
 func getParsedBody(req *ext_authz.CheckRequest) (map[string]interface{}, error) {
