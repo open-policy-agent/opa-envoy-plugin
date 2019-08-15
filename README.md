@@ -135,10 +135,13 @@ The OPA-Istio plugin supports the following configuration fields:
 | `plugins["envoy_ext_authz_grpc"].addr` | No | Set listening address of Envoy External Authorization gRPC server. This must match the value configured in the Envoy Filter resource. Default: `:9191`. |
 | `plugins["envoy_ext_authz_grpc"].query` | No | Specifies the name of the policy decision to query. The policy decision can either be a `boolean` or an `object`. If boolean, `true` indicates the request should be allowed and `false` indicates the request should be denied. If the policy decision is an object, it **must** contain the `allowed` key set to either `true` or `false` to indicate if the request is allowed or not respectively. It can optionally contain a `headers` field to send custom headers to the downstream client or upstream. An optional `body` field can be included in the policy decision to send a response body data to the downstream client. Also an optional `http_status` field can be included to send a HTTP response status code to the downstream client other than `403 (Forbidden)`. Default: `data.istio.authz.allow`.|
 | `plugins["envoy_ext_authz_grpc"].dry-run` | No | Configures the Envoy External Authorization gRPC server to unconditionally return an `ext_authz.CheckResponse.Status` of `google_rpc.Status{Code: google_rpc.OK}`. Default: `false`. |
+|`plugins["envoy_ext_authz_grpc"].enable-reflection`| No | Enables gRPC server reflection on the Envoy External Authorization gRPC server. Default: `false`. |
 
 If the configuration does not specify the `query` field, `data.istio.authz.allow` will be considered as the default name of the policy decision to query.
 
 The `dry-run` parameter is provided to enable you to test out new policies. You can set `dry-run: true` which will unconditionally allow requests. Decision logs can be monitored to see what "would" have happened. This is especially useful for initial integration of OPA or when policies undergo large refactoring.
+
+The `enable-reflection` parameter registers the Envoy External Authorization gRPC server with reflection. After enabling server reflection, a command line tool such as [grpcurl](https://github.com/fullstorydev/grpcurl) can be used to invoke RPC methods on the gRPC server. See [gRPC Server Reflection Usage](#grpc-server-reflection-usage) section for more details.
 
 An example of a rule that returns an object that not only indicates if a request is allowed or not but also provides optional response headers, body and HTTP status that can be sent to the downstream client or upstream can be seen below in the [Example Policy with Object Response](#example-policy-with-object-response) section.
 
@@ -159,9 +162,10 @@ bundle:
   service: bundle_service
 plugins:
     envoy_ext_authz_grpc:
-        addr:    :9191
-        query:   data.istio.authz.allow
+        addr: :9191
+        query: data.istio.authz.allow
         dry-run: false
+        enable-reflection: false
 ```
 
 ## Example Policy
@@ -325,6 +329,62 @@ allow = response {
   }
 }
 ```
+
+## gRPC Server Reflection Usage
+
+This section provides examples of interacting with the Envoy External Authorization gRPC server using the `grpcurl` tool.
+
+* List all services exposed by the server
+
+  ```bash
+  $ grpcurl -plaintext localhost:9191 list
+  ```
+
+  Output:
+
+  ```bash
+  envoy.service.auth.v2.Authorization
+  grpc.reflection.v1alpha.ServerReflection
+  ```
+
+* Invoke RPC on the server
+
+  ```bash
+  $ grpcurl -plaintext -import-path ./proto/ -proto ./proto/envoy/service/auth/v2/external_auth.proto -d '
+  {
+    "attributes": {
+      "request": {
+        "http": {
+          "method": "GET",
+          "path": "/api/v1/products"
+        }
+      }
+    }
+  }' localhost:9191 envoy.service.auth.v2.Authorization/Check
+  ```
+
+  Output:
+
+  ```bash
+  {
+    "status": {
+      "code": 0
+  },
+    "okResponse": {
+      "headers": [
+        {
+          "header": {
+            "key": "x-ext-auth-allow",
+            "value": "yes"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+The `-proto` and `-import-path` flags tell `grpcurl` the relevant proto source file and the folder from which dependencies can be imported respectively. These flags need to be provided as the Envoy External Authorization gRPC server does not support reflection. See this [issue](https://github.com/grpc/grpc-go/issues/1873) for details.
+
 
 ## Dependencies
 

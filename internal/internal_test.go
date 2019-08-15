@@ -441,7 +441,7 @@ func TestConfigValid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	in := `{"addr": ":9292", "query": "data.test"}`
+	in := `{"addr": ":9292", "query": "data.test", "dry-run": true, "enable-reflection": true}`
 	config, err := Validate(m, []byte(in))
 	if err != nil {
 		t.Fatal(err)
@@ -453,6 +453,14 @@ func TestConfigValid(t *testing.T) {
 
 	if config.parsedQuery.String() != "data.test" {
 		t.Fatalf("Expected query data.test but got %v", config.Query)
+	}
+
+	if !config.DryRun {
+		t.Fatal("Expected dry-run config to be enabled")
+	}
+
+	if !config.EnableReflection {
+		t.Fatal("Expected enable-reflection config to be enabled")
 	}
 }
 
@@ -474,6 +482,14 @@ func TestConfigValidDefault(t *testing.T) {
 
 	if config.parsedQuery.String() != defaultQuery {
 		t.Fatalf("Expected query %v but got %v", defaultQuery, config.parsedQuery.String())
+	}
+
+	if config.DryRun {
+		t.Fatal("Expected dry-run config to be disabled by default")
+	}
+
+	if config.EnableReflection {
+		t.Fatal("Expected enable-reflection config to be disabled by default")
 	}
 }
 
