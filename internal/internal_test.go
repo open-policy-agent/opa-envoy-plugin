@@ -94,7 +94,7 @@ const exampleAllowedRequestParsedPath = `{
 		"http": {
 		  "id": "13359530607844510314",
 		  "method": "GET",
-		  "path": "/my/test/path"
+		  "path": "/my/test/path?a=1&a=2&x=y"
 		}
 	  }
 	}
@@ -878,6 +878,8 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 
 		allow {
 			input.parsed_path = ["my", "test", "path"]
+			input.parsed_query.a = ["1", "2"]
+			input.parsed_query.x = ["y"]
 		}
 
 		allow {
@@ -985,6 +987,69 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 	m.RegisterCompilerTrigger(s.compilerUpdated)
 
 	return s
+}
+
+func createExtReqWithPath(path string) *ext_authz.CheckRequest {
+	requestString := fmt.Sprintf(`{
+	  "attributes": {
+		"request": {
+		  "http": {
+			"path": "%s"
+		  }
+		}
+	  }
+	}`, path)
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(requestString), &req); err != nil {
+		panic(err)
+	}
+
+	return &req
+}
+
+func TestParsedPathAndQuery(t *testing.T) {
+	var tests = []struct {
+		request       *ext_authz.CheckRequest
+		expectedPath  []interface{}
+		expectedQuery map[string]interface{}
+	}{
+		{
+			createExtReqWithPath("/my/test/path"),
+			[]interface{}{"my", "test", "path"},
+			map[string]interface{}{},
+		},
+		{
+			createExtReqWithPath("/my/test/path?a=1"),
+			[]interface{}{"my", "test", "path"},
+			map[string]interface{}{"a": []interface{}{"1"}},
+		},
+		{
+			createExtReqWithPath("/my/test/path?a=1&a=2"),
+			[]interface{}{"my", "test", "path"},
+			map[string]interface{}{"a": []interface{}{"1", "2"}},
+		},
+		{
+			createExtReqWithPath("/my/test/path?a=1&b=2"),
+			[]interface{}{"my", "test", "path"},
+			map[string]interface{}{"a": []interface{}{"1"}, "b": []interface{}{"2"}},
+		},
+		{
+			createExtReqWithPath("%2Fmy%2Ftest%2Fpath%3Fa%3D1%26a%3D2"),
+			[]interface{}{"my", "test", "path"},
+			map[string]interface{}{"a": []interface{}{"1", "2"}},
+		},
+	}
+
+	for _, tt := range tests {
+		actualPath, actualQuery, _ := getParsedPathAndQuery(tt.request)
+		if !reflect.DeepEqual(actualPath, tt.expectedPath) {
+			t.Errorf("parsed_path (%s): expected %s, actual %s", tt.request, tt.expectedPath, actualPath)
+		}
+		if !reflect.DeepEqual(actualQuery, tt.expectedQuery) {
+			t.Errorf("parsed_query (%s): expected %s, actual %s", tt.request, tt.expectedQuery, actualQuery)
+		}
+	}
 }
 
 func createCheckRequest(policy string) *ext_authz.CheckRequest {

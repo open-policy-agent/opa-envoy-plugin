@@ -225,6 +225,7 @@ The `input` value defined for your policy will resemble the JSON below:
 ```json
 {
   "parsed_path": ["api", "v1", "products"],
+  "parsed_query": {"lang": ["en"]},
   "parsed_body":  {"id": "ext1", "name": "opa_authz"},
   "attributes": {
     "source": {
@@ -258,7 +259,7 @@ The `input` value defined for your policy will resemble the JSON below:
         "headers": {
           ":authority": "192.168.99.100:31380",
           ":method": "GET",
-          ":path": "/api/v1/products",
+          ":path": "/api/v1/products?lang=en",
           "accept": "*/*",
           "authorization": "Basic YWxpY2U6cGFzc3dvcmQ=",
           "content-length": "0",
@@ -272,7 +273,7 @@ The `input` value defined for your policy will resemble the JSON below:
           "x-istio-attributes": "Cj4KE2Rlc3RpbmF0aW9uLnNlcnZpY2USJxIlcHJvZHVjdHBhZ2UuZGVmYXVsdC5zdmMuY2x1c3Rlci5sb2NhbApPCgpzb3VyY2UudWlkEkESP2t1YmVybmV0ZXM6Ly9pc3Rpby1pbmdyZXNzZ2F0ZXdheS02Nzk5NWM0ODZjLXFwOGpyLmlzdGlvLXN5c3RlbQpBChdkZXN0aW5hdGlvbi5zZXJ2aWNlLnVpZBImEiRpc3RpbzovL2RlZmF1bHQvc2VydmljZXMvcHJvZHVjdHBhZ2UKQwoYZGVzdGluYXRpb24uc2VydmljZS5ob3N0EicSJXByb2R1Y3RwYWdlLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwKKgodZGVzdGluYXRpb24uc2VydmljZS5uYW1lc3BhY2USCRIHZGVmYXVsdAopChhkZXN0aW5hdGlvbi5zZXJ2aWNlLm5hbWUSDRILcHJvZHVjdHBhZ2U=",
           "x-request-id": "92a6c0f7-0250-944b-9cfc-ae10cbcedd8e"
         },
-        "path": "/api/v1/products",
+        "path": "/api/v1/products?lang=en",
         "host": "192.168.99.100:31380",
         "protocol": "HTTP/1.1",
         "body": "{\"id\": \"ext1\", \"name\": \"opa_authz\"}"
@@ -291,6 +292,21 @@ default allow = false
 
 allow {
    input.parsed_path = ["api", "v1", "products"]
+}
+```
+
+The `parsed_query` field in the input is also generated from the `path` field in the HTTP request. This field provides the HTTP url query as a map of string array. The below sample policy allows anyone to access the path `/api/v1/products?lang=en&id=1&id=2`.
+
+
+```ruby
+package istio.authz
+
+default allow = false
+
+allow {
+   input.parsed_path = ["api", "v1", "products"]
+   input.parsed_query.lang = ["en"]
+   input.parsed_query.id = ["1", "2"]
 }
 ```
 
