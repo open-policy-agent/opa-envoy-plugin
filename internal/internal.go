@@ -138,7 +138,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	// The listener is closed automatically by Serve when it returns.
 	l, err := net.Listen("tcp", p.cfg.Addr)
 	if err != nil {
-		logrus.WithField("err", err).Fatalf("Unable to create listener.")
+		logrus.WithField("err", err).Fatal("Unable to create listener.")
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -146,10 +146,10 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 		"query":             p.cfg.Query,
 		"dry-run":           p.cfg.DryRun,
 		"enable-reflection": p.cfg.EnableReflection,
-	}).Infof("Starting gRPC server.")
+	}).Info("Starting gRPC server.")
 
 	if err := p.server.Serve(l); err != nil {
-		logrus.WithField("err", err).Fatalf("Listener failed.")
+		logrus.WithField("err", err).Fatal("Listener failed.")
 	}
 
 	logrus.Info("Listener exited.")
@@ -257,15 +257,17 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		return resp, nil
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"query":               p.cfg.Query,
-		"dry-run":             p.cfg.DryRun,
-		"decision":            result.decision,
-		"err":                 err,
-		"txn":                 result.txnID,
-		"metrics":             result.metrics.All(),
-		"total_decision_time": time.Since(start),
-	}).Info("Returning policy decision.")
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		logrus.WithFields(logrus.Fields{
+			"query":               p.cfg.Query,
+			"dry-run":             p.cfg.DryRun,
+			"decision":            result.decision,
+			"err":                 err,
+			"txn":                 result.txnID,
+			"metrics":             result.metrics.All(),
+			"total_decision_time": time.Since(start),
+		}).Debug("Returning policy decision.")
+	}
 
 	// If dry-run mode, override the Status code to unconditionally Allow the request
 	// DecisionLogging should reflect what "would" have happened
@@ -302,12 +304,14 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 
 		result.txnID = txn.ID()
 
-		logrus.WithFields(logrus.Fields{
-			"input":   input,
-			"query":   p.cfg.Query,
-			"dry-run": p.cfg.DryRun,
-			"txn":     result.txnID,
-		}).Infof("Executing policy query.")
+		if logrus.IsLevelEnabled(logrus.DebugLevel) {
+			logrus.WithFields(logrus.Fields{
+				"input":   input,
+				"query":   p.cfg.Query,
+				"dry-run": p.cfg.DryRun,
+				"txn":     result.txnID,
+			}).Debug("Executing policy query.")
+		}
 
 		err = p.constructPreparedQuery(txn, result.metrics, opts)
 		if err != nil {

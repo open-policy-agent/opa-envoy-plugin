@@ -84,7 +84,7 @@ update-opa:
 	@./build/update-opa-version.sh $(TAG)
 
 test: generate
-	$(DISABLE_CGO) $(GO) test $(PACKAGES)
+	$(DISABLE_CGO) $(GO) test -bench=. $(PACKAGES)
 
 clean:
 	rm -f .Dockerfile_*
