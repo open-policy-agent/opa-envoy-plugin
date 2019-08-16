@@ -52,6 +52,8 @@ type evalResult struct {
 // configuration and returns a configuration value that can be used to
 // instantiate the plugin.
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
+	// Default to logging consistently with the default in Opa server
+	logrus.SetFormatter(&logrus.JSONFormatter{})
 
 	cfg := Config{
 		Addr:   defaultAddr,
