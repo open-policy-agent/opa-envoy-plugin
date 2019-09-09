@@ -14,13 +14,13 @@ import (
 
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
-	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
+	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 const exampleAllowedRequest = `{
@@ -143,7 +143,7 @@ func TestCheckAllow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 }
@@ -164,7 +164,7 @@ func TestCheckTrigger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 
@@ -174,7 +174,7 @@ func TestCheckTrigger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 
@@ -190,7 +190,7 @@ func TestCheckTrigger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 
@@ -212,7 +212,7 @@ func TestCheckAllowParsedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 }
@@ -230,7 +230,7 @@ func TestCheckAllowParsedBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 }
@@ -254,7 +254,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 
@@ -299,7 +299,7 @@ func TestCheckDeny(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatal("Expected request to be denied but got:", output)
 	}
 }
@@ -317,7 +317,7 @@ func TestCheckDenyParsedBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatal("Expected request to be denied but got:", output)
 	}
 }
@@ -341,7 +341,7 @@ func TestCheckAllowWithDryRunTrue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 }
@@ -365,7 +365,7 @@ func TestCheckDenyWithDryRunTrue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed since config.DryRun is true, but got:", output)
 	}
 }
@@ -389,7 +389,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatal("Expected request to be denied but got:", output)
 	}
 
@@ -423,7 +423,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Status.Code != int32(google_rpc.UNKNOWN) {
+	if output.Status.Code != int32(code.Code_UNKNOWN) {
 		t.Fatalf("Expected logger error code UNKNOWN but got %v", output.Status.Code)
 	}
 
@@ -509,7 +509,7 @@ func TestCheckAllowObjectDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatalf("Expected request to be allowed but got: %v", output)
 	}
 
@@ -546,7 +546,7 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 
 	fmt.Printf("Result is %v\n", output)
 
-	if output.Status.Code != int32(google_rpc.PERMISSION_DENIED) {
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatalf("Expected request to be denied but got: %v", output)
 	}
 
@@ -590,7 +590,7 @@ func TestCheckDenyWithDryRunObjectDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatalf("Expected request to be allowed since config.DryRun is true, but got: %v", output)
 	}
 
@@ -614,7 +614,7 @@ func TestCheckAllowWithDryRunObjectDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if output.Status.Code != int32(google_rpc.OK) {
+	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatalf("Expected request to be allowed but got: %v", output)
 	}
 
@@ -659,8 +659,8 @@ func TestGetResponseStatus(t *testing.T) {
 		t.Fatalf("Expected no error but got %v", err)
 	}
 
-	if result != int32(google_rpc.OK) {
-		t.Fatalf("Expected result %v but got %v", int32(google_rpc.OK), result)
+	if result != int32(code.Code_OK) {
+		t.Fatalf("Expected result %v but got %v", int32(code.Code_OK), result)
 	}
 }
 

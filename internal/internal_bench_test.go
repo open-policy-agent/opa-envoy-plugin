@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
-	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/util"
+	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 func BenchmarkCheck(b *testing.B) {
@@ -29,7 +29,7 @@ func BenchmarkCheck(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		if output.Status.Code != int32(google_rpc.OK) {
+		if output.Status.Code != int32(code.Code_OK) {
 			b.Fatal("Expected request to be allowed but got:", output)
 		}
 	}
