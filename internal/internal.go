@@ -21,7 +21,6 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_type "github.com/envoyproxy/go-control-plane/envoy/type"
-	google_rpc "github.com/gogo/googleapis/google/rpc"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
@@ -32,6 +31,8 @@ import (
 	"github.com/open-policy-agent/opa/util"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -200,12 +201,12 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	switch decision := result.decision.(type) {
 	case bool:
-		status := int32(google_rpc.PERMISSION_DENIED)
+		status := int32(code.Code_PERMISSION_DENIED)
 		if decision {
-			status = int32(google_rpc.OK)
+			status = int32(code.Code_OK)
 		}
 
-		resp.Status = &google_rpc.Status{Code: status}
+		resp.Status = &rpc_status.Status{Code: status}
 
 	case map[string]interface{}:
 		status, err := getResponseStatus(decision)
@@ -213,14 +214,14 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 			return nil, errors.Wrap(err, "failed to get response status")
 		}
 
-		resp.Status = &google_rpc.Status{Code: status}
+		resp.Status = &rpc_status.Status{Code: status}
 
 		responseHeaders, err := getResponseHeaders(decision)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get response headers")
 		}
 
-		if status == int32(google_rpc.OK) {
+		if status == int32(code.Code_OK) {
 			resp.HttpResponse = &ext_authz.CheckResponse_OkResponse{
 				OkResponse: &ext_authz.OkHttpResponse{
 					Headers: responseHeaders,
@@ -256,8 +257,8 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	if err != nil {
 		resp := &ext_authz.CheckResponse{
-			Status: &google_rpc.Status{
-				Code:    int32(google_rpc.UNKNOWN),
+			Status: &rpc_status.Status{
+				Code:    int32(code.Code_UNKNOWN),
 				Message: err.Error(),
 			},
 		}
@@ -279,8 +280,8 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 	// If dry-run mode, override the Status code to unconditionally Allow the request
 	// DecisionLogging should reflect what "would" have happened
 	if p.cfg.DryRun {
-		if resp.Status.Code != int32(google_rpc.OK) {
-			resp.Status = &google_rpc.Status{Code: int32(google_rpc.OK)}
+		if resp.Status.Code != int32(code.Code_OK) {
+			resp.Status = &rpc_status.Status{Code: int32(code.Code_OK)}
 			resp.HttpResponse = &ext_authz.CheckResponse_OkResponse{
 				OkResponse: &ext_authz.OkHttpResponse{},
 			}
@@ -400,7 +401,7 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 // result and is represented as a boolean value. If the key is missing, an
 // error will be returned.
 func getResponseStatus(result map[string]interface{}) (int32, error) {
-	status := int32(google_rpc.PERMISSION_DENIED)
+	status := int32(code.Code_PERMISSION_DENIED)
 
 	var decision, ok bool
 	var val interface{}
@@ -414,7 +415,7 @@ func getResponseStatus(result map[string]interface{}) (int32, error) {
 	}
 
 	if decision {
-		status = int32(google_rpc.OK)
+		status = int32(code.Code_OK)
 	}
 
 	return status, nil
