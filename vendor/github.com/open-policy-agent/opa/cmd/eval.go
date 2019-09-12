@@ -15,13 +15,12 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/cover"
+	fileurl "github.com/open-policy-agent/opa/internal/file/url"
 	pr "github.com/open-policy-agent/opa/internal/presentation"
 	"github.com/open-policy-agent/opa/internal/runtime"
-	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/profiler"
 	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/topdown/lineage"
 	"github.com/open-policy-agent/opa/util"
@@ -52,6 +51,7 @@ type evalCommandParams struct {
 	prettyLimit       intFlag
 	fail              bool
 	failDefined       bool
+	bundlePaths       repeatedStringFlag
 }
 
 func newEvalCommandParams() evalCommandParams {
@@ -107,13 +107,19 @@ To evaluate a query against JSON data:
 
 	$ opa eval --data data.json 'data.names[_] = name'
 
-File Loading
-------------
+To evaluate a query against JSON data supplied with a file:// URL:
 
-The --data flag will recursively load data files and Rego files contained in
-sub-directories under the path. For example, given /some/path:
+	$ opa eval --data file:///path/to/file.json 'data'
 
-	$ opa eval --data /some/path 'data'
+
+File & Bundle Loading
+---------------------
+
+The --bundle flag will load data files and Rego files contained
+the bundle specified by the path. It can be either a compressed
+tar archive bundle file or a directory tree.
+
+	$ opa eval --bundle /some/path 'data'
 
 Where /some/path contains:
 
@@ -123,11 +129,21 @@ Where /some/path contains:
 	  |     |
 	  |     +-- data.json
 	  |
-	  +-- baz.rego
+	  +-- baz_test.rego
+	  |
+	  +-- manifest.yaml
 
 The JSON file 'foo/bar/data.json' would be loaded and rooted under
 'data.foo.bar' and the 'foo/baz.rego' would be loaded and rooted under the
-package path contained inside the file.
+package path contained inside the file. Only data files named data.json or
+data.yaml will be loaded. In the example above the manifest.yaml would be
+ignored.
+
+See https://www.openpolicyagent.org/docs/latest/bundles/ for more details
+on bundle directory structures.
+
+The --data flag can be used to recursively load ALL *.rego, *.json, and
+*.yaml files under the specified directory.
 
 Output Formats
 --------------
@@ -193,6 +209,7 @@ Set the output format with the --format flag.
 	evalCommand.Flags().StringSliceVarP(&params.unknowns, "unknowns", "u", []string{"input"}, "set paths to treat as unknown during partial evaluation")
 	evalCommand.Flags().StringSliceVarP(&params.disableInlining, "disable-inlining", "", []string{}, "set paths of documents to exclude from inlining")
 	evalCommand.Flags().VarP(&params.dataPaths, "data", "d", "set data file(s) or directory path(s)")
+	evalCommand.Flags().VarP(&params.bundlePaths, "bundle", "b", "set bundle file(s) or directory path(s)")
 	evalCommand.Flags().StringVarP(&params.inputPath, "input", "i", "", "set input file path")
 	evalCommand.Flags().VarP(&params.imports, "import", "", "set query import(s)")
 	evalCommand.Flags().StringVarP(&params.pkg, "package", "", "", "set query package")
@@ -213,6 +230,8 @@ Set the output format with the --format flag.
 }
 
 func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
+
+	ctx := context.Background()
 
 	var query string
 
@@ -241,24 +260,16 @@ func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 		regoArgs = append(regoArgs, rego.Package(params.pkg))
 	}
 
-	parsedModules := map[string]*ast.Module{}
-
 	if len(params.dataPaths.v) > 0 {
-
 		f := loaderFilter{
 			Ignore: checkParams.ignore,
 		}
+		regoArgs = append(regoArgs, rego.Load(params.dataPaths.v, f.Apply))
+	}
 
-		loadResult, err := loader.Filtered(params.dataPaths.v, f.Apply)
-		if err != nil {
-			return false, err
-		}
-
-		regoArgs = append(regoArgs, rego.Store(inmem.NewFromObject(loadResult.Documents)))
-
-		for _, file := range loadResult.Modules {
-			parsedModules[file.Name] = file.Parsed
-			regoArgs = append(regoArgs, rego.ParsedModule(file.Parsed))
+	if params.bundlePaths.isFlagSet() {
+		for _, bundleDir := range params.bundlePaths.v {
+			regoArgs = append(regoArgs, rego.LoadBundle(bundleDir))
 		}
 	}
 
@@ -316,14 +327,25 @@ func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 	}
 
 	eval := rego.New(regoArgs...)
-	ctx := context.Background()
 
 	var result pr.Output
 
+	var parsedModules map[string]*ast.Module
+
 	if !params.partial {
-		result.Result, result.Error = eval.Eval(ctx)
+		var pq rego.PreparedEvalQuery
+		pq, result.Error = eval.PrepareForEval(ctx)
+		if result.Error == nil {
+			parsedModules = pq.Modules()
+			result.Result, result.Error = pq.Eval(ctx)
+		}
 	} else {
-		result.Partial, result.Error = eval.Partial(ctx)
+		var pq rego.PreparedPartialQuery
+		pq, result.Error = eval.PrepareForPartial(ctx)
+		if result.Error == nil {
+			parsedModules = pq.Modules()
+			result.Partial, result.Error = eval.Partial(ctx)
+		}
 	}
 
 	switch params.explain.String() {
@@ -400,7 +422,11 @@ func readInputBytes(params evalCommandParams) ([]byte, error) {
 	if params.stdinInput {
 		return ioutil.ReadAll(os.Stdin)
 	} else if params.inputPath != "" {
-		return ioutil.ReadFile(params.inputPath)
+		path, err := fileurl.Clean(params.inputPath)
+		if err != nil {
+			return nil, err
+		}
+		return ioutil.ReadFile(path)
 	}
 	return nil, nil
 }
