@@ -31,7 +31,8 @@ GO15VENDOREXPERIMENT := 1
 export GO15VENDOREXPERIMENT
 
 .PHONY: all build build-mac build-linux clean check check-fmt check-vet check-lint \
-    deps generate image image-quick push push-latest tag-latest test version
+    deps deploy-travis docker-login generate image image-quick push push-latest tag-latest \
+    test test-e2e version
 
 ######################################################
 #
@@ -76,11 +77,25 @@ tag-latest:
 push-latest:
 	docker push $(IMAGE):latest-istio
 
+docker-login:
+	docker login -u ${DOCKER_USER} -p ${DOCKER_PASSWORD}
+
+deploy-travis: docker-login image-quick push tag-latest push-latest
+
 update-opa:
 	@./build/update-opa-version.sh $(TAG)
 
+update-quickstart-version:
+	sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:latest-istio\"\,/;}" quick_start.yaml
+
 test: generate
 	$(DISABLE_CGO) $(GO) test -bench=. $(PACKAGES)
+
+test-e2e:
+	bats -t test/bats/test.bats
+
+test-cluster:
+	@./build/install-istio-with-kind.sh
 
 clean:
 	rm -f .Dockerfile_*
