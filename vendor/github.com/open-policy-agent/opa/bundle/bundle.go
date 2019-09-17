@@ -12,11 +12,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"strings"
 
+	"github.com/open-policy-agent/opa/internal/file/archive"
+
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/internal/file"
 	"github.com/open-policy-agent/opa/util"
 	"github.com/pkg/errors"
 )
@@ -24,7 +28,6 @@ import (
 // Common file extensions and file names.
 const (
 	RegoExt      = ".rego"
-	jsonExt      = ".json"
 	manifestExt  = ".manifest"
 	dataFile     = "data.json"
 	yamlDataFile = "data.yaml"
@@ -61,13 +64,15 @@ func (m *Manifest) validateAndInjectDefaults(b Bundle) error {
 
 	// Validate roots in bundle.
 	roots := *m.Roots
+
+	// Standardize the roots (no starting or trailing slash)
 	for i := range roots {
 		roots[i] = strings.Trim(roots[i], "/")
 	}
 
 	for i := 0; i < len(roots)-1; i++ {
 		for j := i + 1; j < len(roots); j++ {
-			if strings.HasPrefix(roots[i], roots[j]) || strings.HasPrefix(roots[j], roots[i]) {
+			if RootPathsOverlap(roots[i], roots[j]) {
 				return fmt.Errorf("manifest has overlapped roots: %v and %v", roots[i], roots[j])
 			}
 		}
@@ -117,14 +122,22 @@ type ModuleFile struct {
 
 // Reader contains the reader to load the bundle from.
 type Reader struct {
-	r                     io.Reader
+	loader                file.DirectoryLoader
 	includeManifestInData bool
 }
 
 // NewReader returns a new Reader.
+// Deprecated: Use NewCustomReader with TarballLoader instead
 func NewReader(r io.Reader) *Reader {
-	nr := Reader{}
-	nr.r = r
+	return NewCustomReader(file.NewTarballLoader(r))
+}
+
+// NewCustomReader returns a new Reader configured to use the
+// specified DirectoryLoader.
+func NewCustomReader(loader file.DirectoryLoader) *Reader {
+	nr := Reader{
+		loader: loader,
+	}
 	return &nr
 }
 
@@ -142,50 +155,42 @@ func (r *Reader) Read() (Bundle, error) {
 
 	bundle.Data = map[string]interface{}{}
 
-	gr, err := gzip.NewReader(r.r)
-	if err != nil {
-		return bundle, errors.Wrap(err, "bundle read failed")
-	}
-
-	tr := tar.NewReader(gr)
-
 	for {
-		header, err := tr.Next()
+		f, err := r.loader.NextFile()
 		if err == io.EOF {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			return bundle, errors.Wrap(err, "bundle read failed")
 		}
 
-		if header.Typeflag != tar.TypeReg {
-			continue
-		}
-
 		var buf bytes.Buffer
-		n, err := io.CopyN(&buf, tr, bundleLimitBytes)
+		n, err := f.Read(&buf, bundleLimitBytes)
+		f.Close() // always close, even on error
 		if err != nil && err != io.EOF {
 			return bundle, err
 		} else if err == nil && n >= bundleLimitBytes {
 			return bundle, fmt.Errorf("bundle exceeded max size (%v bytes)", bundleLimitBytes-1)
 		}
 
-		path := header.Name
+		// Normalize the paths to use `/` separators
+		path := filepath.ToSlash(f.Path())
 
 		if strings.HasSuffix(path, RegoExt) {
 			module, err := ast.ParseModule(path, buf.String())
 			if err != nil {
-				return bundle, errors.Wrap(err, "bundle load failed")
+				return bundle, err
 			}
 			if module == nil {
-				return bundle, errors.Wrap(fmt.Errorf("module '%s' is empty", path), "bundle load failed")
+				return bundle, fmt.Errorf("module '%s' is empty", path)
 			}
 
-			file := ModuleFile{
+			mf := ModuleFile{
 				Path:   path,
 				Raw:    buf.Bytes(),
 				Parsed: module,
 			}
-			bundle.Modules = append(bundle.Modules, file)
+			bundle.Modules = append(bundle.Modules, mf)
 
 		} else if filepath.Base(path) == dataFile {
 			var value interface{}
@@ -253,12 +258,12 @@ func Write(w io.Writer, bundle Bundle) error {
 		return err
 	}
 
-	if err := writeFile(tw, "data.json", buf.Bytes()); err != nil {
+	if err := archive.WriteFile(tw, "data.json", buf.Bytes()); err != nil {
 		return err
 	}
 
 	for _, module := range bundle.Modules {
-		if err := writeFile(tw, module.Path, module.Raw); err != nil {
+		if err := archive.WriteFile(tw, module.Path, module.Raw); err != nil {
 			return err
 		}
 	}
@@ -282,7 +287,20 @@ func writeManifest(tw *tar.Writer, bundle Bundle) error {
 		return err
 	}
 
-	return writeFile(tw, manifestExt, buf.Bytes())
+	return archive.WriteFile(tw, manifestExt, buf.Bytes())
+}
+
+// ParsedModules returns a map of parsed modules with names that are
+// unique and human readable for the given a bundle name.
+func (b *Bundle) ParsedModules(bundleName string) map[string]*ast.Module {
+
+	mods := make(map[string]*ast.Module, len(b.Modules))
+
+	for _, mf := range b.Modules {
+		mods[modulePathWithPrefix(bundleName, mf.Path)] = mf.Parsed
+	}
+
+	return mods
 }
 
 // Equal returns true if this bundle's contents equal the other bundle's
@@ -343,6 +361,27 @@ func (b *Bundle) mkdir(key []string) (map[string]interface{}, error) {
 	return obj, nil
 }
 
+// RootPathsOverlap takes in two bundle root paths and returns
+// true if they overlap.
+func RootPathsOverlap(pathA string, pathB string) bool {
+
+	// Special case for empty prefixes, they always overlap
+	if pathA == "" || pathB == "" {
+		return true
+	}
+
+	aParts := strings.Split(pathA, "/")
+	bParts := strings.Split(pathB, "/")
+
+	for i := 0; i < len(aParts) && i < len(bParts); i++ {
+		if aParts[i] != bParts[i] {
+			// Found diverging path segments, no overlap
+			return false
+		}
+	}
+	return true
+}
+
 func insertValue(b *Bundle, path string, value interface{}) error {
 
 	// Remove leading / and . characters from the directory path. If the bundle
@@ -358,23 +397,6 @@ func insertValue(b *Bundle, path string, value interface{}) error {
 	}
 
 	return nil
-}
-
-func writeFile(tw *tar.Writer, path string, bs []byte) error {
-
-	hdr := &tar.Header{
-		Name:     "/" + strings.TrimLeft(path, "/"),
-		Mode:     0600,
-		Typeflag: tar.TypeReg,
-		Size:     int64(len(bs)),
-	}
-
-	if err := tw.WriteHeader(hdr); err != nil {
-		return err
-	}
-
-	_, err := tw.Write(bs)
-	return err
 }
 
 func dfs(value interface{}, path string, fn func(string, interface{}) (bool, error)) error {
@@ -393,4 +415,18 @@ func dfs(value interface{}, path string, fn func(string, interface{}) (bool, err
 		}
 	}
 	return nil
+}
+
+func modulePathWithPrefix(bundleName string, modulePath string) string {
+	// Default prefix is just the bundle name
+	prefix := bundleName
+
+	// Bundle names are sometimes just file paths, some of which
+	// are full urls (file:///foo/). Parse these and only use the path.
+	parsed, err := url.Parse(bundleName)
+	if err == nil {
+		prefix = filepath.Join(parsed.Host, parsed.Path)
+	}
+
+	return filepath.Join(prefix, modulePath)
 }

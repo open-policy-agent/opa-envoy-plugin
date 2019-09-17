@@ -92,6 +92,7 @@ func (tc *typeChecker) CheckTypes(env *TypeEnv, sorted []util.T) (*TypeEnv, Erro
 	for _, s := range sorted {
 		tc.checkRule(env, s.(*Rule))
 	}
+	tc.errs.Sort()
 	return env, tc.errs
 }
 
@@ -123,9 +124,13 @@ func (tc *typeChecker) checkClosures(env *TypeEnv, expr *Expr) Errors {
 	return result
 }
 
-func (tc *typeChecker) checkLanguageBuiltins() *TypeEnv {
-	env := NewTypeEnv()
-	for _, bi := range Builtins {
+func (tc *typeChecker) checkLanguageBuiltins(env *TypeEnv, builtins map[string]*Builtin) *TypeEnv {
+	if env == nil {
+		env = NewTypeEnv()
+	} else {
+		env = env.wrap()
+	}
+	for _, bi := range builtins {
 		env.tree.Put(bi.Ref(), bi.Decl)
 	}
 	return env

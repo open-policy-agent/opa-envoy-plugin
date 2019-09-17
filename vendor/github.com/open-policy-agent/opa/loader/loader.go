@@ -16,6 +16,8 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
+	"github.com/open-policy-agent/opa/internal/file"
+	fileurl "github.com/open-policy-agent/opa/internal/file/url"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
@@ -118,11 +120,46 @@ func Filtered(paths []string, filter Filter) (*Result, error) {
 
 // Rego returns a RegoFile object loaded from the given path.
 func Rego(path string) (*RegoFile, error) {
+	path, err := fileurl.Clean(path)
+	if err != nil {
+		return nil, err
+	}
 	bs, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	return loadRego(path, bs)
+}
+
+// AsBundle loads a path as a bundle. If it is a single file
+// it will be treated as a normal tarball bundle. If a directory
+// is supplied it will be loaded as an unzipped bundle tree.
+func AsBundle(path string) (*bundle.Bundle, error) {
+	path, err := fileurl.Clean(path)
+	if err != nil {
+		return nil, err
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("error reading %q: %s", path, err)
+	}
+
+	var bundleLoader file.DirectoryLoader
+
+	if fi.IsDir() {
+		bundleLoader = file.NewDirectoryLoader(path)
+	} else {
+		fh, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		bundleLoader = file.NewTarballLoader(fh)
+	}
+
+	br := bundle.NewCustomReader(bundleLoader)
+	b, err := br.Read()
+	return &b, err
 }
 
 // CleanPath returns the normalized version of a path that can be used as an identifier.
@@ -134,6 +171,10 @@ func CleanPath(path string) string {
 // and path is a directory, then Paths will walk the directory structure
 // recursively and list files at each level.
 func Paths(path string, recurse bool) (paths []string, err error) {
+	path, err = fileurl.Clean(path)
+	if err != nil {
+		return nil, err
+	}
 	err = filepath.Walk(path, func(f string, info os.FileInfo, err error) error {
 		if !recurse {
 			if path != f && path != filepath.Dir(f) {
@@ -149,6 +190,11 @@ func Paths(path string, recurse bool) (paths []string, err error) {
 // SplitPrefix returns a tuple specifying the document prefix and the file
 // path.
 func SplitPrefix(path string) ([]string, string) {
+	// Non-prefixed URLs can be returned without modification and their contents
+	// can be rooted directly under data.
+	if strings.Index(path, "://") == strings.Index(path, ":") {
+		return nil, path
+	}
 	parts := strings.SplitN(path, ":", 2)
 	if len(parts) == 2 && len(parts[0]) > 0 {
 		return strings.Split(parts[0], "."), parts[1]
@@ -227,6 +273,13 @@ func all(paths []string, filter Filter, f func(*Result, string, int) error) (*Re
 }
 
 func allRec(path string, filter Filter, errors *loaderErrors, loaded *Result, depth int, f func(*Result, string, int) error) {
+
+	path, err := fileurl.Clean(path)
+	if err != nil {
+		errors.Add(err)
+		return
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		errors.Add(err)
@@ -245,7 +298,7 @@ func allRec(path string, filter Filter, errors *loaderErrors, loaded *Result, de
 	}
 
 	// If we are recursing on directories then content must be loaded under path
-	// speciifed by directory hierarchy.
+	// specified by directory hierarchy.
 	if depth > 0 {
 		loaded = loaded.withParent(info.Name())
 	}
@@ -280,7 +333,7 @@ func loadKnownTypes(path string, bs []byte) (interface{}, error) {
 		return loadYAML(path, bs)
 	default:
 		if strings.HasSuffix(path, ".tar.gz") {
-			return loadBundle(bs)
+			return loadBundleFile(bs)
 		}
 	}
 	return nil, unrecognizedFile(path)
@@ -302,9 +355,14 @@ func loadFileForAnyType(path string, bs []byte) (interface{}, error) {
 	return nil, unrecognizedFile(path)
 }
 
-func loadBundle(bs []byte) (bundle.Bundle, error) {
-	br := bundle.NewReader(bytes.NewBuffer(bs)).IncludeManifestInData(true)
+func loadBundleFile(bs []byte) (bundle.Bundle, error) {
+	tl := file.NewTarballLoader(bytes.NewBuffer(bs))
+	br := bundle.NewCustomReader(tl).IncludeManifestInData(true)
 	return br.Read()
+}
+
+func loadBundleDir(path string) (bundle.Bundle, error) {
+	return bundle.Bundle{}, nil
 }
 
 func loadRego(path string, bs []byte) (*RegoFile, error) {
