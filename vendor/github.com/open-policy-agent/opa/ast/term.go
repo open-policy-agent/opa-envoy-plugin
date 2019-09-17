@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math/big"
 	"net/url"
 	"regexp"
 	"sort"
@@ -18,6 +20,8 @@ import (
 	"github.com/open-policy-agent/opa/util"
 	"github.com/pkg/errors"
 )
+
+var errFindNotFound = fmt.Errorf("find: not found")
 
 // Location records a position in source code
 type Location struct {
@@ -133,7 +137,7 @@ func InterfaceToValue(x interface{}) (Value, error) {
 	case string:
 		return String(x), nil
 	case []interface{}:
-		r := Array{}
+		r := make(Array, 0, len(x))
 		for _, e := range x {
 			e, err := InterfaceToValue(e)
 			if err != nil {
@@ -143,7 +147,7 @@ func InterfaceToValue(x interface{}) (Value, error) {
 		}
 		return r, nil
 	case map[string]interface{}:
-		r := NewObject()
+		r := newobject(len(x))
 		for k, v := range x {
 			k, err := InterfaceToValue(k)
 			if err != nil {
@@ -157,7 +161,7 @@ func InterfaceToValue(x interface{}) (Value, error) {
 		}
 		return r, nil
 	case map[string]string:
-		r := NewObject()
+		r := newobject(len(x))
 		for k, v := range x {
 			k, err := InterfaceToValue(k)
 			if err != nil {
@@ -173,6 +177,20 @@ func InterfaceToValue(x interface{}) (Value, error) {
 	default:
 		return nil, fmt.Errorf("ast: illegal value: %T", x)
 	}
+}
+
+// ValueFromReader returns an AST value from a JSON serialized value in the reader.
+func ValueFromReader(r io.Reader) (Value, error) {
+	var x interface{}
+	if err := util.NewJSONDecoder(r).Decode(&x); err != nil {
+		return nil, err
+	}
+	return InterfaceToValue(x)
+}
+
+// As converts v into a Go native type referred to by x.
+func As(v Value, x interface{}) error {
+	return util.NewJSONDecoder(bytes.NewBufferString(v.String())).Decode(x)
 }
 
 // Resolver defines the interface for resolving references to native Go values.
@@ -375,6 +393,8 @@ func (term *Term) Equal(other *Term) bool {
 		return v.Equal(other.Value)
 	case Boolean:
 		return v.Equal(other.Value)
+	case Number:
+		return v.Equal(other.Value)
 	case String:
 		return v.Equal(other.Value)
 	case Var:
@@ -539,7 +559,7 @@ func (null Null) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return null, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code for the Value.
@@ -585,7 +605,7 @@ func (bol Boolean) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return bol, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code for the Value.
@@ -645,7 +665,7 @@ func (num Number) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return num, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code for the Value.
@@ -732,7 +752,7 @@ func (str String) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return str, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // IsGround always returns true.
@@ -780,7 +800,7 @@ func (v Var) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return v, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code for the Value.
@@ -941,7 +961,7 @@ func (ref Ref) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return ref, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code for the Value.
@@ -1094,14 +1114,14 @@ func (arr Array) Find(path Ref) (Value, error) {
 	}
 	num, ok := path[0].Value.(Number)
 	if !ok {
-		return nil, fmt.Errorf("find: not found")
+		return nil, errFindNotFound
 	}
 	i, ok := num.Int()
 	if !ok {
-		return nil, fmt.Errorf("find: not found")
+		return nil, errFindNotFound
 	}
 	if i < 0 || i >= len(arr) {
-		return nil, fmt.Errorf("find: not found")
+		return nil, errFindNotFound
 	}
 	return arr[i].Value.Find(path[1:])
 }
@@ -1215,7 +1235,7 @@ type set struct {
 
 // Copy returns a deep copy of s.
 func (s *set) Copy() Set {
-	cpy := NewSet()
+	cpy := newset(s.Len())
 	s.Foreach(func(x *Term) {
 		cpy.Add(x.Copy())
 	})
@@ -1271,7 +1291,7 @@ func (s *set) Find(path Ref) (Value, error) {
 		return s, nil
 	}
 	if !s.Contains(path[0]) {
-		return nil, fmt.Errorf("find: not found")
+		return nil, errFindNotFound
 	}
 	return path[0].Value.Find(path[1:])
 }
@@ -1424,8 +1444,48 @@ func (s *set) Slice() []*Term {
 
 func (s *set) insert(x *Term) {
 	hash := x.Hash()
+	var equal func(v Value) bool
+
+	switch x := x.Value.(type) {
+	case Null, Boolean, String, Var:
+		equal = func(y Value) bool { return x == y }
+	case Number:
+		if xi, err := json.Number(x).Int64(); err == nil {
+			equal = func(y Value) bool {
+				if y, ok := y.(Number); ok {
+					if yi, err := json.Number(y).Int64(); err == nil {
+						return xi == yi
+					}
+				}
+
+				return false
+			}
+			break
+		}
+
+		a, ok := new(big.Float).SetString(string(x))
+		if !ok {
+			panic("illegal value")
+		}
+
+		equal = func(b Value) bool {
+			if b, ok := b.(Number); ok {
+				b, ok := new(big.Float).SetString(string(b))
+				if !ok {
+					panic("illegal value")
+				}
+
+				return a.Cmp(b) == 0
+			}
+
+			return false
+		}
+	default:
+		equal = func(y Value) bool { return Compare(x, y) == 0 }
+	}
+
 	for curr, ok := s.elems[hash]; ok; {
-		if Compare(curr, x) == 0 {
+		if equal(curr.Value) {
 			return
 		}
 
@@ -1439,8 +1499,48 @@ func (s *set) insert(x *Term) {
 
 func (s *set) get(x *Term) *Term {
 	hash := x.Hash()
+	var equal func(v Value) bool
+
+	switch x := x.Value.(type) {
+	case Null, Boolean, String, Var:
+		equal = func(y Value) bool { return x == y }
+	case Number:
+		if xi, err := json.Number(x).Int64(); err == nil {
+			equal = func(y Value) bool {
+				if y, ok := y.(Number); ok {
+					if yi, err := json.Number(y).Int64(); err == nil {
+						return xi == yi
+					}
+				}
+
+				return false
+			}
+			break
+		}
+
+		a, ok := new(big.Float).SetString(string(x))
+		if !ok {
+			panic("illegal value")
+		}
+
+		equal = func(b Value) bool {
+			if b, ok := b.(Number); ok {
+				b, ok := new(big.Float).SetString(string(b))
+				if !ok {
+					panic("illegal value")
+				}
+
+				return a.Cmp(b) == 0
+			}
+
+			return false
+		}
+	default:
+		equal = func(y Value) bool { return Compare(x, y) == 0 }
+	}
+
 	for curr, ok := s.elems[hash]; ok; {
-		if Compare(curr, x) == 0 {
+		if equal(curr.Value) {
 			return curr
 		}
 
@@ -1562,7 +1662,7 @@ func (obj *object) Find(path Ref) (Value, error) {
 	}
 	value := obj.Get(path[0])
 	if value == nil {
-		return nil, fmt.Errorf("find: not found")
+		return nil, errFindNotFound
 	}
 	return value.Value.Find(path[1:])
 }
@@ -1745,8 +1845,49 @@ func (obj object) String() string {
 
 func (obj *object) get(k *Term) *objectElem {
 	hash := k.Hash()
+
+	var equal func(v Value) bool
+
+	switch x := k.Value.(type) {
+	case Null, Boolean, String, Var:
+		equal = func(y Value) bool { return x == y }
+	case Number:
+		if xi, err := json.Number(x).Int64(); err == nil {
+			equal = func(y Value) bool {
+				if y, ok := y.(Number); ok {
+					if yi, err := json.Number(y).Int64(); err == nil {
+						return xi == yi
+					}
+				}
+
+				return false
+			}
+			break
+		}
+
+		a, ok := new(big.Float).SetString(string(x))
+		if !ok {
+			panic("illegal value")
+		}
+
+		equal = func(b Value) bool {
+			if b, ok := b.(Number); ok {
+				b, ok := new(big.Float).SetString(string(b))
+				if !ok {
+					panic("illegal value")
+				}
+
+				return a.Cmp(b) == 0
+			}
+
+			return false
+		}
+	default:
+		equal = func(y Value) bool { return Compare(x, y) == 0 }
+	}
+
 	for curr := obj.elems[hash]; curr != nil; curr = curr.next {
-		if Compare(curr.key, k) == 0 {
+		if equal(curr.key.Value) {
 			return curr
 		}
 	}
@@ -1756,8 +1897,48 @@ func (obj *object) get(k *Term) *objectElem {
 func (obj *object) insert(k, v *Term) {
 	hash := k.Hash()
 	head := obj.elems[hash]
+	var equal func(v Value) bool
+
+	switch x := k.Value.(type) {
+	case Null, Boolean, String, Var:
+		equal = func(y Value) bool { return x == y }
+	case Number:
+		if xi, err := json.Number(x).Int64(); err == nil {
+			equal = func(y Value) bool {
+				if y, ok := y.(Number); ok {
+					if yi, err := json.Number(y).Int64(); err == nil {
+						return xi == yi
+					}
+				}
+
+				return false
+			}
+			break
+		}
+
+		a, ok := new(big.Float).SetString(string(x))
+		if !ok {
+			panic("illegal value")
+		}
+
+		equal = func(b Value) bool {
+			if b, ok := b.(Number); ok {
+				b, ok := new(big.Float).SetString(string(b))
+				if !ok {
+					panic("illegal value")
+				}
+
+				return a.Cmp(b) == 0
+			}
+
+			return false
+		}
+	default:
+		equal = func(y Value) bool { return Compare(x, y) == 0 }
+	}
+
 	for curr := head; curr != nil; curr = curr.next {
-		if Compare(curr.key, k) == 0 {
+		if equal(curr.key.Value) {
 			curr.value = v
 			return
 		}
@@ -1811,7 +1992,7 @@ func (ac *ArrayComprehension) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return ac, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code of the Value.
@@ -1871,7 +2052,7 @@ func (oc *ObjectComprehension) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return oc, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code of the Value.
@@ -1928,7 +2109,7 @@ func (sc *SetComprehension) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return sc, nil
 	}
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code of the Value.
@@ -1967,7 +2148,7 @@ func (c Call) Compare(other Value) int {
 
 // Find returns the current value or a not found error.
 func (c Call) Find(Ref) (Value, error) {
-	return nil, fmt.Errorf("find: not found")
+	return nil, errFindNotFound
 }
 
 // Hash returns the hash code for the Value.
