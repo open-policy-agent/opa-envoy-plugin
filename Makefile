@@ -39,7 +39,7 @@ export GO15VENDOREXPERIMENT
 #
 ######################################################
 
-all: deps build build-plugin test check
+all: deps build test check
 
 version:
 	@echo $(VERSION)
@@ -48,10 +48,10 @@ deps:
 	@./build/install-deps.sh
 
 generate:
-	$(GO) generate
+	$(GO) generate ./...
 
 build: generate
-	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./internal/cmd/...
+	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-istio-plugin/...
 
 build-mac:
 	@$(MAKE) build GOOS=darwin
@@ -59,12 +59,8 @@ build-mac:
 build-linux:
 	@$(MAKE) build GOOS=linux
 
-build-plugin:
-	$(GO) build -buildmode=plugin -o=opa_istio_plugin.so
-
 image:
 	@$(MAKE) build-linux
-	@$(MAKE) build-plugin
 	@$(MAKE) image-quick
 
 image-quick:

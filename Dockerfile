@@ -10,8 +10,6 @@ WORKDIR /app
 
 COPY opa_istio_linux_GOARCH /app
 
-COPY opa_istio_plugin.so /app
-
 ENTRYPOINT ["./opa_istio_linux_GOARCH"]
 
 CMD ["run"]

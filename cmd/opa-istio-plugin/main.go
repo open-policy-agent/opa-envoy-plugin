@@ -5,7 +5,11 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/open-policy-agent/opa-istio-plugin/internal"
+	"github.com/open-policy-agent/opa/cmd"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/runtime"
 )
@@ -23,9 +27,13 @@ func (Factory) Validate(m *plugins.Manager, config []byte) (interface{}, error) 
 	return internal.Validate(m, config)
 }
 
-// Init register plugin factory with OPA.
-func Init() error {
+func main() {
+
 	runtime.RegisterPlugin("envoy.ext_authz.grpc", Factory{}) // for backwards compatibility
 	runtime.RegisterPlugin("envoy_ext_authz_grpc", Factory{})
-	return nil
+
+	if err := cmd.RootCommand.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
