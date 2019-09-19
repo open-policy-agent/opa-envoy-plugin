@@ -101,7 +101,6 @@ data:
       "image": "openpolicyagent/opa:0.14.0-istio",
       "name": "opa-istio",
       "args": [
-        "--plugin-dir=.",
         "run",
         "--server",
         "--config-file=/config/config.yaml",
