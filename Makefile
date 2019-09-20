@@ -31,8 +31,8 @@ GO15VENDOREXPERIMENT := 1
 export GO15VENDOREXPERIMENT
 
 .PHONY: all build build-mac build-linux clean check check-fmt check-vet check-lint \
-    deps deploy-travis docker-login generate image image-quick push push-latest tag-latest \
-    test test-e2e version
+    deps deploy-travis generate image image-quick push push-latest tag-latest \
+    test test-cluster test-e2e update-opa update-quickstart-version version
 
 ######################################################
 #
@@ -77,10 +77,7 @@ tag-latest:
 push-latest:
 	docker push $(IMAGE):latest-istio
 
-docker-login:
-	docker login -u ${DOCKER_USER} -p ${DOCKER_PASSWORD}
-
-deploy-travis: docker-login image-quick push tag-latest push-latest
+deploy-travis: image-quick push tag-latest push-latest
 
 update-opa:
 	@./build/update-opa-version.sh $(TAG)
