@@ -36,6 +36,7 @@ spec:
     filterType: NETWORK
     filterName: "envoy.ext_authz"
     filterConfig:
+      stat_prefix: "ext_authz"
       grpc_service:
         google_grpc:
           target_uri: 127.0.0.1:9191
