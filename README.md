@@ -403,8 +403,10 @@ This will result in something like the following dictionary being added to `inpu
 }
 ```
 
-### Example OPA Configuration
-This JWT data can be accessed in OPA configuration like this:
+### Example OPA Policy
+
+This JWT data can be accessed in OPA policy like this:
+
 ```ruby
 jwt_payload = _value {
     verified_jwt := input.attributes.metadata_context.filter_metadata["envoy.filters.http.jwt_authn"]["fields"]["verified_jwt"]
