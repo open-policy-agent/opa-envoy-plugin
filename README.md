@@ -346,6 +346,79 @@ allow = response {
 }
 ```
 
+## Example with JWT payload passed from Envoy
+
+Envoy can be configured to pass validated JWT payload data into the `ext_authz` filter with `metadata_context_namespaces` and `payload_in_metadata`.
+
+### Example Envoy Configuration
+```ruby
+http_filters:
+- name: envoy.filters.http.jwt_authn
+  typed_config:
+  "@type": type.googleapis.com/envoy.config.filter.http.jwt_authn.v2alpha.JwtAuthentication
+  providers:
+    example:
+      payload_in_metadata: verified_jwt
+      <...>
+- name: envoy.ext_authz
+  config:
+    metadata_context_namespaces:
+    - envoy.filters.http.jwt_authn
+    <...>
+```
+
+### Example OPA Input
+This will result in something like the following dictionary being added to `input.attributes` (some common fields have been excluded for brevity):
+```ruby
+"metadata_context": {
+  "filter_metadata": {
+    "envoy.filters.http.jwt_authn": {
+      "fields": {
+        "verified_jwt": {
+          "Kind": {
+            "StructValue": {
+              "fields": {
+                "email": {
+                  "Kind": {
+                    "StringValue": "alice@example.com"
+                  }
+                },
+                "exp": {
+                  "Kind": {
+                    "NumberValue": 1569026124
+                  }
+                },
+                "name": {
+                  "Kind": {
+                    "StringValue": "Alice"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Example OPA Configuration
+This JWT data can be accessed in OPA configuration like this:
+```ruby
+jwt_payload = _value {
+    verified_jwt := input.attributes.metadata_context.filter_metadata["envoy.filters.http.jwt_authn"]["fields"]["verified_jwt"]
+    _value := {
+        "name": verified_jwt["Kind"]["StructValue"]["fields"]["name"]["Kind"]["StringValue"],
+        "email": verified_jwt["Kind"]["StructValue"]["fields"]["email"]["Kind"]["StringValue"]
+    }
+}
+
+allow {
+  jwt_payload.email == "alice@example.com"
+}
+```
+
 ## gRPC Server Reflection Usage
 
 This section provides examples of interacting with the Envoy External Authorization gRPC server using the `grpcurl` tool.
