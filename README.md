@@ -145,21 +145,21 @@ The `enable-reflection` parameter registers the Envoy External Authorization gRP
 
 An example of a rule that returns an object that not only indicates if a request is allowed or not but also provides optional response headers, body and HTTP status that can be sent to the downstream client or upstream can be seen below in the [Example Policy with Object Response](#example-policy-with-object-response) section.
 
-In the [Quick Start](#quick-start) section an OPA policy is loaded via a volume-mounted ConfigMap. For production deployments, we recommend serving policy [Bundles](http://www.openpolicyagent.org/docs/bundles.html) from a remote HTTP server. For example:
+### Example Bundle Configuration
+
+In the [Quick Start](#quick-start) section an OPA policy is loaded via a volume-mounted ConfigMap. For production deployments, we recommend serving policy [Bundles](http://www.openpolicyagent.org/docs/bundles.html) from a remote HTTP server.
+
+Using the configuration shown below, OPA will download a sample bundle from [https://www.openpolicyagent.org](https://www.openpolicyagent.org). The sample bundle contains the exact same policy that was loaded into OPA via the volume-mounted ConfigMap. More details about this policy can be found in the [Example Policy](#example-policy) section.
 
 **config.yaml**:
 
 ```yaml
 services:
-  - name: default
-    url: https://example.com                           # replace with your bundle service base URL
-    credentials:                                       # replace with your bundle service credentials
-      bearer:
-        scheme: "Bearer"
-        token: "BrXpzQ2cHXV06H0-8xSe79agaTiM5wPurYGS"
-bundle:
-  name: istio/authz
-  service: bundle_service
+  - name: controller
+    url: https://www.openpolicyagent.org
+bundles:
+  istio/authz:
+    service: controller
 plugins:
     envoy_ext_authz_grpc:
         addr: :9191
@@ -167,6 +167,34 @@ plugins:
         dry-run: false
         enable-reflection: false
 ```
+
+You can download the bundle and inspect it yourself:
+
+```bash
+mkdir example && cd example
+curl -s -L https://www.openpolicyagent.org/bundles/istio/authz | tar xzv
+```
+
+> To allow OPA to access the sample bundle from [https://www.openpolicyagent.org](https://www.openpolicyagent.org), create a `ServiceEntry` as shown below:
+> ```bash
+> $ kubectl apply -f - <<EOF
+> apiVersion: networking.istio.io/v1alpha3
+> kind: ServiceEntry
+> metadata:
+>   name: opa-bundle
+> spec:
+>   hosts:
+>    - www.openpolicyagent.org
+>   ports:
+>   - number: 443
+>     name: https
+>     protocol: HTTPS
+>   resolution: DNS
+>   location: MESH_EXTERNAL
+>EOF
+>```
+
+In this way OPA can periodically download bundles of policy from an external server and hence loading the policy via a volume-mounted ConfigMap would not be required.
 
 ## Example Policy
 
