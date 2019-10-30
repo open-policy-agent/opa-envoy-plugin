@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/cover"
 	fileurl "github.com/open-policy-agent/opa/internal/file/url"
@@ -24,8 +27,6 @@ import (
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/topdown/lineage"
 	"github.com/open-policy-agent/opa/util"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 )
 
 type evalCommandParams struct {
@@ -33,6 +34,7 @@ type evalCommandParams struct {
 	partial           bool
 	unknowns          []string
 	disableInlining   []string
+	disableIndexing   bool
 	dataPaths         repeatedStringFlag
 	inputPath         string
 	imports           repeatedStringFlag
@@ -61,6 +63,7 @@ func newEvalCommandParams() evalCommandParams {
 			evalValuesOutput,
 			evalBindingsOutput,
 			evalPrettyOutput,
+			evalSourceOutput,
 		}),
 		explain: newExplainFlag([]string{explainModeOff, explainModeFull, explainModeNotes, explainModeFails}),
 	}
@@ -71,6 +74,7 @@ const (
 	evalValuesOutput   = "values"
 	evalBindingsOutput = "bindings"
 	evalPrettyOutput   = "pretty"
+	evalSourceOutput   = "source"
 
 	// number of profile results to return by default
 	defaultProfileLimit = 10
@@ -174,8 +178,10 @@ Set the output format with the --format flag.
 				return errors.New("specify --fail or --fail-defined but not both")
 			}
 			of := params.outputFormat.String()
-			if params.partial && of != evalPrettyOutput && of != evalJSONOutput {
+			if params.partial && of != evalPrettyOutput && of != evalJSONOutput && of != evalSourceOutput {
 				return errors.New("invalid output format for partial evaluation")
+			} else if !params.partial && of == evalSourceOutput {
+				return errors.New("invalid output format for evaluation")
 			}
 			if params.profileLimit.isFlagSet() || params.profileCriteria.isFlagSet() {
 				params.profile = true
@@ -208,6 +214,7 @@ Set the output format with the --format flag.
 	evalCommand.Flags().BoolVarP(&params.partial, "partial", "p", false, "perform partial evaluation")
 	evalCommand.Flags().StringSliceVarP(&params.unknowns, "unknowns", "u", []string{"input"}, "set paths to treat as unknown during partial evaluation")
 	evalCommand.Flags().StringSliceVarP(&params.disableInlining, "disable-inlining", "", []string{}, "set paths of documents to exclude from inlining")
+	evalCommand.Flags().BoolVar(&params.disableIndexing, "disable-indexing", false, "disable indexing optimizations")
 	evalCommand.Flags().VarP(&params.dataPaths, "data", "d", "set data file(s) or directory path(s)")
 	evalCommand.Flags().VarP(&params.bundlePaths, "bundle", "b", "set bundle file(s) or directory path(s)")
 	evalCommand.Flags().StringVarP(&params.inputPath, "input", "i", "", "set input file path")
@@ -251,6 +258,7 @@ func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 	}
 
 	regoArgs := []func(*rego.Rego){rego.Query(query), rego.Runtime(info)}
+	var evalArgs []rego.EvalOption
 
 	if len(params.imports.v) > 0 {
 		regoArgs = append(regoArgs, rego.Imports(params.imports.v))
@@ -293,24 +301,32 @@ func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 
 	if params.explain.String() != explainModeOff {
 		tracer = topdown.NewBufferTracer()
-		regoArgs = append(regoArgs, rego.Tracer(tracer))
+		evalArgs = append(evalArgs, rego.EvalTracer(tracer))
+	}
+
+	if params.disableIndexing {
+		evalArgs = append(evalArgs, rego.EvalRuleIndexing(false))
 	}
 
 	var m metrics.Metrics
 
 	if params.metrics {
 		m = metrics.New()
+
+		// Use the same metrics for preparing and evaluating
 		regoArgs = append(regoArgs, rego.Metrics(m))
+		evalArgs = append(evalArgs, rego.EvalMetrics(m))
 	}
 
 	if params.instrument {
 		regoArgs = append(regoArgs, rego.Instrument(true))
+		evalArgs = append(evalArgs, rego.EvalInstrument(true))
 	}
 
 	var p *profiler.Profiler
 	if params.profile {
 		p = profiler.New()
-		regoArgs = append(regoArgs, rego.Tracer(p))
+		evalArgs = append(evalArgs, rego.EvalTracer(p))
 	}
 
 	if params.partial {
@@ -323,30 +339,33 @@ func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 
 	if params.coverage {
 		c = cover.New()
-		regoArgs = append(regoArgs, rego.Tracer(c))
+		evalArgs = append(evalArgs, rego.EvalTracer(c))
 	}
 
 	eval := rego.New(regoArgs...)
 
 	var result pr.Output
+	var resultErr error
 
 	var parsedModules map[string]*ast.Module
 
 	if !params.partial {
 		var pq rego.PreparedEvalQuery
-		pq, result.Error = eval.PrepareForEval(ctx)
-		if result.Error == nil {
+		pq, resultErr = eval.PrepareForEval(ctx)
+		if resultErr == nil {
 			parsedModules = pq.Modules()
-			result.Result, result.Error = pq.Eval(ctx)
+			result.Result, resultErr = pq.Eval(ctx, evalArgs...)
 		}
 	} else {
 		var pq rego.PreparedPartialQuery
-		pq, result.Error = eval.PrepareForPartial(ctx)
-		if result.Error == nil {
+		pq, resultErr = eval.PrepareForPartial(ctx)
+		if resultErr == nil {
 			parsedModules = pq.Modules()
-			result.Partial, result.Error = eval.Partial(ctx)
+			result.Partial, resultErr = pq.Partial(ctx, evalArgs...)
 		}
 	}
+
+	result.Errors = pr.NewOutputErrors(resultErr)
 
 	switch params.explain.String() {
 	case explainModeFull:
@@ -383,13 +402,15 @@ func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 		err = pr.Values(w, result)
 	case evalPrettyOutput:
 		err = pr.Pretty(w, result)
+	case evalSourceOutput:
+		err = pr.Source(w, result)
 	default:
 		err = pr.JSON(w, result)
 	}
 
 	if err != nil {
 		return false, err
-	} else if result.Error != nil {
+	} else if len(result.Errors) > 0 {
 		// If the rego package returned an error, return a special error here so
 		// that the command doesn't print the same error twice. The error will
 		// have been printed above by the presentation package.

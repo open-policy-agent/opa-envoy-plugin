@@ -18,12 +18,13 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/lineage"
 
+	"github.com/spf13/cobra"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/cover"
 	"github.com/open-policy-agent/opa/tester"
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/util"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -112,7 +113,7 @@ Example test run:
 }
 
 func opaTest(args []string) int {
-	ctx, cancel := context.WithTimeout(context.Background(), testParams.timeout)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	filter := loaderFilter{
@@ -174,7 +175,8 @@ func opaTest(args []string) int {
 		EnableFailureLine(testParams.failureLine).
 		SetRuntime(info).
 		SetModules(modules).
-		SetBundles(bundles)
+		SetBundles(bundles).
+		SetTimeout(testParams.timeout)
 
 	ch, err := runner.RunTests(ctx, txn)
 	if err != nil {
