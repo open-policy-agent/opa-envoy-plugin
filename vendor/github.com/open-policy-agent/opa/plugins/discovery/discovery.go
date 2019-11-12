@@ -12,6 +12,8 @@ import (
 
 	"github.com/open-policy-agent/opa/metrics"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/open-policy-agent/opa/ast"
 	bundleApi "github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/config"
@@ -22,7 +24,6 @@ import (
 	"github.com/open-policy-agent/opa/plugins/status"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage/inmem"
-	"github.com/sirupsen/logrus"
 )
 
 // Discovery implements configuration discovery for OPA. When discovery is
@@ -146,7 +147,7 @@ func (c *Discovery) processUpdate(ctx context.Context, u download.Update) {
 	}
 
 	if u.ETag == c.etag {
-		c.logError("Discovery update skipped, server replied with not modified.")
+		c.logDebug("Discovery update skipped, server replied with not modified.")
 		c.status.SetError(nil)
 		return
 	}

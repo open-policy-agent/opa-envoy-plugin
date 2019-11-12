@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/peterh/liner"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/format"
 	pr "github.com/open-policy-agent/opa/internal/presentation"
@@ -25,7 +27,6 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/topdown/lineage"
-	"github.com/peterh/liner"
 )
 
 // REPL represents an instance of the interactive shell.
@@ -482,18 +483,27 @@ func (r *REPL) cmdTypes() error {
 	return nil
 }
 
+var errUnknownUsage = fmt.Errorf("usage: unknown <input/data reference> [<input/data reference> [...]] (hint: try 'input')")
+
 func (r *REPL) cmdUnknown(s []string) error {
+
 	if len(s) == 0 && len(r.unknowns) == 0 {
-		return fmt.Errorf("usage: unknown <unknown-1> [<unknown-2> [...]] (hint: try just 'input')")
+		return errUnknownUsage
 	}
-	r.unknowns = make([]*ast.Term, len(s))
-	for i := range r.unknowns {
+
+	unknowns := make([]*ast.Term, len(s))
+
+	for i := range unknowns {
+
 		ref, err := ast.ParseRef(s[i])
 		if err != nil {
-			return err
+			return errUnknownUsage
 		}
-		r.unknowns[i] = ast.NewTerm(ref)
+
+		unknowns[i] = ast.NewTerm(ref)
 	}
+
+	r.unknowns = unknowns
 	return nil
 }
 
@@ -854,7 +864,7 @@ func (r *REPL) evalBody(ctx context.Context, compiler *ast.Compiler, input ast.V
 	rs, err := eval.Eval(ctx)
 
 	output := pr.Output{
-		Error:   err,
+		Errors:  pr.NewOutputErrors(err),
 		Result:  rs,
 		Metrics: r.metrics,
 	}
@@ -910,7 +920,7 @@ func (r *REPL) evalPartial(ctx context.Context, compiler *ast.Compiler, input as
 	output := pr.Output{
 		Metrics: r.metrics,
 		Partial: pq,
-		Error:   err,
+		Errors:  pr.NewOutputErrors(err),
 	}
 
 	switch r.explain {
