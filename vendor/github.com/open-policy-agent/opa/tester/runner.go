@@ -99,13 +99,16 @@ type Runner struct {
 	trace       bool
 	runtime     *ast.Term
 	failureLine bool
+	timeout     time.Duration
 	modules     map[string]*ast.Module
 	bundles     map[string]*bundle.Bundle
 }
 
 // NewRunner returns a new runner.
 func NewRunner() *Runner {
-	return &Runner{}
+	return &Runner{
+		timeout: 5 * time.Second,
+	}
 }
 
 // SetCompiler sets the compiler used by the runner.
@@ -148,6 +151,12 @@ func (r *Runner) EnableFailureLine(yes bool) *Runner {
 // SetRuntime sets runtime information to expose to the evaluation engine.
 func (r *Runner) SetRuntime(term *ast.Term) *Runner {
 	r.runtime = term
+	return r
+}
+
+// SetTimeout sets the timeout for the individual test cases
+func (r *Runner) SetTimeout(timout time.Duration) *Runner {
+	r.timeout = timout
 	return r
 }
 
@@ -259,7 +268,11 @@ func (r *Runner) RunTests(ctx context.Context, txn storage.Transaction) (ch chan
 				if !strings.HasPrefix(string(rule.Head.Name), TestPrefix) {
 					continue
 				}
-				tr, stop := r.runTest(ctx, txn, module, rule)
+				tr, stop := func() (*Result, bool) {
+					runCtx, cancel := context.WithTimeout(ctx, r.timeout)
+					defer cancel()
+					return r.runTest(runCtx, txn, module, rule)
+				}()
 				ch <- tr
 				if stop {
 					return
@@ -332,7 +345,7 @@ func (r *Runner) runTest(ctx context.Context, txn storage.Transaction, mod *ast.
 
 	if err != nil {
 		tr.Error = err
-		if topdown.IsCancel(err) {
+		if topdown.IsCancel(err) && !(ctx.Err() == context.DeadlineExceeded) {
 			stop = true
 		}
 	} else if len(rs) == 0 {

@@ -9,8 +9,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open-policy-agent/opa/rego"
 	"github.com/spf13/cobra"
+
+	"github.com/open-policy-agent/opa/rego"
 )
 
 var buildParams = struct {
@@ -71,7 +72,7 @@ func build(args []string) error {
 	}
 
 	r := rego.New(regoArgs...)
-	cr, err := r.Compile(ctx, rego.CompilePartial(true))
+	cr, err := r.Compile(ctx, rego.CompilePartial(false))
 	if err != nil {
 		return err
 	}

@@ -37,6 +37,7 @@ type eval struct {
 	cancel          Cancel
 	query           ast.Body
 	index           int
+	indexing        bool
 	bindings        *bindings
 	store           storage.Store
 	baseCache       *baseCache
@@ -150,7 +151,23 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string) {
 	}
 
 	locals := ast.NewValueMap()
+	localMeta := map[string]VarMetadata{}
 	e.bindings.Iter(nil, func(k, v *ast.Term) error {
+		// Check if the var has a different name in the source policy
+		name := k.Value.(ast.Var)
+		if e.compiler != nil {
+			rewritten, ok := e.compiler.RewrittenVars[name]
+			if ok {
+				name = rewritten
+			}
+		}
+
+		localMeta[k.Value.String()] = VarMetadata{
+			Name:     name.String(),
+			Location: k.Loc(),
+		}
+
+		// For backwards compatibility save a copy of the values too..
 		locals.Put(k.Value, v.Value)
 		return nil
 	})
@@ -161,12 +178,14 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string) {
 	}
 
 	evt := &Event{
-		QueryID:  e.queryID,
-		ParentID: parentID,
-		Op:       op,
-		Node:     x,
-		Locals:   locals,
-		Message:  msg,
+		QueryID:       e.queryID,
+		ParentID:      parentID,
+		Op:            op,
+		Node:          x,
+		Location:      x.Loc(),
+		Locals:        locals,
+		LocalMetadata: localMeta,
+		Message:       msg,
 	}
 
 	for i := range e.tracers {
@@ -1012,7 +1031,14 @@ func (e *eval) getRules(ref ast.Ref) (*ast.IndexResult, error) {
 		return nil, nil
 	}
 
-	result, err := index.Lookup(e)
+	var result *ast.IndexResult
+	var err error
+	if e.indexing {
+		result, err = index.Lookup(e)
+	} else {
+		result, err = index.AllRules(e)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -1101,6 +1127,10 @@ func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
 }
 
 func (e *eval) resolveReadFromStorage(ref ast.Ref, a ast.Value) (ast.Value, error) {
+	if refContainsNonScalar(ref) {
+		return a, nil
+	}
+
 	path, err := storage.NewPathForRef(ref)
 	if err != nil {
 		if !storage.IsNotFound(err) {
@@ -2286,6 +2316,15 @@ func mergeObjects(objA, objB ast.Object) (result ast.Object, ok bool) {
 func refSliceContainsPrefix(sl []ast.Ref, prefix ast.Ref) bool {
 	for _, ref := range sl {
 		if ref.HasPrefix(prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func refContainsNonScalar(ref ast.Ref) bool {
+	for _, term := range ref[1:] {
+		if !ast.IsScalar(term.Value) {
 			return true
 		}
 	}

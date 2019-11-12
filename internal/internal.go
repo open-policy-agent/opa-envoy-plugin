@@ -330,6 +330,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			ctx,
 			rego.EvalParsedInput(input),
 			rego.EvalTransaction(txn),
+			rego.EvalMetrics(result.metrics),
 		)
 
 		result.metrics.Timer(metrics.ServerHandler).Stop()
