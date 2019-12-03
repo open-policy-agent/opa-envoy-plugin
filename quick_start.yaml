@@ -146,7 +146,7 @@ spec:
 ############################################################
 # OPA admission controller deployment for injecting OPA-Istio.
 ############################################################
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -155,6 +155,9 @@ metadata:
   name: admission-controller
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: admission-controller
   template:
     metadata:
       labels:
