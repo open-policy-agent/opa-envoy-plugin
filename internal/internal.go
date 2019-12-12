@@ -157,15 +157,27 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	logrus.Info("Listener exited.")
 }
 
-func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (*ext_authz.CheckResponse, error) {
+func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (resp *ext_authz.CheckResponse, err error) {
 	start := time.Now()
+	var input map[string]interface{}
+	var result *evalResult
+
+	defer func() {
+		logErr := p.log(ctx, input, result, err)
+		if logErr != nil {
+			resp = &ext_authz.CheckResponse{
+				Status: &rpc_status.Status{
+					Code:    int32(code.Code_UNKNOWN),
+					Message: logErr.Error(),
+				},
+			}
+		}
+	}()
 
 	bs, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-
-	var input map[string]interface{}
 
 	err = util.UnmarshalJSON(bs, &input)
 	if err != nil {
@@ -192,12 +204,12 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		return nil, err
 	}
 
-	result, err := p.eval(ctx, inputValue)
+	result, err = p.eval(ctx, inputValue)
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &ext_authz.CheckResponse{}
+	resp = &ext_authz.CheckResponse{}
 
 	switch decision := result.decision.(type) {
 	case bool:
@@ -250,19 +262,8 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 		}
 
 	default:
-		return nil, fmt.Errorf("illegal value for policy evaluation result: %T", decision)
-	}
-
-	err = p.log(ctx, input, result, err)
-
-	if err != nil {
-		resp := &ext_authz.CheckResponse{
-			Status: &rpc_status.Status{
-				Code:    int32(code.Code_UNKNOWN),
-				Message: err.Error(),
-			},
-		}
-		return resp, nil
+		err = fmt.Errorf("illegal value for policy evaluation result: %T", decision)
+		return nil, err
 	}
 
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {

@@ -404,6 +404,46 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	}
 }
 
+func TestCheckIllegalDecisionWithLogger(t *testing.T) {
+
+	// Example Envoy Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServerWithIllegalDecision(customLogger, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	expectedErrMsg := "illegal value for policy evaluation result: json.Number"
+	if err.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, err)
+	}
+
+	if output != nil {
+		t.Fatal("Expected nil output")
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || event.Result != nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+}
+
 func TestCheckWithLoggerError(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -960,6 +1000,41 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 				"headers": {"x": "hello", "y": "world"}
 		    }
 		}`
+
+	m, err := getPluginManager(module, customLogger)
+	if err != nil {
+		panic(err)
+	}
+
+	query := "data.istio.authz.allow"
+	parsedQuery, err := ast.ParseBody(query)
+	if err != nil {
+		panic(err)
+	}
+
+	s := &envoyExtAuthzGrpcServer{
+		cfg: Config{
+			Addr:        ":50052",
+			Query:       query,
+			DryRun:      dryRun,
+			parsedQuery: parsedQuery,
+		},
+		manager:             m,
+		preparedQueryDoOnce: new(sync.Once),
+	}
+
+	m.RegisterCompilerTrigger(s.compilerUpdated)
+
+	return s
+}
+
+func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+
+	module := `
+		package istio.authz
+
+		default allow = 1
+		`
 
 	m, err := getPluginManager(module, customLogger)
 	if err != nil {
