@@ -127,6 +127,17 @@ const exampleDeniedRequestParsedBody = `{
 	}
   }`
 
+const exampleInvalidRequest = `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "headers": { "content-type": "application/json"},
+		  "body": "foo"
+		}
+	  }
+	}
+  }`
+
 func TestCheckAllow(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -431,6 +442,39 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 	if output != nil {
 		t.Fatal("Expected nil output")
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || event.Result != nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+}
+
+func TestCheckBadDecisionWithLogger(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleInvalidRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if output != nil {
+		t.Fatalf("Expected no output but got %v", output)
 	}
 
 	if len(customLogger.events) != 1 {

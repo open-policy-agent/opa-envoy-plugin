@@ -380,18 +380,24 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 	}
 
 	info := &server.Info{
-		Revision:   result.revision,
-		DecisionID: result.decisionID,
-		Timestamp:  time.Now(),
-		Query:      p.cfg.Query,
-		Path:       p.cfg.Query,
-		Input:      &input,
-		Error:      err,
-		Metrics:    result.metrics,
+		Timestamp: time.Now(),
+		Query:     p.cfg.Query,
+		Path:      p.cfg.Query,
+		Input:     &input,
+		Error:     err,
+	}
+
+	if result != nil {
+		info.Revision = result.revision
+		info.DecisionID = result.decisionID
+		info.Metrics = result.metrics
 	}
 
 	if err == nil {
-		var x interface{} = result.decision
+		var x interface{}
+		if result != nil {
+			x = result.decision
+		}
 		info.Results = &x
 	}
 
