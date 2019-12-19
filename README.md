@@ -107,7 +107,7 @@ To deploy OPA-Istio include the following container in your Kubernetes Deploymen
 
 ```yaml
 containers:
-- image: openpolicyagent/opa:0.15.1-istio
+- image: openpolicyagent/opa:0.16.0-istio
   imagePullPolicy: IfNotPresent
   name: opa-istio
   volumeMounts:
