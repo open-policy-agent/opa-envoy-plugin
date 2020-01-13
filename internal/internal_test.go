@@ -280,10 +280,8 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	}
 
 	expected := []string{
-		"timer_rego_module_parse_ns",
 		"timer_rego_query_compile_ns",
 		"timer_rego_query_eval_ns",
-		"timer_rego_query_parse_ns",
 		"timer_server_handler_ns",
 	}
 
