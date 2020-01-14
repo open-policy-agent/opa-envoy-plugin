@@ -13,22 +13,22 @@ github.com/ghodss/yaml
 # github.com/gobwas/glob v0.2.3
 github.com/gobwas/glob
 github.com/gobwas/glob/compiler
-github.com/gobwas/glob/syntax
 github.com/gobwas/glob/match
+github.com/gobwas/glob/syntax
 github.com/gobwas/glob/syntax/ast
-github.com/gobwas/glob/util/runes
 github.com/gobwas/glob/syntax/lexer
+github.com/gobwas/glob/util/runes
 github.com/gobwas/glob/util/strings
 # github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/proto
+github.com/golang/protobuf/protoc-gen-go/descriptor
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/empty
 github.com/golang/protobuf/ptypes/struct
-github.com/golang/protobuf/ptypes/wrappers
 github.com/golang/protobuf/ptypes/timestamp
-github.com/golang/protobuf/protoc-gen-go/descriptor
+github.com/golang/protobuf/ptypes/wrappers
 # github.com/gorilla/mux v1.7.3
 github.com/gorilla/mux
 # github.com/inconshreveable/mousetrap v1.0.0
@@ -42,81 +42,81 @@ github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/olekukonko/tablewriter v0.0.1
 github.com/olekukonko/tablewriter
 # github.com/open-policy-agent/opa v0.16.1
-github.com/open-policy-agent/opa/cmd
-github.com/open-policy-agent/opa/plugins
-github.com/open-policy-agent/opa/runtime
 github.com/open-policy-agent/opa/ast
-github.com/open-policy-agent/opa/metrics
-github.com/open-policy-agent/opa/plugins/logs
-github.com/open-policy-agent/opa/rego
-github.com/open-policy-agent/opa/server
-github.com/open-policy-agent/opa/storage
-github.com/open-policy-agent/opa/util
 github.com/open-policy-agent/opa/bundle
+github.com/open-policy-agent/opa/cmd
+github.com/open-policy-agent/opa/config
 github.com/open-policy-agent/opa/cover
 github.com/open-policy-agent/opa/dependencies
+github.com/open-policy-agent/opa/download
 github.com/open-policy-agent/opa/format
+github.com/open-policy-agent/opa/internal/compiler/wasm
+github.com/open-policy-agent/opa/internal/compiler/wasm/opa
+github.com/open-policy-agent/opa/internal/file/archive
 github.com/open-policy-agent/opa/internal/file/url
+github.com/open-policy-agent/opa/internal/ir
+github.com/open-policy-agent/opa/internal/leb128
+github.com/open-policy-agent/opa/internal/merge
+github.com/open-policy-agent/opa/internal/planner
 github.com/open-policy-agent/opa/internal/presentation
+github.com/open-policy-agent/opa/internal/prometheus
 github.com/open-policy-agent/opa/internal/runtime
+github.com/open-policy-agent/opa/internal/strvals
+github.com/open-policy-agent/opa/internal/version
+github.com/open-policy-agent/opa/internal/wasm/constant
+github.com/open-policy-agent/opa/internal/wasm/encoding
+github.com/open-policy-agent/opa/internal/wasm/instruction
+github.com/open-policy-agent/opa/internal/wasm/module
+github.com/open-policy-agent/opa/internal/wasm/opcode
+github.com/open-policy-agent/opa/internal/wasm/types
 github.com/open-policy-agent/opa/loader
+github.com/open-policy-agent/opa/metrics
+github.com/open-policy-agent/opa/plugins
+github.com/open-policy-agent/opa/plugins/bundle
+github.com/open-policy-agent/opa/plugins/discovery
+github.com/open-policy-agent/opa/plugins/logs
+github.com/open-policy-agent/opa/plugins/rest
+github.com/open-policy-agent/opa/plugins/status
 github.com/open-policy-agent/opa/profiler
+github.com/open-policy-agent/opa/rego
+github.com/open-policy-agent/opa/repl
+github.com/open-policy-agent/opa/runtime
+github.com/open-policy-agent/opa/server
+github.com/open-policy-agent/opa/server/authorizer
+github.com/open-policy-agent/opa/server/identifier
+github.com/open-policy-agent/opa/server/types
+github.com/open-policy-agent/opa/server/writer
+github.com/open-policy-agent/opa/storage
 github.com/open-policy-agent/opa/storage/inmem
 github.com/open-policy-agent/opa/tester
 github.com/open-policy-agent/opa/topdown
-github.com/open-policy-agent/opa/topdown/lineage
-github.com/open-policy-agent/opa/version
-github.com/open-policy-agent/opa/config
-github.com/open-policy-agent/opa/plugins/rest
-github.com/open-policy-agent/opa/internal/prometheus
-github.com/open-policy-agent/opa/internal/strvals
-github.com/open-policy-agent/opa/internal/version
-github.com/open-policy-agent/opa/plugins/discovery
-github.com/open-policy-agent/opa/repl
-github.com/open-policy-agent/opa/server/types
-github.com/open-policy-agent/opa/types
-github.com/open-policy-agent/opa/internal/compiler/wasm
-github.com/open-policy-agent/opa/internal/ir
-github.com/open-policy-agent/opa/internal/planner
-github.com/open-policy-agent/opa/internal/wasm/encoding
-github.com/open-policy-agent/opa/plugins/bundle
-github.com/open-policy-agent/opa/server/authorizer
-github.com/open-policy-agent/opa/server/identifier
-github.com/open-policy-agent/opa/server/writer
-github.com/open-policy-agent/opa/watch
-github.com/open-policy-agent/opa/internal/file/archive
-github.com/open-policy-agent/opa/internal/merge
 github.com/open-policy-agent/opa/topdown/builtins
 github.com/open-policy-agent/opa/topdown/copypropagation
+github.com/open-policy-agent/opa/topdown/internal/jwx/buffer
+github.com/open-policy-agent/opa/topdown/internal/jwx/jwa
 github.com/open-policy-agent/opa/topdown/internal/jwx/jwk
 github.com/open-policy-agent/opa/topdown/internal/jwx/jws
-github.com/open-policy-agent/opa/download
-github.com/open-policy-agent/opa/plugins/status
-github.com/open-policy-agent/opa/internal/compiler/wasm/opa
-github.com/open-policy-agent/opa/internal/wasm/instruction
-github.com/open-policy-agent/opa/internal/wasm/module
-github.com/open-policy-agent/opa/internal/wasm/types
-github.com/open-policy-agent/opa/internal/leb128
-github.com/open-policy-agent/opa/internal/wasm/constant
-github.com/open-policy-agent/opa/internal/wasm/opcode
-github.com/open-policy-agent/opa/topdown/internal/jwx/jwa
 github.com/open-policy-agent/opa/topdown/internal/jwx/jws/sign
 github.com/open-policy-agent/opa/topdown/internal/jwx/jws/verify
-github.com/open-policy-agent/opa/topdown/internal/jwx/buffer
+github.com/open-policy-agent/opa/topdown/lineage
+github.com/open-policy-agent/opa/types
+github.com/open-policy-agent/opa/util
+github.com/open-policy-agent/opa/version
+github.com/open-policy-agent/opa/watch
 # github.com/peterh/liner v1.1.0
 github.com/peterh/liner
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/prometheus/client_golang v1.1.0
 github.com/prometheus/client_golang/prometheus
-github.com/prometheus/client_golang/prometheus/promhttp
 github.com/prometheus/client_golang/prometheus/internal
+github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.6.0
 github.com/prometheus/common/expfmt
-github.com/prometheus/common/model
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+github.com/prometheus/common/model
 # github.com/prometheus/procfs v0.0.3
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
@@ -132,31 +132,33 @@ github.com/spf13/pflag
 github.com/yashtewari/glob-intersection
 # golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
 golang.org/x/net/context
-golang.org/x/net/trace
-golang.org/x/net/internal/timeseries
+golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
-golang.org/x/net/http/httpguts
 golang.org/x/net/idna
+golang.org/x/net/internal/timeseries
+golang.org/x/net/trace
 # golang.org/x/sys v0.0.0-20190801041406-cbf593c0f2f3
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-golang.org/x/text/transform
 # google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.23.0
 google.golang.org/grpc
-google.golang.org/grpc/reflection
 google.golang.org/grpc/balancer
+google.golang.org/grpc/balancer/base
 google.golang.org/grpc/balancer/roundrobin
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/codes
 google.golang.org/grpc/connectivity
 google.golang.org/grpc/credentials
+google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/grpclog
@@ -168,11 +170,14 @@ google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
 google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
+google.golang.org/grpc/reflection
+google.golang.org/grpc/reflection/grpc_reflection_v1alpha
 google.golang.org/grpc/resolver
 google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
@@ -180,11 +185,6 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-google.golang.org/grpc/reflection/grpc_reflection_v1alpha
-google.golang.org/grpc/balancer/base
-google.golang.org/grpc/credentials/internal
-google.golang.org/grpc/binarylog/grpc_binarylog_v1
-google.golang.org/grpc/internal/syscall
 # gopkg.in/fsnotify.v1 v1.4.7
 gopkg.in/fsnotify.v1
 # gopkg.in/yaml.v2 v2.2.2
