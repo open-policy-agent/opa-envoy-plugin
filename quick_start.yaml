@@ -228,7 +228,7 @@ data:
     plugins:
       envoy_ext_authz_grpc:
         addr: :9191
-        query: data.istio.authz.allow
+        path: istio/authz/allow
 ---
 ############################################################
 # Example policy to enforce into OPA-Istio sidecars.

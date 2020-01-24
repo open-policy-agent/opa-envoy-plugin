@@ -133,11 +133,11 @@ The OPA-Istio plugin supports the following configuration fields:
 | Field | Required | Description |
 | --- | --- | --- |
 | `plugins["envoy_ext_authz_grpc"].addr` | No | Set listening address of Envoy External Authorization gRPC server. This must match the value configured in the Envoy Filter resource. Default: `:9191`. |
-| `plugins["envoy_ext_authz_grpc"].query` | No | Specifies the name of the policy decision to query. The policy decision can either be a `boolean` or an `object`. If boolean, `true` indicates the request should be allowed and `false` indicates the request should be denied. If the policy decision is an object, it **must** contain the `allowed` key set to either `true` or `false` to indicate if the request is allowed or not respectively. It can optionally contain a `headers` field to send custom headers to the downstream client or upstream. An optional `body` field can be included in the policy decision to send a response body data to the downstream client. Also an optional `http_status` field can be included to send a HTTP response status code to the downstream client other than `403 (Forbidden)`. Default: `data.istio.authz.allow`.|
+| `plugins["envoy_ext_authz_grpc"].path` | No | Specifies the hierarchical policy decision path. The policy decision can either be a `boolean` or an `object`. If boolean, `true` indicates the request should be allowed and `false` indicates the request should be denied. If the policy decision is an object, it **must** contain the `allowed` key set to either `true` or `false` to indicate if the request is allowed or not respectively. It can optionally contain a `headers` field to send custom headers to the downstream client or upstream. An optional `body` field can be included in the policy decision to send a response body data to the downstream client. Also an optional `http_status` field can be included to send a HTTP response status code to the downstream client other than `403 (Forbidden)`. Default: `istio/authz/allow`.|
 | `plugins["envoy_ext_authz_grpc"].dry-run` | No | Configures the Envoy External Authorization gRPC server to unconditionally return an `ext_authz.CheckResponse.Status` of `google_rpc.Status{Code: google_rpc.OK}`. Default: `false`. |
 |`plugins["envoy_ext_authz_grpc"].enable-reflection`| No | Enables gRPC server reflection on the Envoy External Authorization gRPC server. Default: `false`. |
 
-If the configuration does not specify the `query` field, `data.istio.authz.allow` will be considered as the default name of the policy decision to query.
+If the configuration does not specify the `path` field, `istio/authz/allow` will be considered as the default policy decision path. `data.istio.authz.allow` will be the name of the policy decision to query in the default case.
 
 The `dry-run` parameter is provided to enable you to test out new policies. You can set `dry-run: true` which will unconditionally allow requests. Decision logs can be monitored to see what "would" have happened. This is especially useful for initial integration of OPA or when policies undergo large refactoring.
 
@@ -163,7 +163,7 @@ bundles:
 plugins:
     envoy_ext_authz_grpc:
         addr: :9191
-        query: data.istio.authz.allow
+        path: istio/authz/allow
         dry-run: false
         enable-reflection: false
 ```

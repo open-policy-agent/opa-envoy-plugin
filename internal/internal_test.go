@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -275,7 +276,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == false {
+	if event.Error != nil || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == false {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
 
@@ -408,7 +409,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || *event.Result == true {
+	if event.Error != nil || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == true {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
 }
@@ -481,7 +482,7 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || event.Result != nil {
+	if event.Error == nil || event.Path != "istio/authz/allow" || event.Revision != "" || event.Result != nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 }
@@ -515,7 +516,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	}
 }
 
-func TestConfigValid(t *testing.T) {
+func TestConfigValidWithQuery(t *testing.T) {
 
 	m, err := plugins.New([]byte{}, "test", inmem.New())
 	if err != nil {
@@ -533,7 +534,7 @@ func TestConfigValid(t *testing.T) {
 	}
 
 	if config.parsedQuery.String() != "data.test" {
-		t.Fatalf("Expected query data.test but got %v", config.Query)
+		t.Fatalf("Expected query data.test but got %v", config.parsedQuery.String())
 	}
 
 	if !config.DryRun {
@@ -542,6 +543,41 @@ func TestConfigValid(t *testing.T) {
 
 	if !config.EnableReflection {
 		t.Fatal("Expected enable-reflection config to be enabled")
+	}
+}
+
+func TestConfigValidWithPath(t *testing.T) {
+
+	m, err := plugins.New([]byte{}, "test", inmem.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := map[string]struct {
+		path string
+		want string
+	}{
+		"empty_path":               {path: "", want: "data.istio.authz.allow"},
+		"path_no_lt_slash":         {path: "test/allow/main", want: "data.test.allow.main"},
+		"path_with_leading_slash":  {path: "/test/allow/main", want: "data.test.allow.main"},
+		"path_with_trailing_slash": {path: "test/allow/main/", want: "data.test.allow.main"},
+		"path_with_lt_slash":       {path: "/test/allow/main/", want: "data.test.allow.main"},
+		"path_with_periods":        {path: "test/com.foo.istio.ingress/allow/main/", want: "data.test[\"com.foo.istio.ingress\"].allow.main"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+
+			in := fmt.Sprintf(`{"path": %v}`, tc.path)
+			config, err := Validate(m, []byte(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if config.parsedQuery.String() != tc.want {
+				t.Fatalf("Expected query %v but got %v", tc.want, config.parsedQuery.String())
+			}
+		})
 	}
 }
 
@@ -561,8 +597,17 @@ func TestConfigValidDefault(t *testing.T) {
 		t.Fatalf("Expected address %v but got %v", defaultAddr, config.Addr)
 	}
 
-	if config.parsedQuery.String() != defaultQuery {
-		t.Fatalf("Expected query %v but got %v", defaultQuery, config.parsedQuery.String())
+	expected := "data." + strings.Replace(defaultPath, "/", ".", -1)
+	if config.parsedQuery.String() != expected {
+		t.Fatalf("Expected query %v but got %v", expected, config.parsedQuery.String())
+	}
+
+	if config.Path != defaultPath {
+		t.Fatalf("Expected path %v but got %v", defaultPath, config.Path)
+	}
+
+	if config.Query != "" {
+		t.Fatalf("Expected empty query but got %v", config.Query)
 	}
 
 	if config.DryRun {
@@ -571,6 +616,20 @@ func TestConfigValidDefault(t *testing.T) {
 
 	if config.EnableReflection {
 		t.Fatal("Expected enable-reflection config to be disabled by default")
+	}
+}
+
+func TestConfigInvalid(t *testing.T) {
+
+	m, err := plugins.New([]byte{}, "test", inmem.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in := `{"query": "data.test.allow", "path": "test/allow"}`
+	_, err = Validate(m, []byte(in))
+	if err == nil {
+		t.Fatal("Expected error but got nil")
 	}
 }
 
@@ -1004,8 +1063,8 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 		panic(err)
 	}
 
-	query := "data.istio.authz.allow"
-	parsedQuery, err := ast.ParseBody(query)
+	path := "istio/authz/allow"
+	parsedQuery, err := ast.ParseBody("data." + strings.Replace(path, "/", ".", -1))
 	if err != nil {
 		panic(err)
 	}
@@ -1013,7 +1072,7 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 	s := &envoyExtAuthzGrpcServer{
 		cfg: Config{
 			Addr:        ":50052",
-			Query:       query,
+			Path:        path,
 			DryRun:      dryRun,
 			parsedQuery: parsedQuery,
 		},

@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,7 +39,7 @@ import (
 )
 
 const defaultAddr = ":9191"
-const defaultQuery = "data.istio.authz.allow"
+const defaultPath = "istio/authz/allow"
 const defaultDryRun = false
 const defaultEnableReflection = false
 
@@ -59,7 +60,6 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 	cfg := Config{
 		Addr:             defaultAddr,
-		Query:            defaultQuery,
 		DryRun:           defaultDryRun,
 		EnableReflection: defaultEnableReflection,
 	}
@@ -68,7 +68,24 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 		return nil, err
 	}
 
-	parsedQuery, err := ast.ParseBody(cfg.Query)
+	if cfg.Path != "" && cfg.Query != "" {
+		return nil, fmt.Errorf("invalid config: specify a value for only the \"path\" field")
+	}
+
+	var parsedQuery ast.Body
+	var err error
+
+	if cfg.Query != "" {
+		// Deprecated: Use Path instead
+		parsedQuery, err = ast.ParseBody(cfg.Query)
+	} else {
+		if cfg.Path == "" {
+			cfg.Path = defaultPath
+		}
+		path := stringPathToDataRef(cfg.Path)
+		parsedQuery, err = ast.ParseBody(path.String())
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +121,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 // Config represents the plugin configuration.
 type Config struct {
 	Addr             string `json:"addr"`
-	Query            string `json:"query"`
+	Query            string `json:"query"` // Deprecated: Use Path instead
+	Path             string `json:"path"`
 	DryRun           bool   `json:"dry-run"`
 	EnableReflection bool   `json:"enable-reflection"`
 	parsedQuery      ast.Body
@@ -146,6 +164,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	logrus.WithFields(logrus.Fields{
 		"addr":              p.cfg.Addr,
 		"query":             p.cfg.Query,
+		"path":              p.cfg.Path,
 		"dry-run":           p.cfg.DryRun,
 		"enable-reflection": p.cfg.EnableReflection,
 	}).Info("Starting gRPC server.")
@@ -268,7 +287,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
 		logrus.WithFields(logrus.Fields{
-			"query":               p.cfg.Query,
+			"query":               p.cfg.parsedQuery.String(),
 			"dry-run":             p.cfg.DryRun,
 			"decision":            result.decision,
 			"err":                 err,
@@ -316,7 +335,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 		if logrus.IsLevelEnabled(logrus.DebugLevel) {
 			logrus.WithFields(logrus.Fields{
 				"input":   input,
-				"query":   p.cfg.Query,
+				"query":   p.cfg.parsedQuery.String(),
 				"dry-run": p.cfg.DryRun,
 				"txn":     result.txnID,
 			}).Debug("Executing policy query.")
@@ -381,10 +400,16 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 
 	info := &server.Info{
 		Timestamp: time.Now(),
-		Query:     p.cfg.Query,
-		Path:      p.cfg.Query,
 		Input:     &input,
 		Error:     err,
+	}
+
+	if p.cfg.Query != "" {
+		info.Query = p.cfg.Query
+	}
+
+	if p.cfg.Path != "" {
+		info.Path = p.cfg.Path
 	}
 
 	if result != nil {
@@ -584,4 +609,31 @@ func getParsedBody(req *ext_authz.CheckRequest) (map[string]interface{}, error) 
 	}
 
 	return data, nil
+}
+
+func stringPathToDataRef(s string) (r ast.Ref) {
+	result := ast.Ref{ast.DefaultRootDocument}
+	result = append(result, stringPathToRef(s)...)
+	return result
+}
+
+func stringPathToRef(s string) (r ast.Ref) {
+	if len(s) == 0 {
+		return r
+	}
+
+	p := strings.Split(s, "/")
+	for _, x := range p {
+		if x == "" {
+			continue
+		}
+
+		i, err := strconv.Atoi(x)
+		if err != nil {
+			r = append(r, ast.StringTerm(x))
+		} else {
+			r = append(r, ast.IntNumberTerm(i))
+		}
+	}
+	return r
 }
