@@ -10,7 +10,7 @@ require (
 	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
-	github.com/open-policy-agent/opa v0.16.1
+	github.com/open-policy-agent/opa v0.16.2
 	github.com/peterh/liner v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
