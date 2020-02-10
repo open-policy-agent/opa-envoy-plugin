@@ -234,6 +234,8 @@ func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
 
 	manager.RegisterCompilerTrigger(plugin.compilerUpdated)
 
+	manager.UpdatePluginStatus(Name, &plugins.Status{State: plugins.StateNotReady})
+
 	return plugin
 }
 
@@ -252,6 +254,7 @@ func Lookup(manager *plugins.Manager) *Plugin {
 func (p *Plugin) Start(ctx context.Context) error {
 	p.logInfo("Starting decision logger.")
 	go p.loop()
+	p.manager.UpdatePluginStatus(Name, &plugins.Status{State: plugins.StateOK})
 	return nil
 }
 
@@ -261,12 +264,11 @@ func (p *Plugin) Stop(ctx context.Context) {
 	done := make(chan struct{})
 	p.stop <- done
 	_ = <-done
+	p.manager.UpdatePluginStatus(Name, &plugins.Status{State: plugins.StateNotReady})
 }
 
 // Log appends a decision log event to the buffer for uploading.
 func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
-
-	path := strings.Replace(strings.TrimPrefix(decision.Path, "data."), ".", "/", -1)
 
 	bundles := map[string]BundleInfoV1{}
 	for name, info := range decision.Bundles {
@@ -278,7 +280,7 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 		DecisionID:  decision.DecisionID,
 		Revision:    decision.Revision,
 		Bundles:     bundles,
-		Path:        path,
+		Path:        decision.Path,
 		Query:       decision.Query,
 		Input:       decision.Input,
 		Result:      decision.Results,

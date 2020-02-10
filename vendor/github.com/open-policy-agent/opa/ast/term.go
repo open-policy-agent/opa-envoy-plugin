@@ -463,14 +463,14 @@ func (term *Term) UnmarshalJSON(bs []byte) error {
 // Vars returns a VarSet with variables contained in this term.
 func (term *Term) Vars() VarSet {
 	vis := &VarVisitor{vars: VarSet{}}
-	Walk(vis, term)
+	vis.Walk(term)
 	return vis.vars
 }
 
 // IsConstant returns true if the AST value is constant.
 func IsConstant(v Value) bool {
 	found := false
-	Walk(&GenericVisitor{
+	vis := GenericVisitor{
 		func(x interface{}) bool {
 			switch x.(type) {
 			case Var, Ref, *ArrayComprehension, *ObjectComprehension, *SetComprehension, Call:
@@ -479,7 +479,8 @@ func IsConstant(v Value) bool {
 			}
 			return false
 		},
-	}, v)
+	}
+	vis.Walk(v)
 	return !found
 }
 
@@ -939,6 +940,10 @@ func (ref Ref) Concat(terms []*Term) Ref {
 
 // Dynamic returns the offset of the first non-constant operand of ref.
 func (ref Ref) Dynamic() int {
+	switch ref[0].Value.(type) {
+	case Call:
+		return 0
+	}
 	for i := 1; i < len(ref); i++ {
 		if !IsConstant(ref[i].Value) {
 			return i
@@ -1054,13 +1059,8 @@ func (ref Ref) String() string {
 	if len(ref) == 0 {
 		return ""
 	}
-	var buf []string
-	path := ref
-	switch v := ref[0].Value.(type) {
-	case Var:
-		buf = append(buf, string(v))
-		path = path[1:]
-	}
+	buf := []string{ref[0].Value.String()}
+	path := ref[1:]
 	for _, p := range path {
 		switch p := p.Value.(type) {
 		case String:
@@ -1081,7 +1081,7 @@ func (ref Ref) String() string {
 //  this expression in isolation.
 func (ref Ref) OutputVars() VarSet {
 	vis := NewVarVisitor().WithParams(VarVisitorParams{SkipRefHead: true})
-	Walk(vis, ref)
+	vis.Walk(ref)
 	return vis.Vars()
 }
 
