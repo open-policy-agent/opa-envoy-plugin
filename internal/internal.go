@@ -593,11 +593,11 @@ func getParsedPathAndQuery(req *ext_authz.CheckRequest) ([]interface{}, map[stri
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(req *ext_authz.CheckRequest) (map[string]interface{}, error) {
+func getParsedBody(req *ext_authz.CheckRequest) (interface{}, error) {
 	body := req.GetAttributes().GetRequest().GetHttp().GetBody()
 	headers := req.GetAttributes().GetRequest().GetHttp().GetHeaders()
 
-	data := make(map[string]interface{})
+	var data interface{}
 
 	if val, ok := headers["content-type"]; ok {
 		if strings.Contains(val, "application/json") {

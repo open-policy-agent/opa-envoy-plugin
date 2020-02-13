@@ -133,7 +133,7 @@ const exampleInvalidRequest = `{
 	  "request": {
 		"http": {
 		  "headers": { "content-type": "application/json"},
-		  "body": "foo"
+		  "body": "[\"foo\" : 42}"
 		}
 	  }
 	}
@@ -942,7 +942,59 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
-	requestContentTypeJSON := `{
+	requestContentTypeJSONString := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "foo"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeJSONBoolean := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "true"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeJSONNumber := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "42"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeJSONNull := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "null"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeJSONObject := `{
 		"attributes": {
 		  "request": {
 			"http": {
@@ -955,18 +1007,42 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
-	expected := map[string]interface{}{}
-	expected["firstname"] = "foo"
-	expected["lastname"] = "bar"
+	requestContentTypeJSONArray := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "[\"hello\", \"opa\"]"
+			}
+		  }
+		}
+	  }`
+
+	expectedNumber := json.Number("42")
+
+	expectedObject := map[string]interface{}{}
+	expectedObject["firstname"] = "foo"
+	expectedObject["lastname"] = "bar"
+
+	expectedArray := []interface{}{"hello", "opa"}
+
+	var data interface{}
 
 	tests := map[string]struct {
 		input *ext_authz.CheckRequest
-		want  map[string]interface{}
+		want  interface{}
 		err   error
 	}{
-		"no_content_type":   {input: createCheckRequest(requestNoContentType), want: map[string]interface{}{}, err: nil},
-		"content_type_text": {input: createCheckRequest(requestContentTypeText), want: map[string]interface{}{}, err: nil},
-		"content_type_json": {input: createCheckRequest(requestContentTypeJSON), want: expected, err: nil},
+		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: data, err: nil},
+		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: data, err: nil},
+		"content_type_json_string":  {input: createCheckRequest(requestContentTypeJSONString), want: "foo", err: nil},
+		"content_type_json_boolean": {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, err: nil},
+		"content_type_json_number":  {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, err: nil},
+		"content_type_json_null":    {input: createCheckRequest(requestContentTypeJSONNull), want: nil, err: nil},
+		"content_type_json_object":  {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, err: nil},
+		"content_type_json_array":   {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, err: nil},
 	}
 
 	for name, tc := range tests {
@@ -989,7 +1065,7 @@ func TestGetParsedBody(t *testing.T) {
 			  "headers": {
 				"content-type": "application/json"
 			  },
-			  "body": "foo"
+			  "body": "[\"foo\" : 42}"
 			}
 		  }
 		}
