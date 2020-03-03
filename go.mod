@@ -3,14 +3,13 @@ module github.com/open-policy-agent/opa-istio-plugin
 go 1.12
 
 require (
-	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/envoyproxy/go-control-plane v0.9.0
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/gogo/googleapis v1.2.0 // indirect
 	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
-	github.com/open-policy-agent/opa v0.17.2
+	github.com/open-policy-agent/opa v0.17.3
 	github.com/peterh/liner v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
