@@ -41,7 +41,7 @@ github.com/mattn/go-runewidth
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/olekukonko/tablewriter v0.0.1
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.17.3
+# github.com/open-policy-agent/opa v0.18.0
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/cmd
