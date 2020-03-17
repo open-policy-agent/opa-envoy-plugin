@@ -50,6 +50,14 @@ var DefaultBuiltins = [...]*Builtin{
 	Abs,
 	Rem,
 
+	// Bitwise Arithmetic
+	BitsOr,
+	BitsAnd,
+	BitsNegate,
+	BitsXOr,
+	BitsShiftLeft,
+	BitsShiftRight,
+
 	// Binary
 	And,
 	Or,
@@ -133,6 +141,7 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// JSON Object Manipulation
 	JSONFilter,
+	JSONRemove,
 
 	// Tokens
 	JWTDecode,
@@ -382,10 +391,69 @@ var Rem = &Builtin{
 }
 
 /**
- * Binary
+ * Bitwise
  */
 
-// TODO(tsandall): update binary operators to support integers.
+// BitsOr returns the bitwise "or" of two integers.
+var BitsOr = &Builtin{
+	Name: "bits.or",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsAnd returns the bitwise "and" of two integers.
+var BitsAnd = &Builtin{
+	Name: "bits.and",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsNegate returns the bitwise "negation" of an integer (i.e. flips each
+// bit).
+var BitsNegate = &Builtin{
+	Name: "bits.negate",
+	Decl: types.NewFunction(
+		types.Args(types.N),
+		types.N,
+	),
+}
+
+// BitsXOr returns the bitwise "exclusive-or" of two integers.
+var BitsXOr = &Builtin{
+	Name: "bits.xor",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsShiftLeft returns a new integer with its bits shifted some value to the
+// left.
+var BitsShiftLeft = &Builtin{
+	Name: "bits.lsh",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsShiftRight returns a new integer with its bits shifted some value to the
+// right.
+var BitsShiftRight = &Builtin{
+	Name: "bits.rsh",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+/**
+ * Sets
+ */
 
 // And performs an intersection operation on sets.
 var And = &Builtin{
@@ -937,6 +1005,41 @@ var JSONUnmarshal = &Builtin{
 // JSONFilter filters the JSON object
 var JSONFilter = &Builtin{
 	Name: "json.filter",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+			types.NewAny(
+				types.NewArray(
+					nil,
+					types.NewAny(
+						types.S,
+						types.NewArray(
+							nil,
+							types.A,
+						),
+					),
+				),
+				types.NewSet(
+					types.NewAny(
+						types.S,
+						types.NewArray(
+							nil,
+							types.A,
+						),
+					),
+				),
+			),
+		),
+		types.A,
+	),
+}
+
+// JSONRemove removes paths in the JSON object
+var JSONRemove = &Builtin{
+	Name: "json.remove",
 	Decl: types.NewFunction(
 		types.Args(
 			types.NewObject(
