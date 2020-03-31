@@ -114,6 +114,12 @@ data:
         "mountPath": "/policy",
         "name": "opa-policy",
       }],
+      "readinessProbe": {
+        "httpGet": {
+          "path": "/health?bundles",
+          "port": 8181,
+        },
+      },
     }
 
     opa_config_volume = {
