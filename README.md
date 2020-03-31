@@ -117,6 +117,10 @@ containers:
   - run
   - --server
   - --config-file=/config/config.yaml
+  readinessProbe: 
+    httpGet:
+      path: /health?bundles
+      port: 8181
 ```
 
 The OPA-Istio configuration file should be volume mounted into the container. Add the following volume to your Kubernetes Deployments:
@@ -194,7 +198,7 @@ curl -s -L https://www.openpolicyagent.org/bundles/istio/authz | tar xzv
 >EOF
 >```
 
-In this way OPA can periodically download bundles of policy from an external server and hence loading the policy via a volume-mounted ConfigMap would not be required.
+In this way OPA can periodically download bundles of policy from an external server and hence loading the policy via a volume-mounted ConfigMap would not be required. The `readinessProbe` to `GET /health?bundles` ensures that the `opa-istio` container becomes ready after the bundles are activated.
 
 ## Example Policy
 
