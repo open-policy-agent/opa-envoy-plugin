@@ -45,6 +45,7 @@ var allowedKeyNames = [...]string{
 	"tls_client_cert_file",
 	"tls_client_key_file",
 	"tls_insecure_skip_verify",
+	"tls_server_name",
 	"timeout",
 }
 var allowedKeys = ast.NewSet()
@@ -134,28 +135,16 @@ func validateHTTPRequestOperand(term *ast.Term, pos int) (ast.Object, error) {
 
 }
 
-// Adds custom headers to a new HTTP request.
-func addHeaders(req *http.Request, headers map[string]interface{}) (bool, error) {
-	for k, v := range headers {
-		// Type assertion
-		header, ok := v.(string)
-		if !ok {
-			return false, fmt.Errorf("invalid type for headers value %q", v)
-		}
+// canonicalizeHeaders returns a copy of the headers where the keys are in
+// canonical HTTP form.
+func canonicalizeHeaders(headers map[string]interface{}) map[string]interface{} {
+	canonicalized := map[string]interface{}{}
 
-		// If the Host header is given, bump that up to
-		// the request. Otherwise, just collect it in the
-		// headers.
-		k := http.CanonicalHeaderKey(k)
-		switch k {
-		case "Host":
-			req.Host = header
-		default:
-			req.Header.Add(k, header)
-		}
+	for k, v := range headers {
+		canonicalized[http.CanonicalHeaderKey(k)] = v
 	}
 
-	return true, nil
+	return canonicalized
 }
 
 func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) {
@@ -167,6 +156,7 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 	var tlsClientCertEnvVar []byte
 	var tlsClientCertFile string
 	var tlsClientKeyFile string
+	var tlsServerName string
 	var body *bytes.Buffer
 	var rawBody *bytes.Buffer
 	var enableRedirect bool
@@ -246,6 +236,9 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		case "tls_client_key_file":
 			tlsClientKeyFile = obj.Get(val).String()
 			tlsClientKeyFile = strings.Trim(tlsClientKeyFile, "\"")
+		case "tls_server_name":
+			tlsServerName = obj.Get(val).String()
+			tlsServerName = strings.Trim(tlsServerName, "\"")
 		case "headers":
 			headersVal := obj.Get(val).Value
 			headersValInterface, err := ast.JSON(headersVal)
@@ -272,15 +265,16 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		}
 	}
 
+	isTLS := false
 	client := &http.Client{
 		Timeout: timeout,
 	}
 
 	if tlsInsecureSkipVerify {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsInsecureSkipVerify},
-		}
+		isTLS = true
+		tlsConfig.InsecureSkipVerify = tlsInsecureSkipVerify
 	}
+
 	if tlsClientCertFile != "" && tlsClientKeyFile != "" {
 		clientCertFromFile, err := tls.LoadX509KeyPair(tlsClientCertFile, tlsClientKeyFile)
 		if err != nil {
@@ -297,7 +291,6 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		clientCerts = append(clientCerts, clientCertFromEnv)
 	}
 
-	isTLS := false
 	if len(clientCerts) > 0 {
 		isTLS = true
 		tlsConfig.Certificates = append(tlsConfig.Certificates, clientCerts...)
@@ -337,17 +330,45 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	req = req.WithContext(bctx.Context)
 
 	// Add custom headers
 	if len(customHeaders) != 0 {
-		if ok, err := addHeaders(req, customHeaders); !ok {
-			return nil, err
+		customHeaders = canonicalizeHeaders(customHeaders)
+
+		for k, v := range customHeaders {
+			header, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid type for headers value %q", v)
+			}
+
+			req.Header.Add(k, header)
 		}
+
 		// Don't overwrite or append to one that was set in the custom headers
 		if _, hasUA := customHeaders["User-Agent"]; !hasUA {
 			req.Header.Add("User-Agent", version.UserAgent)
 		}
+
+		// If the caller specifies the Host header, use it for the HTTP
+		// request host and the TLS server name.
+		if host, hasHost := customHeaders["Host"]; hasHost {
+			host := host.(string) // We already checked that it's a string.
+			req.Host = host
+
+			// Only default the ServerName if the caller has
+			// specified the host. If we don't specify anything,
+			// Go will default to the target hostname. This name
+			// is not the same as the default that Go populates
+			// `req.Host` with, which is why we don't just set
+			// this unconditionally.
+			tlsConfig.ServerName = host
+		}
+	}
+
+	if tlsServerName != "" {
+		tlsConfig.ServerName = tlsServerName
 	}
 
 	// execute the http request
