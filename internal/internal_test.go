@@ -1981,9 +1981,9 @@ func TestParsedPathAndQuery(t *testing.T) {
 			map[string]interface{}{"a": []interface{}{"1"}, "b": []interface{}{"2"}},
 		},
 		{
-			createExtReqWithPath("%2Fmy%2Ftest%2Fpath%3Fa%3D1%26a%3D2"),
+			createExtReqWithPath("/my/test/path?a=1&a=new%0aline"),
 			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "2"}},
+			map[string]interface{}{"a": []interface{}{"1", "new\nline"}},
 		},
 	}
 

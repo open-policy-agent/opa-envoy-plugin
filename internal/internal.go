@@ -693,12 +693,7 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 }
 
 func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {
-	unescapedPath, err := url.PathUnescape(path)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	parsedURL, err := url.Parse(unescapedPath)
+	parsedURL, err := url.Parse(path)
 	if err != nil {
 		return nil, nil, err
 	}
