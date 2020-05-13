@@ -22,6 +22,13 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_type "github.com/envoyproxy/go-control-plane/envoy/type"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
@@ -30,18 +37,15 @@ import (
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/util"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"google.golang.org/genproto/googleapis/rpc/code"
-	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 const defaultAddr = ":9191"
 const defaultPath = "istio/authz/allow"
 const defaultDryRun = false
 const defaultEnableReflection = false
+
+// PluginName is the name to register with the OPA plugin manager
+const PluginName = "envoy_ext_authz_grpc"
 
 var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
 
@@ -115,6 +119,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		reflection.Register(plugin.server)
 	}
 
+	m.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+
 	return plugin
 }
 
@@ -137,12 +143,14 @@ type envoyExtAuthzGrpcServer struct {
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 	go p.listen()
 	return nil
 }
 
 func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 	p.server.Stop()
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
 func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
@@ -169,11 +177,14 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 		"enable-reflection": p.cfg.EnableReflection,
 	}).Info("Starting gRPC server.")
 
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
+
 	if err := p.server.Serve(l); err != nil {
 		logrus.WithField("err", err).Fatal("Listener failed.")
 	}
 
 	logrus.Info("Listener exited.")
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
 func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (resp *ext_authz.CheckResponse, err error) {
