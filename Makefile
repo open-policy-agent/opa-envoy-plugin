@@ -84,7 +84,7 @@ update-quickstart-version:
 	sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:latest-istio\"\,/;}" quick_start.yaml
 
 test: generate
-	$(DISABLE_CGO) $(GO) test -bench=. $(PACKAGES)
+	$(DISABLE_CGO) $(GO) test -v -bench=. $(PACKAGES)
 
 test-e2e:
 	bats -t test/bats/test.bats
