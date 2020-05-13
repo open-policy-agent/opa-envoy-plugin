@@ -7,21 +7,24 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 const exampleAllowedRequest = `{
@@ -1074,6 +1077,73 @@ func TestGetParsedBody(t *testing.T) {
 	_, err := getParsedBody(createCheckRequest(requestContentTypeJSONInvalid))
 	if err == nil {
 		t.Fatal("Expected error but got nil")
+	}
+}
+
+func TestPluginStatusLifeCycle(t *testing.T) {
+	m, err := getPluginManager("package foo", &testPlugin{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
+	p := New(m, &Config{
+		Addr: ":0",
+	})
+	m.Register(PluginName, p)
+
+	assertPluginState(t, m, plugins.StateNotReady)
+
+	ctx := context.Background()
+	err = m.Start(ctx)
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
+	// Wait a short time for the plugin to reach OK state
+	// If it hits this timeout something bad has almost definitely happened
+	waitForPluginState(t, m, plugins.StateOK, 5*time.Second)
+
+	m.Stop(ctx)
+
+	assertPluginState(t, m, plugins.StateNotReady)
+}
+
+func waitForPluginState(t *testing.T, m *plugins.Manager, desired plugins.State, timeout time.Duration) {
+	after := time.After(timeout)
+	tick := time.Tick(10 * time.Microsecond)
+	for {
+		select {
+		case <-after:
+			t.Fatal("Plugin failed to reach OK state in time")
+		case <-tick:
+			state, err := getPluginState(t, m)
+			if err == nil && state == desired {
+				return
+			}
+		}
+	}
+}
+
+func getPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error) {
+	t.Helper()
+	status, ok := m.PluginStatus()[PluginName]
+	if !ok {
+		return plugins.StateNotReady, fmt.Errorf("expected plugin %s to be in manager plugin status map", PluginName)
+	}
+	if status == nil {
+		return plugins.StateNotReady, errors.New("expected a non-nil status value")
+	}
+	return status.State, nil
+}
+
+func assertPluginState(t *testing.T, m *plugins.Manager, expected plugins.State) {
+	t.Helper()
+	state, err := getPluginState(t, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state != expected {
+		t.Fatalf("Expected plugin state %v, got %v", expected, state)
 	}
 }
 
