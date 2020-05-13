@@ -116,11 +116,17 @@ containers:
   args:
   - run
   - --server
+  - --addr=localhost:8181
+  - --diagnostic-addr=0.0.0.0:8282
   - --config-file=/config/config.yaml
+  livenessProbe: 
+    httpGet:
+      path: /health?plugins
+      port: 8282
   readinessProbe: 
     httpGet:
-      path: /health?bundles
-      port: 8181
+      path: /health?plugins
+      port: 8282
 ```
 
 The OPA-Istio configuration file should be volume mounted into the container. Add the following volume to your Kubernetes Deployments:

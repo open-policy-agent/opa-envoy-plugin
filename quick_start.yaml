@@ -105,6 +105,8 @@ data:
         "run",
         "--server",
         "--config-file=/config/config.yaml",
+        "--addr=localhost:8181",
+        "--diagnostic-addr=0.0.0.0:8282",
         "/policy/policy.rego",
       ],
       "volumeMounts": [{
@@ -116,10 +118,16 @@ data:
       }],
       "readinessProbe": {
         "httpGet": {
-          "path": "/health?bundles",
-          "port": 8181,
+          "path": "/health?plugins",
+          "port": 8282,
         },
       },
+      "livenessProbe": {
+        "httpGet": {
+          "path": "/health?plugins",
+          "port": 8282,
+        },
+      }
     }
 
     opa_config_volume = {
@@ -182,6 +190,20 @@ spec:
           - "--tls-private-key-file=/certs/tls.key"
           - "--addr=0.0.0.0:443"
           - "/policies/inject.rego"
+          livenessProbe:
+            httpGet:
+              path: /health?plugins
+              scheme: HTTPS
+              port: 443
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health?plugins
+              scheme: HTTPS
+              port: 443
+            initialDelaySeconds: 5
+            periodSeconds: 5
           volumeMounts:
             - readOnly: true
               mountPath: /certs
