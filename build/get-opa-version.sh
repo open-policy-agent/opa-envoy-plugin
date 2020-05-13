@@ -4,4 +4,6 @@
 # The script also trims whitespaces.
 
 SCRIPT_DIR="$( cd "$(dirname "$0")" ; pwd -P )"
-grep "open-policy-agent/opa" $SCRIPT_DIR/../go.mod | tail -1 | cut -d' ' -f 2 | xargs | cut -c 2-
+
+# Ignore the "module" definition and any "replace" directives
+grep "open-policy-agent/opa" $SCRIPT_DIR/../go.mod | grep -vE 'module|replace' | tail -1 | cut -d' ' -f 2 | xargs | cut -c 2-
