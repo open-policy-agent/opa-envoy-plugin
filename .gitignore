@@ -9,6 +9,7 @@ opa_*
 .Dockerfile_*
 _release
 site.tar.gz
+*.bak
 
 # runtime artifacts
 policies

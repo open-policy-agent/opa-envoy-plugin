@@ -26,10 +26,11 @@ if [ $? -eq 0 ]; then
   tag=$(echo $1 | cut -c 2-)   # Remove 'v' in Tag. Eg. v0.8.0 -> 0.8.0
 
   # update plugin image version in README
-  sed -i "s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio/" README.md
+  sed -i.bak "s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio/" README.md && rm README.md.bak
 
   # update plugin image version in quick_start.yaml
-  sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml
+  sed -i.bak "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:$tag-istio\"\,/;}" quick_start.yaml && rm quick_start.yaml.bak
+  sed -i.bak "s/image: openpolicyagent\/opa:.*/image: openpolicyagent\/opa:$tag/" quick_start.yaml quick_start.yaml && rm quick_start.yaml.bak
 
   # update vendor
   env GO111MODULE=on go mod vendor
