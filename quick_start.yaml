@@ -179,7 +179,7 @@ spec:
       name: admission-controller
     spec:
       containers:
-        - image: openpolicyagent/opa:0.10.3
+        - image: openpolicyagent/opa:0.19.2
           name: opa
           ports:
           - containerPort: 443
