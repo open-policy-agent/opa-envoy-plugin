@@ -80,7 +80,7 @@ data:
       "response": {
         "allowed": true,
         "patchType": "JSONPatch",
-        "patch": base64url.encode(json.marshal(patch)),
+        "patch": base64.encode(json.marshal(patch)),
       },
     }
 
