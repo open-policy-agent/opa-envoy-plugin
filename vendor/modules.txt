@@ -41,13 +41,14 @@ github.com/mattn/go-runewidth
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/olekukonko/tablewriter v0.0.1
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.19.2
+# github.com/open-policy-agent/opa v0.20.1
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
 github.com/open-policy-agent/opa/ast/internal/tokens
 github.com/open-policy-agent/opa/ast/location
 github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/cmd
+github.com/open-policy-agent/opa/compile
 github.com/open-policy-agent/opa/config
 github.com/open-policy-agent/opa/cover
 github.com/open-policy-agent/opa/dependencies
@@ -55,17 +56,23 @@ github.com/open-policy-agent/opa/download
 github.com/open-policy-agent/opa/format
 github.com/open-policy-agent/opa/internal/compiler/wasm
 github.com/open-policy-agent/opa/internal/compiler/wasm/opa
+github.com/open-policy-agent/opa/internal/config
 github.com/open-policy-agent/opa/internal/file/archive
 github.com/open-policy-agent/opa/internal/file/url
 github.com/open-policy-agent/opa/internal/ir
 github.com/open-policy-agent/opa/internal/lcss
 github.com/open-policy-agent/opa/internal/leb128
 github.com/open-policy-agent/opa/internal/merge
+github.com/open-policy-agent/opa/internal/oracle
 github.com/open-policy-agent/opa/internal/planner
 github.com/open-policy-agent/opa/internal/presentation
 github.com/open-policy-agent/opa/internal/prometheus
+github.com/open-policy-agent/opa/internal/ref
+github.com/open-policy-agent/opa/internal/report
 github.com/open-policy-agent/opa/internal/runtime
+github.com/open-policy-agent/opa/internal/runtime/init
 github.com/open-policy-agent/opa/internal/strvals
+github.com/open-policy-agent/opa/internal/uuid
 github.com/open-policy-agent/opa/internal/version
 github.com/open-policy-agent/opa/internal/wasm/constant
 github.com/open-policy-agent/opa/internal/wasm/encoding
