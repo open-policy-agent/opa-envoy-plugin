@@ -1,10 +1,12 @@
-// Copyright 2016 The OPA Authors.  All rights reserved.
+// Copyright 2020 The OPA Authors.  All rights reserved.
 // Use of this source code is governed by an Apache2
 // license that can be found in the LICENSE file.
 
-package runtime
+// Package config implements helper functions to parse OPA's configuration.
+package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -14,16 +16,56 @@ import (
 	"github.com/ghodss/yaml"
 
 	"github.com/open-policy-agent/opa/internal/strvals"
+	"github.com/open-policy-agent/opa/plugins/rest"
+	"github.com/open-policy-agent/opa/util"
 )
 
-func loadConfig(params Params) ([]byte, error) {
+// ParseServicesConfig returns a set of named service clients. The service
+// clients can be specified either as an array or as a map. Some systems (e.g.,
+// Helm) do not have proper support for configuration values nested under
+// arrays, so just support both here.
+func ParseServicesConfig(raw json.RawMessage) (map[string]rest.Client, error) {
+
+	services := map[string]rest.Client{}
+
+	var arr []json.RawMessage
+	var obj map[string]json.RawMessage
+
+	if err := util.Unmarshal(raw, &arr); err == nil {
+		for _, s := range arr {
+			client, err := rest.New(s)
+			if err != nil {
+				return nil, err
+			}
+			services[client.Service()] = client
+		}
+	} else if util.Unmarshal(raw, &obj) == nil {
+		for k := range obj {
+			client, err := rest.New(obj[k], rest.Name(k))
+			if err != nil {
+				return nil, err
+			}
+			services[client.Service()] = client
+		}
+	} else {
+		// Return error from array decode as that is the default format.
+		return nil, err
+	}
+
+	return services, nil
+}
+
+// Load implements configuraiton file loading. The supplied config file will be
+// read from disk (if specified) and overrides will be applied. If no config file is
+// specified, the overrides can still be applied to an empty config.
+func Load(configFile string, overrides []string, overrideFiles []string) ([]byte, error) {
 	baseConf := map[string]interface{}{}
 
 	// User specified config file
-	if params.ConfigFile != "" {
+	if configFile != "" {
 		var bytes []byte
 		var err error
-		bytes, err = ioutil.ReadFile(params.ConfigFile)
+		bytes, err = ioutil.ReadFile(configFile)
 		if err != nil {
 			return nil, err
 		}
@@ -31,14 +73,14 @@ func loadConfig(params Params) ([]byte, error) {
 		processedConf := subEnvVars(string(bytes))
 
 		if err := yaml.Unmarshal([]byte(processedConf), &baseConf); err != nil {
-			return []byte{}, fmt.Errorf("failed to parse %s: %s", params.ConfigFile, err)
+			return []byte{}, fmt.Errorf("failed to parse %s: %s", configFile, err)
 		}
 	}
 
 	overrideConf := map[string]interface{}{}
 
 	// User specified a config override via --set
-	for _, override := range params.ConfigOverrides {
+	for _, override := range overrides {
 		processedOverride := subEnvVars(override)
 		if err := strvals.ParseInto(processedOverride, overrideConf); err != nil {
 			return []byte{}, fmt.Errorf("failed parsing --set data: %s", err)
@@ -46,7 +88,7 @@ func loadConfig(params Params) ([]byte, error) {
 	}
 
 	// User specified a config override value via --set-file
-	for _, override := range params.ConfigOverrideFiles {
+	for _, override := range overrideFiles {
 		reader := func(rs []rune) (interface{}, error) {
 			bytes, err := ioutil.ReadFile(string(rs))
 			value := strings.TrimSpace(string(bytes))

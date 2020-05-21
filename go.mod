@@ -11,7 +11,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/mna/pigeon v0.0.0-20180808201053-bb0192cfc2ae // indirect
-	github.com/open-policy-agent/opa v0.19.2
+	github.com/open-policy-agent/opa v0.20.1
 	github.com/peterh/liner v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
