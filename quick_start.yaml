@@ -257,6 +257,8 @@ data:
       envoy_ext_authz_grpc:
         addr: :9191
         path: istio/authz/allow
+    decision_logs:
+      console: true
 ---
 ############################################################
 # Example policy to enforce into OPA-Istio sidecars.
