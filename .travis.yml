@@ -23,7 +23,7 @@ jobs:
       if: (NOT type IN (pull_request)) AND (branch = master)
       before_script:
       - KIND_VERSION=0.4.0
-      - ISTIO_VERSION=1.2.5
+      - ISTIO_VERSION=1.5.0
       # Download and install kind
       - curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
       # Create kind cluster
