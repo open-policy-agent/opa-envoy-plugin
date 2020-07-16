@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/open-policy-agent/opa/bundle"
+
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/fsnotify.v1"
@@ -161,6 +163,12 @@ type Params struct {
 	// EnableVersionCheck flag controls whether OPA will report its version to an external service.
 	// If this flag is true, OPA will report its version to the external service
 	EnableVersionCheck bool
+
+	// BundleVerificationConfig sets the key configuration used to verify a signed bundle
+	BundleVerificationConfig *bundle.VerificationConfig
+
+	// SkipBundleVerification flag controls whether OPA will verify a signed bundle
+	SkipBundleVerification bool
 }
 
 // LoggingConfig stores the configuration for OPA's logging behaviour.
@@ -188,7 +196,9 @@ type Runtime struct {
 	metrics  *prometheus.Provider
 	reporter *report.Reporter
 
-	done chan struct{}
+	serverInitialized bool
+	serverInitMtx     sync.RWMutex
+	done              chan struct{}
 }
 
 // NewRuntime returns a new Runtime object initialized with params. Clients must
@@ -217,7 +227,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		}
 	}
 
-	loaded, err := initload.LoadPaths(params.Paths, params.Filter, params.BundleMode)
+	loaded, err := initload.LoadPaths(params.Paths, params.Filter, params.BundleMode, params.BundleVerificationConfig, params.SkipBundleVerification)
 	if err != nil {
 		return nil, errors.Wrap(err, "load error")
 	}
@@ -246,11 +256,12 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	manager.Register("discovery", disco)
 
 	rt := &Runtime{
-		Store:    manager.Store,
-		Params:   params,
-		Manager:  manager,
-		metrics:  metrics,
-		reporter: reporter,
+		Store:             manager.Store,
+		Params:            params,
+		Manager:           manager,
+		metrics:           metrics,
+		reporter:          reporter,
+		serverInitialized: false,
 	}
 
 	return rt, nil
@@ -357,6 +368,10 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 	signalc := make(chan os.Signal)
 	signal.Notify(signalc, syscall.SIGINT, syscall.SIGTERM)
 
+	rt.serverInitMtx.Lock()
+	rt.serverInitialized = true
+	rt.serverInitMtx.Unlock()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -372,7 +387,10 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 // Addrs returns a list of addresses that the runtime is listening on (when
 // in server mode). Returns an empty list if it hasn't started listening.
 func (rt *Runtime) Addrs() []string {
-	if rt.server == nil {
+	rt.serverInitMtx.RLock()
+	defer rt.serverInitMtx.RUnlock()
+
+	if !rt.serverInitialized {
 		return nil
 	}
 
@@ -512,7 +530,7 @@ func (rt *Runtime) readWatcher(ctx context.Context, watcher *fsnotify.Watcher, p
 
 func (rt *Runtime) processWatcherUpdate(ctx context.Context, paths []string, removed string) error {
 
-	loaded, err := initload.LoadPaths(paths, rt.Params.Filter, rt.Params.BundleMode)
+	loaded, err := initload.LoadPaths(paths, rt.Params.Filter, rt.Params.BundleMode, nil, true)
 	if err != nil {
 		return err
 	}

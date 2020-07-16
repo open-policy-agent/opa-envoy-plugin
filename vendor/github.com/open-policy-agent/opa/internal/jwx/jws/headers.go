@@ -3,7 +3,7 @@ package jws
 import (
 	"github.com/pkg/errors"
 
-	"github.com/open-policy-agent/opa/topdown/internal/jwx/jwa"
+	"github.com/open-policy-agent/opa/internal/jwx/jwa"
 )
 
 // Constants for JWS Common parameters

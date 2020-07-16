@@ -60,6 +60,8 @@ func InterfaceToValue(x interface{}) (Value, error) {
 		return Number(x), nil
 	case int64:
 		return int64Number(x), nil
+	case uint64:
+		return uint64Number(x), nil
 	case float64:
 		return floatNumber(x), nil
 	case int:
@@ -569,6 +571,11 @@ func IntNumberTerm(i int) *Term {
 	return &Term{Value: Number(strconv.Itoa(i))}
 }
 
+// UIntNumberTerm creates a new Term with an unsigned integer Number value.
+func UIntNumberTerm(u uint64) *Term {
+	return &Term{Value: uint64Number(u)}
+}
+
 // FloatNumberTerm creates a new Term with a floating point Number value.
 func FloatNumberTerm(f float64) *Term {
 	s := strconv.FormatFloat(f, 'g', -1, 64)
@@ -654,6 +661,10 @@ func intNumber(i int) Number {
 
 func int64Number(i int64) Number {
 	return Number(strconv.FormatInt(i, 10))
+}
+
+func uint64Number(u uint64) Number {
+	return Number(strconv.FormatUint(u, 10))
 }
 
 func floatNumber(f float64) Number {
@@ -1199,9 +1210,10 @@ func (s *set) String() string {
 		return "set()"
 	}
 	buf := []string{}
-	s.Foreach(func(x *Term) {
+	sorted := s.Sorted()
+	for _, x := range sorted {
 		buf = append(buf, fmt.Sprint(x))
-	})
+	}
 	return "{" + strings.Join(buf, ", ") + "}"
 }
 
@@ -1806,9 +1818,11 @@ func (obj object) Len() int {
 
 func (obj object) String() string {
 	var buf []string
-	obj.Foreach(func(k, v *Term) {
+	sorted := termSliceSorted(obj.Keys())
+	for _, k := range sorted {
+		v := obj.Get(k)
 		buf = append(buf, fmt.Sprintf("%s: %s", k, v))
-	})
+	}
 	return "{" + strings.Join(buf, ", ") + "}"
 }
 
@@ -2207,6 +2221,15 @@ func (c Call) String() string {
 		args[i-1] = c[i].String()
 	}
 	return fmt.Sprintf("%v(%v)", c[0], strings.Join(args, ", "))
+}
+
+func termSliceSorted(a []*Term) []*Term {
+	b := make([]*Term, len(a))
+	for i := range b {
+		b[i] = a[i]
+	}
+	sort.Sort(termSlice(b))
+	return b
 }
 
 func termSliceCopy(a []*Term) []*Term {

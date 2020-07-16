@@ -38,6 +38,7 @@ type Query struct {
 	metrics           metrics.Metrics
 	instr             *Instrumentation
 	disableInlining   []ast.Ref
+	shallowInlining   bool
 	genvarprefix      string
 	runtime           *ast.Term
 	builtins          map[string]*Builtin
@@ -103,7 +104,7 @@ func (q *Query) WithInput(input *ast.Term) *Query {
 func (q *Query) WithTracer(tracer Tracer) *Query {
 	qt, ok := tracer.(QueryTracer)
 	if !ok {
-		qt = wrapLegacyTracer(tracer)
+		qt = WrapLegacyTracer(tracer)
 	}
 	return q.WithQueryTracer(qt)
 }
@@ -169,6 +170,14 @@ func (q *Query) WithSkipPartialNamespace(yes bool) *Query {
 // computation at the cost of generating support rules.
 func (q *Query) WithDisableInlining(paths []ast.Ref) *Query {
 	q.disableInlining = paths
+	return q
+}
+
+// WithShallowInlining disables aggressive inlining performed during partial evaluation.
+// When shallow inlining is enabled rules that depend (transitively) on unknowns are not inlined.
+// Only rules/values that are completely known will be inlined.
+func (q *Query) WithShallowInlining(yes bool) *Query {
+	q.shallowInlining = yes
 	return q
 }
 
@@ -244,10 +253,12 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		saveSupport:        newSaveSupport(),
 		saveNamespace:      ast.StringTerm(q.partialNamespace),
 		skipSaveNamespace:  q.skipSaveNamespace,
-		inliningControl:    &inliningControl{},
-		genvarprefix:       q.genvarprefix,
-		runtime:            q.runtime,
-		indexing:           q.indexing,
+		inliningControl: &inliningControl{
+			shallow: q.shallowInlining,
+		},
+		genvarprefix: q.genvarprefix,
+		runtime:      q.runtime,
+		indexing:     q.indexing,
 	}
 
 	if len(q.disableInlining) > 0 {
@@ -295,7 +306,11 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 			body.Append(bindingExprs[i])
 		}
 
-		partials = append(partials, applyCopyPropagation(p, e.instr, body))
+		if !q.shallowInlining {
+			body = applyCopyPropagation(p, e.instr, body)
+		}
+
+		partials = append(partials, body)
 		return nil
 	})
 

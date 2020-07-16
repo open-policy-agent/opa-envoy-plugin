@@ -406,9 +406,11 @@ type httpListener interface {
 
 // baseHTTPListener is just a wrapper around http.Server
 type baseHTTPListener struct {
-	s *http.Server
-	l net.Listener
-	t httpListenerType
+	s       *http.Server
+	l       net.Listener
+	t       httpListenerType
+	addr    string
+	addrMtx sync.RWMutex
 }
 
 var _ httpListener = (*baseHTTPListener)(nil)
@@ -432,16 +434,23 @@ func (b *baseHTTPListener) ListenAndServe() error {
 		return err
 	}
 
+	b.initAddr()
+
 	return b.s.Serve(tcpKeepAliveListener{b.l.(*net.TCPListener)})
 }
 
-func (b *baseHTTPListener) Addr() string {
-	if b.l != nil {
-		if addr := b.l.(*net.TCPListener).Addr(); addr != nil {
-			return addr.String()
-		}
+func (b *baseHTTPListener) initAddr() {
+	b.addrMtx.Lock()
+	if addr := b.l.(*net.TCPListener).Addr(); addr != nil {
+		b.addr = addr.String()
 	}
-	return ""
+	b.addrMtx.Unlock()
+}
+
+func (b *baseHTTPListener) Addr() string {
+	b.addrMtx.Lock()
+	defer b.addrMtx.Unlock()
+	return b.addr
 }
 
 func (b *baseHTTPListener) ListenAndServeTLS(certFile, keyFile string) error {
@@ -455,6 +464,8 @@ func (b *baseHTTPListener) ListenAndServeTLS(certFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
+
+	b.initAddr()
 
 	defer b.l.Close()
 
@@ -688,14 +699,14 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, txn storage.Tra
 		rego.ParsedInput(input),
 		rego.Metrics(m),
 		rego.Instrument(includeInstrumentation),
-		rego.Tracer(buf),
+		rego.QueryTracer(buf),
 		rego.Runtime(s.runtime),
 		rego.UnsafeBuiltins(unsafeBuiltinsMap),
 	)
 
 	output, err := rego.Eval(ctx)
 	if err != nil {
-		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, nil, err, m)
+		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, input, nil, err, m)
 		return results, err
 	}
 
@@ -712,7 +723,7 @@ func (s *Server) execQuery(ctx context.Context, r *http.Request, txn storage.Tra
 	}
 
 	var x interface{} = results.Result
-	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, &x, nil, m)
+	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, "", parsedQuery.String(), rawInput, input, &x, nil, m)
 	return results, err
 }
 
@@ -885,7 +896,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 		)
 		pq, err := rego.PrepareForEval(ctx)
 		if err != nil {
-			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -904,15 +915,14 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 
 	// Handle results.
 	if err != nil {
-		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 		writer.ErrorAuto(w, err)
 		return
 	}
 
 	if len(rs) == 0 {
 		err := types.NewErrorV1(types.CodeUndefinedDocument, fmt.Sprintf("%v: %v", types.MsgUndefinedError, stringPathToDataRef(urlPath)))
-
-		if logErr := logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m); logErr != nil {
+		if logErr := logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m); logErr != nil {
 			writer.ErrorAuto(w, logErr)
 			return
 		}
@@ -920,8 +930,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 		writer.Error(w, 404, err)
 		return
 	}
-
-	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, &rs[0].Expressions[0].Value, nil, m)
+	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, &rs[0].Expressions[0].Value, nil, m)
 	if err != nil {
 		writer.ErrorAuto(w, err)
 		return
@@ -1069,7 +1078,7 @@ func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
 		rego.ParsedQuery(request.Query),
 		rego.ParsedInput(request.Input),
 		rego.ParsedUnknowns(request.Unknowns),
-		rego.Tracer(buf),
+		rego.QueryTracer(buf),
 		rego.Instrument(includeInstrumentation),
 		rego.Metrics(m),
 		rego.Runtime(s.runtime),
@@ -1183,7 +1192,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 			rego.ParsedInput(input),
 			rego.Query(stringPathToDataRef(urlPath).String()),
 			rego.Metrics(m),
-			rego.Tracer(buf),
+			rego.QueryTracer(buf),
 			rego.Instrument(includeInstrumentation),
 			rego.Runtime(s.runtime),
 			rego.UnsafeBuiltins(unsafeBuiltinsMap),
@@ -1191,7 +1200,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 		pq, err := rego.PrepareForEval(ctx)
 		if err != nil {
-			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1204,14 +1213,14 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		rego.EvalTransaction(txn),
 		rego.EvalParsedInput(input),
 		rego.EvalMetrics(m),
-		rego.EvalTracer(buf),
+		rego.EvalQueryTracer(buf),
 	)
 
 	m.Timer(metrics.ServerHandler).Stop()
 
 	// Handle results.
 	if err != nil {
-		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1235,7 +1244,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 				writer.ErrorAuto(w, err)
 			}
 		}
-		err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, nil, m)
+		err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, nil, m)
 		if err != nil {
 			writer.ErrorAuto(w, err)
 			return
@@ -1250,7 +1259,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty)
 	}
 
-	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, result.Result, nil, m)
+	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, result.Result, nil, m)
 	if err != nil {
 		writer.ErrorAuto(w, err)
 		return
@@ -1379,14 +1388,14 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		rego, err := s.makeRego(ctx, partial, txn, input, urlPath, m, includeInstrumentation, buf, opts)
 
 		if err != nil {
-			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 			writer.ErrorAuto(w, err)
 			return
 		}
 
 		pq, err := rego.PrepareForEval(ctx)
 		if err != nil {
-			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+			_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1399,14 +1408,14 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		rego.EvalTransaction(txn),
 		rego.EvalParsedInput(input),
 		rego.EvalMetrics(m),
-		rego.EvalTracer(buf),
+		rego.EvalQueryTracer(buf),
 	)
 
 	m.Timer(metrics.ServerHandler).Stop()
 
 	// Handle results.
 	if err != nil {
-		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, err, m)
+		_ = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, err, m)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1430,7 +1439,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 				writer.ErrorAuto(w, err)
 			}
 		}
-		err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, nil, nil, m)
+		err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, nil, m)
 		if err != nil {
 			writer.ErrorAuto(w, err)
 			return
@@ -1445,7 +1454,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty)
 	}
 
-	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, result.Result, nil, m)
+	err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, result.Result, nil, m)
 	if err != nil {
 		writer.ErrorAuto(w, err)
 		return
@@ -2128,7 +2137,7 @@ func (s *Server) getCompiler() *ast.Compiler {
 	return s.manager.GetCompiler()
 }
 
-func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transaction, input ast.Value, urlPath string, m metrics.Metrics, instrument bool, tracer topdown.Tracer, opts []func(*rego.Rego)) (*rego.Rego, error) {
+func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transaction, input ast.Value, urlPath string, m metrics.Metrics, instrument bool, tracer topdown.QueryTracer, opts []func(*rego.Rego)) (*rego.Rego, error) {
 	queryPath := stringPathToDataRef(urlPath).String()
 
 	opts = append(
@@ -2137,7 +2146,7 @@ func (s *Server) makeRego(ctx context.Context, partial bool, txn storage.Transac
 		rego.Query(queryPath),
 		rego.ParsedInput(input),
 		rego.Metrics(m),
-		rego.Tracer(tracer),
+		rego.QueryTracer(tracer),
 		rego.Instrument(instrument),
 		rego.Runtime(s.runtime),
 		rego.UnsafeBuiltins(unsafeBuiltinsMap),
@@ -2572,7 +2581,7 @@ type decisionLogger struct {
 	buffer    Buffer
 }
 
-func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisionID, remoteAddr, path string, query string, input *interface{}, results *interface{}, err error, m metrics.Metrics) error {
+func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisionID, remoteAddr, path string, query string, goInput *interface{}, astInput ast.Value, goResults *interface{}, err error, m metrics.Metrics) error {
 
 	bundles := map[string]BundleInfo{}
 	for name, rev := range l.revisions {
@@ -2588,8 +2597,9 @@ func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisi
 		RemoteAddr: remoteAddr,
 		Path:       path,
 		Query:      query,
-		Input:      input,
-		Results:    results,
+		Input:      goInput,
+		InputAST:   astInput,
+		Results:    goResults,
 		Error:      err,
 		Metrics:    m,
 	}
