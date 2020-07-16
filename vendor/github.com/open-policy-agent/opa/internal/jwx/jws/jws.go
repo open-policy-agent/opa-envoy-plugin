@@ -25,10 +25,10 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/open-policy-agent/opa/topdown/internal/jwx/jwa"
-	"github.com/open-policy-agent/opa/topdown/internal/jwx/jwk"
-	"github.com/open-policy-agent/opa/topdown/internal/jwx/jws/sign"
-	"github.com/open-policy-agent/opa/topdown/internal/jwx/jws/verify"
+	"github.com/open-policy-agent/opa/internal/jwx/jwa"
+	"github.com/open-policy-agent/opa/internal/jwx/jwk"
+	"github.com/open-policy-agent/opa/internal/jwx/jws/sign"
+	"github.com/open-policy-agent/opa/internal/jwx/jws/verify"
 
 	"github.com/pkg/errors"
 )

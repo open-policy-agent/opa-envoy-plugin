@@ -88,7 +88,7 @@ type EvalContext struct {
 	instrument       bool
 	instrumentation  *topdown.Instrumentation
 	partialNamespace string
-	tracers          []topdown.Tracer
+	queryTracers     []topdown.QueryTracer
 	compiledQuery    compiledQuery
 	unknowns         []string
 	disableInlining  []ast.Ref
@@ -137,10 +137,20 @@ func EvalInstrument(instrument bool) EvalOption {
 }
 
 // EvalTracer configures a tracer for a Prepared Query's evaluation
+// Deprecated: Use EvalQueryTracer instead.
 func EvalTracer(tracer topdown.Tracer) EvalOption {
 	return func(e *EvalContext) {
 		if tracer != nil {
-			e.tracers = append(e.tracers, tracer)
+			e.queryTracers = append(e.queryTracers, topdown.WrapLegacyTracer(tracer))
+		}
+	}
+}
+
+// EvalQueryTracer configures a tracer for a Prepared Query's evaluation
+func EvalQueryTracer(tracer topdown.QueryTracer) EvalOption {
+	return func(e *EvalContext) {
+		if tracer != nil {
+			e.queryTracers = append(e.queryTracers, tracer)
 		}
 	}
 }
@@ -216,7 +226,7 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 		instrument:       false,
 		instrumentation:  nil,
 		partialNamespace: pq.r.partialNamespace,
-		tracers:          nil,
+		queryTracers:     nil,
 		unknowns:         pq.r.unknowns,
 		parsedUnknowns:   pq.r.parsedUnknowns,
 		compiledQuery:    compiledQuery{},
@@ -435,42 +445,44 @@ type loadPaths struct {
 
 // Rego constructs a query and can be evaluated to obtain results.
 type Rego struct {
-	query                string
-	parsedQuery          ast.Body
-	compiledQueries      map[queryType]compiledQuery
-	pkg                  string
-	parsedPackage        *ast.Package
-	imports              []string
-	parsedImports        []*ast.Import
-	rawInput             *interface{}
-	parsedInput          ast.Value
-	unknowns             []string
-	parsedUnknowns       []*ast.Term
-	disableInlining      []string
-	skipPartialNamespace bool
-	partialNamespace     string
-	modules              []rawModule
-	parsedModules        map[string]*ast.Module
-	compiler             *ast.Compiler
-	store                storage.Store
-	ownStore             bool
-	txn                  storage.Transaction
-	metrics              metrics.Metrics
-	tracers              []topdown.Tracer
-	tracebuf             *topdown.BufferTracer
-	trace                bool
-	instrumentation      *topdown.Instrumentation
-	instrument           bool
-	capture              map[*ast.Expr]ast.Var // map exprs to generated capture vars
-	termVarID            int
-	dump                 io.Writer
-	runtime              *ast.Term
-	builtinDecls         map[string]*ast.Builtin
-	builtinFuncs         map[string]*topdown.Builtin
-	unsafeBuiltins       map[string]struct{}
-	loadPaths            loadPaths
-	bundlePaths          []string
-	bundles              map[string]*bundle.Bundle
+	query                  string
+	parsedQuery            ast.Body
+	compiledQueries        map[queryType]compiledQuery
+	pkg                    string
+	parsedPackage          *ast.Package
+	imports                []string
+	parsedImports          []*ast.Import
+	rawInput               *interface{}
+	parsedInput            ast.Value
+	unknowns               []string
+	parsedUnknowns         []*ast.Term
+	disableInlining        []string
+	shallowInlining        bool
+	skipPartialNamespace   bool
+	partialNamespace       string
+	modules                []rawModule
+	parsedModules          map[string]*ast.Module
+	compiler               *ast.Compiler
+	store                  storage.Store
+	ownStore               bool
+	txn                    storage.Transaction
+	metrics                metrics.Metrics
+	queryTracers           []topdown.QueryTracer
+	tracebuf               *topdown.BufferTracer
+	trace                  bool
+	instrumentation        *topdown.Instrumentation
+	instrument             bool
+	capture                map[*ast.Expr]ast.Var // map exprs to generated capture vars
+	termVarID              int
+	dump                   io.Writer
+	runtime                *ast.Term
+	builtinDecls           map[string]*ast.Builtin
+	builtinFuncs           map[string]*topdown.Builtin
+	unsafeBuiltins         map[string]struct{}
+	loadPaths              loadPaths
+	bundlePaths            []string
+	bundles                map[string]*bundle.Bundle
+	skipBundleVerification bool
 }
 
 // Function represents a built-in function that is callable in Rego.
@@ -750,6 +762,14 @@ func DisableInlining(paths []string) func(r *Rego) {
 	}
 }
 
+// ShallowInlining prevents rules that depend on unknown values from being inlined.
+// Rules that only depend on known values are inlined.
+func ShallowInlining(yes bool) func(r *Rego) {
+	return func(r *Rego) {
+		r.shallowInlining = yes
+	}
+}
+
 // SkipPartialNamespace disables namespacing of partial evalution results for support
 // rules generated from policy. Synthetic support rules are still namespaced.
 func SkipPartialNamespace(yes bool) func(r *Rego) {
@@ -875,10 +895,20 @@ func Trace(yes bool) func(r *Rego) {
 }
 
 // Tracer returns an argument that adds a query tracer to r.
+// Deprecated: Use QueryTracer instead.
 func Tracer(t topdown.Tracer) func(r *Rego) {
 	return func(r *Rego) {
 		if t != nil {
-			r.tracers = append(r.tracers, t)
+			r.queryTracers = append(r.queryTracers, topdown.WrapLegacyTracer(t))
+		}
+	}
+}
+
+// QueryTracer returns an argument that adds a query tracer to r.
+func QueryTracer(t topdown.QueryTracer) func(r *Rego) {
+	return func(r *Rego) {
+		if t != nil {
+			r.queryTracers = append(r.queryTracers, t)
 		}
 	}
 }
@@ -916,6 +946,13 @@ func PrintTraceWithLocation(w io.Writer, r *Rego) {
 func UnsafeBuiltins(unsafeBuiltins map[string]struct{}) func(r *Rego) {
 	return func(r *Rego) {
 		r.unsafeBuiltins = unsafeBuiltins
+	}
+}
+
+// SkipBundleVerification skips verification of a signed bundle.
+func SkipBundleVerification(yes bool) func(r *Rego) {
+	return func(r *Rego) {
+		r.skipBundleVerification = yes
 	}
 }
 
@@ -959,7 +996,7 @@ func New(options ...func(r *Rego)) *Rego {
 
 	if r.trace {
 		r.tracebuf = topdown.NewBufferTracer()
-		r.tracers = append(r.tracers, r.tracebuf)
+		r.queryTracers = append(r.queryTracers, r.tracebuf)
 	}
 
 	if r.partialNamespace == "" {
@@ -990,8 +1027,8 @@ func (r *Rego) Eval(ctx context.Context) (ResultSet, error) {
 		EvalInstrument(r.instrument),
 	}
 
-	for _, t := range r.tracers {
-		evalArgs = append(evalArgs, EvalTracer(t))
+	for _, qt := range r.queryTracers {
+		evalArgs = append(evalArgs, EvalQueryTracer(qt))
 	}
 
 	rs, err := pq.Eval(ctx, evalArgs...)
@@ -1057,8 +1094,8 @@ func (r *Rego) Partial(ctx context.Context) (*PartialQueries, error) {
 		EvalInstrument(r.instrument),
 	}
 
-	for _, t := range r.tracers {
-		evalArgs = append(evalArgs, EvalTracer(t))
+	for _, t := range r.queryTracers {
+		evalArgs = append(evalArgs, EvalQueryTracer(t))
 	}
 
 	pqs, err := pq.Partial(ctx, evalArgs...)
@@ -1459,7 +1496,7 @@ func (r *Rego) loadBundles(ctx context.Context, txn storage.Transaction, m metri
 	defer m.Timer(metrics.RegoLoadBundles).Stop()
 
 	for _, path := range r.bundlePaths {
-		bndl, err := loader.NewFileLoader().WithMetrics(m).AsBundle(path)
+		bndl, err := loader.NewFileLoader().WithMetrics(m).WithSkipBundleVerification(r.skipBundleVerification).AsBundle(path)
 		if err != nil {
 			return fmt.Errorf("loading error: %s", err)
 		}
@@ -1615,8 +1652,8 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithRuntime(r.runtime).
 		WithIndexing(ectx.indexing)
 
-	for i := range ectx.tracers {
-		q = q.WithTracer(ectx.tracers[i])
+	for i := range ectx.queryTracers {
+		q = q.WithQueryTracer(ectx.queryTracers[i])
 	}
 
 	if ectx.parsedInput != nil {
@@ -1699,7 +1736,7 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 		metrics:          r.metrics,
 		txn:              r.txn,
 		partialNamespace: r.partialNamespace,
-		tracers:          r.tracers,
+		queryTracers:     r.queryTracers,
 		compiledQuery:    r.compiledQueries[partialResultQueryType],
 		instrumentation:  r.instrumentation,
 		indexing:         true,
@@ -1800,10 +1837,11 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithRuntime(r.runtime).
 		WithIndexing(ectx.indexing).
 		WithPartialNamespace(ectx.partialNamespace).
-		WithSkipPartialNamespace(r.skipPartialNamespace)
+		WithSkipPartialNamespace(r.skipPartialNamespace).
+		WithShallowInlining(r.shallowInlining)
 
-	for i := range ectx.tracers {
-		q = q.WithTracer(ectx.tracers[i])
+	for i := range ectx.queryTracers {
+		q = q.WithQueryTracer(ectx.queryTracers[i])
 	}
 
 	if ectx.parsedInput != nil {

@@ -1796,6 +1796,7 @@ type TreeNode struct {
 	Key      Value
 	Values   []util.T
 	Children map[Value]*TreeNode
+	Sorted   []Value
 	Hide     bool
 }
 
@@ -1815,8 +1816,10 @@ func NewRuleTree(mtree *ModuleTreeNode) *TreeNode {
 
 	// Each rule set becomes a leaf node.
 	children := map[Value]*TreeNode{}
+	sorted := make([]Value, 0, len(ruleSets))
 
 	for key, rules := range ruleSets {
+		sorted = append(sorted, key)
 		children[key] = &TreeNode{
 			Key:      key,
 			Children: nil,
@@ -1825,14 +1828,20 @@ func NewRuleTree(mtree *ModuleTreeNode) *TreeNode {
 	}
 
 	// Each module in subpackage becomes child node.
-	for _, child := range mtree.Children {
+	for key, child := range mtree.Children {
+		sorted = append(sorted, key)
 		children[child.Key] = NewRuleTree(child)
 	}
+
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Compare(sorted[j]) < 0
+	})
 
 	return &TreeNode{
 		Key:      mtree.Key,
 		Values:   nil,
 		Children: children,
+		Sorted:   sorted,
 		Hide:     mtree.Hide,
 	}
 }

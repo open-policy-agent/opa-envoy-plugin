@@ -7,12 +7,13 @@ package compile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"regexp"
 	"sort"
+
+	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
@@ -43,18 +44,21 @@ var validTargets = map[string]struct{}{
 
 // Compiler implements bundle compilation and linking.
 type Compiler struct {
-	bundle            *bundle.Bundle   // the bundle that the compiler operates on
-	revision          *string          // the revision to set on the output bundle
-	asBundle          bool             // whether to assume bundle layout on file loading or not
-	filter            loader.Filter    // filter to apply to file loader
-	paths             []string         // file paths to load. TODO(tsandall): add support for supplying readers for embedded users.
-	entrypoints       orderedStringSet // policy entrypoints required for optimization and certain targets
-	optimizationLevel int              // how aggressive should optimization be
-	target            string           // target type (wasm, rego, etc.)
-	output            io.Writer        // output stream to write bundle to
-	entrypointrefs    []*ast.Term      // validated entrypoints computed from default decision or manually supplied entrypoints
-	compiler          *ast.Compiler    // rego ast compiler used for semantic checks and rewriting
-	debug             *debugEvents     // debug information produced during build
+	bundle            *bundle.Bundle             // the bundle that the compiler operates on
+	revision          *string                    // the revision to set on the output bundle
+	asBundle          bool                       // whether to assume bundle layout on file loading or not
+	filter            loader.Filter              // filter to apply to file loader
+	paths             []string                   // file paths to load. TODO(tsandall): add support for supplying readers for embedded users.
+	entrypoints       orderedStringSet           // policy entrypoints required for optimization and certain targets
+	optimizationLevel int                        // how aggressive should optimization be
+	target            string                     // target type (wasm, rego, etc.)
+	output            io.Writer                  // output stream to write bundle to
+	entrypointrefs    []*ast.Term                // validated entrypoints computed from default decision or manually supplied entrypoints
+	compiler          *ast.Compiler              // rego ast compiler used for semantic checks and rewriting
+	debug             *debugEvents               // debug information produced during build
+	bvc               *bundle.VerificationConfig // represents the key configuration used to verify a signed bundle
+	bsc               *bundle.SigningConfig      // represents the key configuration used to generate a signed bundle
+	keyID             string                     // represents the name of the default key used to verify a signed bundle
 }
 
 type debugEvents struct {
@@ -115,8 +119,7 @@ func (c *Compiler) WithEntrypoints(e ...string) *Compiler {
 
 // WithOptimizationLevel sets the optimization level on the compiler. By default
 // optimizations are disabled. Higher levels apply more aggressive optimizations
-// but can take longer. Currently only two levels are supported: 0 (disabled) and
-// 1 (enabled).
+// but can take longer.
 func (c *Compiler) WithOptimizationLevel(n int) *Compiler {
 	c.optimizationLevel = n
 	return c
@@ -146,6 +149,25 @@ func (c *Compiler) WithFilter(filter loader.Filter) *Compiler {
 	return c
 }
 
+// WithBundleVerificationConfig sets the key configuration to use to verify a signed bundle
+func (c *Compiler) WithBundleVerificationConfig(config *bundle.VerificationConfig) *Compiler {
+	c.bvc = config
+	return c
+}
+
+// WithBundleSigningConfig sets the key configuration to use to generate a signed bundle
+func (c *Compiler) WithBundleSigningConfig(config *bundle.SigningConfig) *Compiler {
+	c.bsc = config
+	return c
+}
+
+// WithBundleVerificationKeyID sets the key to use to verify a signed bundle.
+// If provided, the "keyid" claim in the bundle signature, will be set to this value
+func (c *Compiler) WithBundleVerificationKeyID(keyID string) *Compiler {
+	c.keyID = keyID
+	return c
+}
+
 // Build compiles and links the input files and outputs a bundle to the writer.
 func (c *Compiler) Build(ctx context.Context) error {
 
@@ -169,6 +191,16 @@ func (c *Compiler) Build(ctx context.Context) error {
 
 	if c.revision != nil {
 		c.bundle.Manifest.Revision = *c.revision
+	}
+
+	if err := c.bundle.FormatModules(false); err != nil {
+		return err
+	}
+
+	if c.bsc != nil {
+		if err := c.bundle.GenerateSignature(c.bsc, c.keyID, false); err != nil {
+			return err
+		}
 	}
 
 	return bundle.NewWriter(c.output).Write(*c.bundle)
@@ -209,9 +241,10 @@ func (c *Compiler) initBundle() error {
 
 	// TODO(tsandall): the metrics object should passed through here so we that
 	// we can track read and parse times.
-	load, err := initload.LoadPaths(c.paths, c.filter, c.asBundle)
+
+	load, err := initload.LoadPaths(c.paths, c.filter, c.asBundle, c.bvc, false)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "load error")
 	}
 
 	if c.asBundle {
@@ -277,7 +310,8 @@ func (c *Compiler) optimize(ctx context.Context) error {
 
 	o := newOptimizer(c.bundle).
 		WithEntrypoints(c.entrypointrefs).
-		WithDebug(c.debug)
+		WithDebug(c.debug).
+		WithShallowInlining(c.optimizationLevel <= 1)
 
 	err := o.Do(ctx)
 	if err != nil {
@@ -334,6 +368,7 @@ type optimizer struct {
 	nsprefix        string
 	resultsymprefix string
 	outputprefix    string
+	shallow         bool
 	debug           *debugEvents
 }
 
@@ -356,13 +391,12 @@ func (o *optimizer) WithEntrypoints(es []*ast.Term) *optimizer {
 	return o
 }
 
-func (o *optimizer) Do(ctx context.Context) error {
+func (o *optimizer) WithShallowInlining(yes bool) *optimizer {
+	o.shallow = yes
+	return o
+}
 
-	// TODO(tsandall): implement optimization levels. These will just be params on partial evaluation for now.
-	//
-	// Level 1: PE w/ constant folding. Only inline rules that are completely known.
-	// Level 2: L1 except inlining of rules with unknowns.
-	// Level 3: L2 except aggressive inlining using negation and copy propagation optimizations.
+func (o *optimizer) Do(ctx context.Context) error {
 
 	// NOTE(tsandall): if there are multiple entrypoints, copy the bundle because
 	// if any of the optimization steps fail, we do not want to leave the caller's
@@ -399,6 +433,7 @@ func (o *optimizer) Do(ctx context.Context) error {
 			rego.ParsedQuery(ast.NewBody(ast.Equality.Expr(resultsym, e))),
 			rego.PartialNamespace(o.nsprefix),
 			rego.DisableInlining(o.findRequiredDocuments(e)),
+			rego.ShallowInlining(o.shallow),
 			rego.SkipPartialNamespace(true),
 			rego.Compiler(o.compiler),
 			rego.Store(store),

@@ -7,6 +7,7 @@ package server
 import (
 	"time"
 
+	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown"
@@ -34,13 +35,14 @@ type Info struct {
 	Path       string
 	Timestamp  time.Time
 	Input      *interface{}
+	InputAST   ast.Value
 	Results    *interface{}
 	Error      error
 	Metrics    metrics.Metrics
 	Trace      []*topdown.Event
 }
 
-// BundleInfo contains information describing a bundle
+// BundleInfo contains information describing a bundle.
 type BundleInfo struct {
 	Revision string
 }
