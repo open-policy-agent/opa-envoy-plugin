@@ -7,7 +7,7 @@ set -x
 GOARCH=$(go env GOARCH)
 GOOS=$(go env GOOS)
 KIND_VERSION=0.4.0
-ISTIO_VERSION=1.2.5
+ISTIO_VERSION=1.5.0
 
 # Download and install kind
 curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-${GOOS}-${GOARCH} --output kind && chmod +x kind && sudo mv kind /usr/local/bin/

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open-policy-agent/opa-istio-plugin/plugin"
+	"github.com/open-policy-agent/opa-envoy-plugin/plugin"
 	"github.com/open-policy-agent/opa/cmd"
 	"github.com/open-policy-agent/opa/runtime"
 )

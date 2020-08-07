@@ -1,263 +1,185 @@
-############################################################
-# Envoy External Authorization filter that will query OPA.
-############################################################
-apiVersion: networking.istio.io/v1alpha3
-kind: EnvoyFilter
-metadata:
-  name: ext-authz
-  namespace: istio-system
-spec:
-  configPatches:
-    - applyTo: HTTP_FILTER
-      match:
-        context: SIDECAR_INBOUND
-        listener:
-          filterChain:
-            filter:
-              name: "envoy.http_connection_manager"
-              subFilter:
-                name: "envoy.router"
-      patch:
-        operation: INSERT_BEFORE
-        value:
-          name: envoy.ext_authz
-          typed_config:
-            "@type": "type.googleapis.com/envoy.config.filter.http.ext_authz.v2.ExtAuthz"
-            status_on_error:
-              code: ServiceUnavailable
-            with_request_body:
-              max_request_bytes: 8192
-              allow_partial_message: true
-            grpc_service:
-              # NOTE(tsandall): when this was tested with the envoy_grpc client the gRPC
-              # server was receiving check requests over HTTP 1.1. The gRPC server in
-              # OPA-Istio would immediately close the connection and log that a bogus
-              # preamble was sent by the client (it expected HTTP 2). Switching to the
-              # google_grpc client resolved this issue.
-              google_grpc:
-                target_uri: 127.0.0.1:9191
-                stat_prefix: "ext_authz"
----
-############################################################
-# Namespace for cluster-wide OPA-Istio components.
-############################################################
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: opa-istio
----
-############################################################
-# TLS certificate for OPA admission controller.
-############################################################
-apiVersion: v1
-kind: Secret
-metadata:
-  name: server-cert
-  namespace: opa-istio
-data:
-  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURBakNDQWVxZ0F3SUJBZ0lKQU5DaTNHVUoycUthTUEwR0NTcUdTSWIzRFFFQkJRVUFNQmN4RlRBVEJnTlYKQkFNTURHRmtiV2x6YzJsdmJsOWpZVEFnRncweE9EQTBNakF4TnpBMU1EZGFHQTh5TWpreU1ESXdNekUzTURVdwpOMW93TFRFck1Da0dBMVVFQXd3aVlXUnRhWE56YVc5dUxXTnZiblJ5YjJ4c1pYSXViM0JoTFdsemRHbHZMbk4yCll6Q0NBU0l3RFFZSktvWklodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQU1TejhoYkNkaENJVXhLQ3Z3ODQKbFZES1YxWkc4cnFwcDNyZ1AydUF1cHRYS0JzcGcwU2ZSZlR5aVBuQzhMaTVlRy9YbXJEdmhxNGtkSjJ1a05VKwpTZjhtbGhzRDlHSXpkUFlNUnJCQjJvbnp5eXZrYU1oYUpIai8remUxSlNqUTZZWjgyKzNGMndST2RZbE16UzZGCmt4UGdJUEc2dXVTdzBKNmFPZEtXZTFJZzhRS04rM3J4SGd6QzhXRWNaS0xjT0tiQ00xMWJVQXpLMm1PaXgwQkkKL1NiTlY1UElqSlg3ZWtzZldXdFZjVCt5cWVDV3FOSC95ME5jWko3aXlYUHROKytRQjRYUEx0YnBuZC9iS2N1TwpLKzkxSUZ6dVhxYzUwMEQ4REN3OTJJNkJqMnpNTGFBd2hCSlA2L1c5dUZqUkF5UTlDNEtZcTNzdlFhMm0vdDFuClRWc0NBd0VBQWFNNU1EY3dDUVlEVlIwVEJBSXdBREFMQmdOVkhROEVCQU1DQmVBd0hRWURWUjBsQkJZd0ZBWUkKS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUEwR0NTcUdTSWIzRFFFQkJRVUFBNElCQVFCSVovb1p5Y0EwSFZzcQp1anBPaDdDaVdwaWIwWHVFNlo1TVNuS00wSUxnVEtuYndHc0RLd0NjK3N0RmF5blY2WkhVL1NLaHNnRlk1b3NjCloya3Z1VWpQb2dZUmlRYXZqWHJPZWJnd0s0b0hnSnhGUTZTTkI0bVNVb2VDcERIbjkxZnc0SVg0RmRGcXk3WGgKVVpqNHUxbS92UllISzFEU1ZRd3hEU2lldnFEQjcyTy9waktmais1Nm1yeW9GMTArWHRxNlpKTHVpUWROc3FZZgpoMndoRTFGa25lNldkOXBIUVVtblpWRXpXbyt1WVB2WDhqdyt5ZUR4K0cyY0tnUTF6U0tEUE16RWNPVDR2bDFMClE3Ym40Z04zTXkzS3hwTnFRVnFqT0FTVytWNWRvUWtnUWw3OEV5QkNWcy9lQUFrdFl4aVE2U3NJRTRNL0NhMlIKUXpIQ1hTT3UKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
-  tls.key: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb2dJQkFBS0NBUUVBeExQeUZzSjJFSWhURW9LL0R6aVZVTXBYVmtieXVxbW5ldUEvYTRDNm0xY29HeW1EClJKOUY5UEtJK2NMd3VMbDRiOWVhc08rR3JpUjBuYTZRMVQ1Si95YVdHd1AwWWpOMDlneEdzRUhhaWZQTEsrUm8KeUZva2VQLzdON1VsS05EcGhuemI3Y1hiQkU1MWlVek5Mb1dURStBZzhicTY1TERRbnBvNTBwWjdVaUR4QW8zNwpldkVlRE1MeFlSeGtvdHc0cHNJelhWdFFETXJhWTZMSFFFajlKczFYazhpTWxmdDZTeDlaYTFWeFA3S3A0SmFvCjBmL0xRMXhrbnVMSmMrMDM3NUFIaGM4dTF1bWQzOXNweTQ0cjczVWdYTzVlcHpuVFFQd01MRDNZam9HUGJNd3QKb0RDRUVrL3I5YjI0V05FREpEMExncGlyZXk5QnJhYiszV2ROV3dJREFRQUJBb0lCQUM4dlgwNVlYWXYvdDdYRQpDV0wwVnRVbmhLWGNwUk5qNlJvUHV3Ymx2VjNRSFgzT2luK21tVmgxNmFmSVBJaURiVUdlL2F1ZCtiZkNaUHNDClNobnRORUR4bDZacFgzRkRHTGFCSVYvY25EamxjNEpXNjAvTVY5MXl3bWVObTVsYjYvam44TFhyOVdybUMwbmgKVTRMcVplcXBwQjE0aHFhZlI1d1VNUFMwUm1iZnRrNVluU1ZDMkYrMDYwZXZjcEVrL3ZGT2Fxd2JQWE5vL200ZAp1RDdZVllqcmdBMzZySFNOOXQwbTNwakc3dWFleDYyeU5PKzF5ejBGdjFrSnIzaEh6cG1Vb3FlQlNnYTJJR2orCml2TTJjaHNGdVN1YWNZV1Fyc3JuZ0NRNi9ySUdZTjZGRXQ2NVV1T2dvTi9OWUZTVGt0SEtBTEgvZkcvMWpkL0sKdm03dGdRRUNnWUVBNmp5NnFBRlBEWExiNEY0cjMzR2xMbThRZi9GZDlxdTdvbTQvV29yWmhwMWpzdHJQNWc3NQphMjFGM05uayt1bGo3SFliby83QnZJNnVSTjNmamw0S1V6d0ZyR2RMN3g3bXhmMFRvNUFGZUs1L3dZRFM4N1M3CkIyRXc1VFFnQ0hiK1QxbnJKMEU4UG9TcUpqM3JKUEJTYktmdnFzL0hiekQwUC9zbHZNZWNwZHNDZ1lFQTF2cDUKQ2pNSzAxRFF3ZldYVkRkOXp2em5PZ0FMZFUvUzQ1OUd3azNrZ1lJTlA2dzkzZEx1NnVqaytJc3BUbjloZ3F3Rwpld2dlN0dIWURKZGJsRW9lNXRRRjZpdmgrdk9meVRwejlMMUxXbmROQWZSY05hWlUrUzdRbHg4RVA0NGZzU0tICllCbEp6U0pnY1lHNUkxdnN3ak82UXJoQTBvUzQrMlBIT2dOOVRvRUNnWUFIV0VZbUZIeHRHSWZxZmlsMEJUVS8Kd24zSzlUK1VCNGlIckZ0U05INWpxVFhDR3ZoZjUySk15dzFnd25oYW9jemZVa2pGbUt4c2hERFV1ZnhUazRGUgpZTlZ3dFlCOURBUUNlMUFOVmV2Ri8vckRqNDJOMU1IMGxraVpOMHcxMTcxYnNaOGRDUCtobWpsWG42TnE4aG96CmpBU0kzNkVLVEllc0plem1BWUJZOXdLQmdENENrZGQzVWJBU3A2VExDcE9vVGduZXVYUHBmMlNmV2QxK25CS0EKRldHbCtkeGIrcHg1czZEZS9PMFVkeDNGY0lNWXkrWEJPZXBGYnVSeTVGK3A0YkFEaUpFN2h6dXorbXM1Q1NtWApVSjBQdkk3THhhMVVCVDY3V2orOUdxU2FnbG05OC82c1RMVjNMUXFRdUs2U1hZREhHdnNUMnQ3ZW1kMHBzdFh4Ckc3d0JBb0dBRU9UYm9iU0hpVFpJYlAyWlJTV1NqQWEyS2VBcmZsVy9iSWlMb1Z2NEpVMXV5SW56WkU0dSsrNEQKRDZuMmFYeHpXSnJNNnlwRGg4SXFqU0hvRTZ0elJFS2pEVEtILzQ0UjVZZFEzTzBQSlVla0V5bk4xa3JJQktFRgpxMWNHMHNCb1h5S2RXMXdhRFFvNzNpNllqa0E0a2VMTzJXZnFuUExCaUlSekE4UG5Qem89Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==
----
-############################################################
-# OPA admission control policy for injecting OPA-Istio.
-############################################################
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  namespace: opa-istio
-  name: inject-policy
-data:
-  inject.rego: |
-    package istio
-
-    inject = {
-      "apiVersion": "admission.k8s.io/v1beta1",
-      "kind": "AdmissionReview",
-      "response": {
-        "allowed": true,
-        "patchType": "JSONPatch",
-        "patch": base64.encode(json.marshal(patch)),
-      },
-    }
-
-    patch = [{
-      "op": "add",
-      "path": "/spec/containers/-",
-      "value": opa_container,
-    }, {
-      "op": "add",
-      "path": "/spec/volumes/-",
-      "value": opa_config_volume,
-    }, {
-      "op": "add",
-      "path": "/spec/volumes/-",
-      "value": opa_policy_volume,
-    }]
-
-    opa_container = {
-      "image": "openpolicyagent/opa:0.22.0-istio",
-      "name": "opa-istio",
-      "args": [
-        "run",
-        "--server",
-        "--config-file=/config/config.yaml",
-        "--addr=localhost:8181",
-        "--diagnostic-addr=0.0.0.0:8282",
-        "/policy/policy.rego",
-      ],
-      "volumeMounts": [{
-        "mountPath": "/config",
-        "name": "opa-istio-config",
-      }, {
-        "mountPath": "/policy",
-        "name": "opa-policy",
-      }],
-      "readinessProbe": {
-        "httpGet": {
-          "path": "/health?plugins",
-          "port": 8282,
-        },
-      },
-      "livenessProbe": {
-        "httpGet": {
-          "path": "/health?plugins",
-          "port": 8282,
-        },
-      }
-    }
-
-    opa_config_volume = {
-      "name": "opa-istio-config",
-      "configMap": {"name": "opa-istio-config"},
-    }
-
-    opa_policy_volume = {
-      "name": "opa-policy",
-      "configMap": {"name": "opa-policy"},
-    }
----
-############################################################
-# Service to expose OPA admission controller (required by Kubernetes.)
-############################################################
-apiVersion: v1
-kind: Service
-metadata:
-  name: admission-controller
-  namespace: opa-istio
-  labels:
-    app: admission-controller
-spec:
-  ports:
-    - port: 443
-      name: http
-  selector:
-    app: admission-controller
----
-############################################################
-# OPA admission controller deployment for injecting OPA-Istio.
-############################################################
+####################################################
+# App Deployment with OPA-Envoy and Envoy sidecars.
+####################################################
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: example-app
   labels:
-    app: admission-controller
-  namespace: opa-istio
-  name: admission-controller
+    app: example-app
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: admission-controller
+      app: example-app
   template:
     metadata:
       labels:
-        app: admission-controller
-      name: admission-controller
+        app: example-app
     spec:
+      initContainers:
+        - name: proxy-init
+          image: openpolicyagent/proxy_init:v5
+          # Configure the iptables bootstrap script to redirect traffic to the
+          # Envoy proxy on port 8000, specify that Envoy will be running as user
+          # 1111, and that we want to exclude port 8282 from the proxy for the
+          # OPA health checks. These values must match up with the configuration
+          # defined below for the "envoy" and "opa" containers.
+          args: ["-p", "8000", "-u", "1111", "-w", "8282"]
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+            runAsNonRoot: false
+            runAsUser: 0
       containers:
-        - image: openpolicyagent/opa:0.22.0
-          name: opa
+        - name: app
+          image: openpolicyagent/demo-test-server:v1
           ports:
-          - containerPort: 443
+            - containerPort: 8080
+        - name: envoy
+          image: envoyproxy/envoy:v1.10.0
+          securityContext:
+            runAsUser: 1111
+          volumeMounts:
+            - readOnly: true
+              mountPath: /config
+              name: proxy-config
           args:
-          - "run"
-          - "--server"
-          - "--tls-cert-file=/certs/tls.crt"
-          - "--tls-private-key-file=/certs/tls.key"
-          - "--addr=0.0.0.0:443"
-          - "/policies/inject.rego"
+            - "envoy"
+            - "--config-path"
+            - "/config/envoy.yaml"
+        - name: opa-envoy
+          image: openpolicyagent/opa:0.22.0-envoy
+          securityContext:
+            runAsUser: 1111
+          volumeMounts:
+            - readOnly: true
+              mountPath: /policy
+              name: opa-policy
+            - readOnly: true
+              mountPath: /config
+              name: opa-envoy-config
+          args:
+            - "run"
+            - "--server"
+            - "--config-file=/config/config.yaml"
+            - "--addr=localhost:8181"
+            - "--diagnostic-addr=0.0.0.0:8282"
+            - "--ignore=.*"
+            - "/policy/policy.rego"
           livenessProbe:
             httpGet:
               path: /health?plugins
-              scheme: HTTPS
-              port: 443
+              scheme: HTTP
+              port: 8282
             initialDelaySeconds: 5
             periodSeconds: 5
           readinessProbe:
             httpGet:
               path: /health?plugins
-              scheme: HTTPS
-              port: 443
+              scheme: HTTP
+              port: 8282
             initialDelaySeconds: 5
             periodSeconds: 5
-          volumeMounts:
-            - readOnly: true
-              mountPath: /certs
-              name: server-cert
-            - readOnly: true
-              mountPath: /policies
-              name: inject-policy
       volumes:
-        - name: inject-policy
+        - name: proxy-config
           configMap:
-            name: inject-policy
-        - name: server-cert
-          secret:
-            secretName: server-cert
+            name: proxy-config
+        - name: opa-policy
+          configMap:
+            name: opa-policy
+        - name: opa-envoy-config
+          configMap:
+            name: opa-envoy-config
 ---
 ############################################################
-# OPA admission controller configuration.
-############################################################
-apiVersion: admissionregistration.k8s.io/v1beta1
-kind: MutatingWebhookConfiguration
-metadata:
-  name: opa-istio-admission-controller
-webhooks:
-  - name: istio.openpolicyagent.org
-    clientConfig:
-      service:
-        name: admission-controller
-        namespace: opa-istio
-        path: "/v0/data/istio/inject"
-      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNyRENDQVpRQ0NRQ3dKemhjUk5xSHZ6QU5CZ2txaGtpRzl3MEJBUXNGQURBWE1SVXdFd1lEVlFRRERBeGgKWkcxcGMzTnBiMjVmWTJFd0lCY05NVGd3TXpFd01ERTBPVFEzV2hnUE1qSTVNVEV5TWpRd01UUTVORGRhTUJjeApGVEFUQmdOVkJBTU1ER0ZrYldsemMybHZibDlqWVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDCkFRb0NnZ0VCQU5GOS9jV3pMeVRxSjVoWVJON0R4V1VjVVU4NFpiU3pHRmc2dnROMmZyN0c0eVRaM1JRUnJEWU4KdHV3M3RnVi9raGxZN3RZWVhjS1RSZWt4bis3V0dyWUJHMzM4WWpxU084ekF1R3NBdndIS2J4YjFBeVNtb0hOcQpSY29PT1FkQXpaR2JPUlVsazliY2JxWkFtWDZvU1BKbVlRbjRqWnQxNjlYOWJRbjl2eU1MQmlPcmIzclppb2VXCnpDQUVFa3dkS0wzanZONWI2OEZveDJoMTNUQnpPTEgwMGhKOTJNS3pIeHl2VWxwbmNTMnVPbUtlYnR1ejJQcGMKNVhIN3FMNHBqVEkyNEN5cnNLZ2ZNNnhxblo1bTdmc0pocWgwSzU3RUtXZkNpZlFkNnU0a2s1YjNaWTRSbHdpTAp1OU9iQ2RyTTJibDNsL2lCYWRNak9XQ0hWNzVubWpzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBCkdXOWdVc0VMVXJYYlN5ZlMvNWRuMlh0SE1tS2VKQ2t1Q0RmRGxmUmxrZWNGaWgrU2xuUVdXc05kci82RlJKUVUKTTN3Z2FCR2ZJNDYxeU4xWk93NzU2dHBDdWFkbkJ3c0U2WDhvQ0hFdTVpRjMxN1Z0WDZXTDZhdktiRStyL2M1aApHbmFZRW5HdWlQVk8yd1hTUlVXb0xpdTZYdzhFOXRqV0FBcG1jbkRMUVFDLy9INGM0aXRoYWQyY2FXL0FUckVPCkJGRG9SbGQ2MUx4NE9rekVDQSt2azZVL1MxNUU1cm1tajBQTUVKTDd6eHpaMUJDUkFocG44SXJOZ2MvdmRLVzQKZUpLMFBLUUZhWHhlM0ZMRzVhdm9SS2kzUWhSN0w5NkxxbUV2NmR4MEhnTW1uYUlOTkYvbTlsc0lLSysrMGVaQQpyMVJUQzdHL2NTRkJqd0NOdlQwY3VRPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
-    rules:
-      - operations: ["CREATE"]
-        apiGroups: [""]
-        apiVersions: ["v1"]
-        resources: ["pods"]
-    namespaceSelector:
-      matchLabels:
-        opa-istio-injection: enabled
-    failurePolicy: Fail
----
-############################################################
-# Example configuration to bootstrap OPA-Istio sidecars.
+# Example configuration to bootstrap OPA-Envoy sidecars.
 ############################################################
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: opa-istio-config
+  name: opa-envoy-config
 data:
   config.yaml: |
     plugins:
       envoy_ext_authz_grpc:
         addr: :9191
-        path: istio/authz/allow
+        path: envoy/authz/allow
     decision_logs:
       console: true
 ---
+######################################################################
+# Envoy Config with External Authorization filter that will query OPA.
+######################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxy-config
+data:
+  envoy.yaml: |
+    static_resources:
+      listeners:
+      - address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: 8000
+        filter_chains:
+        - filters:
+          - name: envoy.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager
+              codec_type: auto
+              stat_prefix: ingress_http
+              route_config:
+                name: local_route
+                virtual_hosts:
+                - name: backend
+                  domains:
+                  - "*"
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: service
+              http_filters:
+              - name: envoy.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.config.filter.http.ext_authz.v2.ExtAuthz
+                  with_request_body:
+                    max_request_bytes: 8192
+                    allow_partial_message: true
+                  failure_mode_allow: false
+                  grpc_service:
+                    google_grpc:
+                      target_uri: 127.0.0.1:9191
+                      stat_prefix: ext_authz
+                    timeout: 0.5s
+              - name: envoy.router
+                typed_config: {}
+      clusters:
+      - name: service
+        connect_timeout: 0.25s
+        type: strict_dns
+        lb_policy: round_robin
+        load_assignment:
+          cluster_name: service
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 127.0.0.1
+                    port_value: 8080
+    admin:
+      access_log_path: "/dev/null"
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8001
+---
 ############################################################
-# Example policy to enforce into OPA-Istio sidecars.
+# Example policy to enforce into OPA-Envoy sidecars.
 ############################################################
 apiVersion: v1
 kind: ConfigMap
@@ -265,43 +187,44 @@ metadata:
   name: opa-policy
 data:
   policy.rego: |
-    package istio.authz
+    package envoy.authz
 
     import input.attributes.request.http as http_request
 
     default allow = false
 
-    allow {
-        roles_for_user[r]
-        required_roles[r]
-    }
-
-    roles_for_user[r] {
-        r := user_roles[user_name][_]
-    }
-
-    required_roles[r] {
-        perm := role_perms[r][_]
-        perm.method = http_request.method
-        perm.path = http_request.path
-    }
-
-    user_name = parsed {
+    token = {"valid": valid, "payload": payload} {
         [_, encoded] := split(http_request.headers.authorization, " ")
-        [parsed, _] := split(base64url.decode(encoded), ":")
+        [valid, _, payload] := io.jwt.decode_verify(encoded, {"secret": "secret"})
     }
 
-    user_roles = {
-        "alice": ["guest"],
-        "bob": ["admin"]
+    allow {
+        is_token_valid
+        action_allowed
     }
 
-    role_perms = {
-        "guest": [
-            {"method": "GET",  "path": "/productpage"},
-        ],
-        "admin": [
-            {"method": "GET",  "path": "/productpage"},
-            {"method": "GET",  "path": "/api/v1/products"},
-        ],
+    is_token_valid {
+      token.valid
+      now := time.now_ns() / 1000000000
+      token.payload.nbf <= now
+      now < token.payload.exp
+    }
+
+    action_allowed {
+      http_request.method == "GET"
+      token.payload.role == "guest"
+      glob.match("/people*", [], http_request.path)
+    }
+
+    action_allowed {
+      http_request.method == "GET"
+      token.payload.role == "admin"
+      glob.match("/people*", [], http_request.path)
+    }
+
+    action_allowed {
+      http_request.method == "POST"
+      token.payload.role == "admin"
+      glob.match("/people", [], http_request.path)
+      lower(input.parsed_body.firstname) != base64url.decode(token.payload.sub)
     }

@@ -6,12 +6,12 @@ BATS_TESTS_DIR=test/bats/tests
 WAIT_TIME=60
 SLEEP_TIME=1
 
-@test "install Opa-Istio" {
-  run kubectl apply -f quick_start.yaml
+@test "install OPA-Envoy" {
+  run kubectl apply -f examples/istio/quick_start.yaml
   assert_success
 }
 
-@test "label default namespace for Istio Proxy and OPA-Istio sidecar injection" {
+@test "label default namespace for Istio Proxy and OPA-Envoy sidecar injection" {
   run kubectl label namespace default opa-istio-injection="enabled"
   assert_success
 

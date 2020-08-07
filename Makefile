@@ -2,7 +2,8 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := $(shell ./build/get-opa-version.sh)-istio$(shell ./build/get-plugin-rev.sh)
+VERSION := $(shell ./build/get-opa-version.sh)-envoy$(shell ./build/get-plugin-rev.sh)
+VERSION_ISTIO := $(shell ./build/get-opa-version.sh)-istio$(shell ./build/get-plugin-rev.sh)
 
 PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 
@@ -11,7 +12,7 @@ GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
 
-BIN := opa_istio_$(GOOS)_$(GOARCH)
+BIN := opa_envoy_$(GOOS)_$(GOARCH)
 
 REPOSITORY := openpolicyagent
 IMAGE := $(REPOSITORY)/opa
@@ -30,7 +31,7 @@ export GO15VENDOREXPERIMENT
 
 .PHONY: all build build-mac build-linux clean check check-fmt check-vet check-lint \
     deps deploy-travis generate image image-quick push push-latest tag-latest \
-    test test-cluster test-e2e update-opa update-quickstart-version version
+    test test-cluster test-e2e update-opa update-istio-quickstart-version version
 
 ######################################################
 #
@@ -50,7 +51,7 @@ generate:
 	$(GO) generate ./...
 
 build: generate
-	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-istio-plugin/...
+	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
 
 build-mac:
 	@$(MAKE) build GOOS=darwin
@@ -65,14 +66,18 @@ image:
 image-quick:
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
 	docker build -t $(IMAGE):$(VERSION) -f .Dockerfile_$(GOARCH) .
+	docker tag $(IMAGE):$(VERSION) $(IMAGE):$(VERSION_ISTIO)
 
 push:
 	docker push $(IMAGE):$(VERSION)
+	docker push $(IMAGE):$(VERSION_ISTIO)
 
 tag-latest:
+	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest-envoy
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest-istio
 
 push-latest:
+	docker push $(IMAGE):latest-envoy
 	docker push $(IMAGE):latest-istio
 
 deploy-travis: image-quick push tag-latest push-latest
@@ -80,8 +85,8 @@ deploy-travis: image-quick push tag-latest push-latest
 update-opa:
 	@./build/update-opa-version.sh $(TAG)
 
-update-quickstart-version:
-	sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:latest-istio\"\,/;}" quick_start.yaml
+update-istio-quickstart-version:
+	sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:latest-istio\"\,/;}" examples/istio/quick_start.yaml
 
 test: generate
 	$(DISABLE_CGO) $(GO) test -v -bench=. $(PACKAGES)

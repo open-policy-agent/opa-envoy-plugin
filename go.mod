@@ -1,4 +1,4 @@
-module github.com/open-policy-agent/opa-istio-plugin
+module github.com/open-policy-agent/opa-envoy-plugin
 
 go 1.12
 
