@@ -4,13 +4,13 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-function opa-istio-plugin::go_packages() {
+function opa-envoy-plugin::go_packages() {
     for pkg in $(go list ./.../ 2>/dev/null | grep -v vendor); do
         echo $pkg
     done
 }
 
-function opa-istio-plugin::go_files_in_package() {
+function opa-envoy-plugin::go_files_in_package() {
     dir=$(go list -f '{{ .Dir }}' $1)
     for file in $(go list -f '{{ join .GoFiles "\n" }}' $1); do
         echo  $dir/$file

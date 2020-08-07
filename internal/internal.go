@@ -40,7 +40,7 @@ import (
 )
 
 const defaultAddr = ":9191"
-const defaultPath = "istio/authz/allow"
+const defaultPath = "envoy/authz/allow"
 const defaultDryRun = false
 const defaultEnableReflection = false
 

@@ -7,7 +7,7 @@ package plugin
 import (
 	"github.com/open-policy-agent/opa/plugins"
 
-	"github.com/open-policy-agent/opa-istio-plugin/internal"
+	"github.com/open-policy-agent/opa-envoy-plugin/internal"
 )
 
 // Factory defines the interface OPA uses to instantiate a plugin.

@@ -8,8 +8,8 @@ MAINTAINER Ashutosh Narkar  <anarkar4387@gmail.com>
 
 WORKDIR /app
 
-COPY opa_istio_linux_GOARCH /app
+COPY opa_envoy_linux_GOARCH /app
 
-ENTRYPOINT ["./opa_istio_linux_GOARCH"]
+ENTRYPOINT ["./opa_envoy_linux_GOARCH"]
 
 CMD ["run"]

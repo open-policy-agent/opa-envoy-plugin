@@ -47,7 +47,6 @@ const exampleAllowedRequest = `{
 			"x-envoy-internal": "true",
 			"x-forwarded-for": "172.17.0.1",
 			"x-forwarded-proto": "http",
-			"x-istio-attributes": "Cj4KE2Rlc3RpbmF0aW9uLnNlcnZpY2USJxIlcHJvZHVjdHBhZ2UuZGVmYXVsdC5zdmMuY2x1c3Rlci5sb2NhbApPCgpzb3VyY2UudWlkEkESP2t1YmVybmV0ZXM6Ly9pc3Rpby1pbmdyZXNzZ2F0ZXdheS02Nzk5NWM0ODZjLXFwOGpyLmlzdGlvLXN5c3RlbQpBChdkZXN0aW5hdGlvbi5zZXJ2aWNlLnVpZBImEiRpc3RpbzovL2RlZmF1bHQvc2VydmljZXMvcHJvZHVjdHBhZ2UKQwoYZGVzdGluYXRpb24uc2VydmljZS5ob3N0EicSJXByb2R1Y3RwYWdlLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwKKgodZGVzdGluYXRpb24uc2VydmljZS5uYW1lc3BhY2USCRIHZGVmYXVsdAopChhkZXN0aW5hdGlvbi5zZXJ2aWNlLm5hbWUSDRILcHJvZHVjdHBhZ2U=",
 			"x-request-id": "92a6c0f7-0250-944b-9cfc-ae10cbcedd8e"
 		  },
 		  "path": "/api/v1/products",
@@ -80,7 +79,6 @@ const exampleDeniedRequest = `{
 			"x-envoy-internal": "true",
 			"x-forwarded-for": "172.17.0.1",
 			"x-forwarded-proto": "http",
-			"x-istio-attributes": "Cj4KE2Rlc3RpbmF0aW9uLnNlcnZpY2USJxIlcHJvZHVjdHBhZ2UuZGVmYXVsdC5zdmMuY2x1c3Rlci5sb2NhbApPCgpzb3VyY2UudWlkEkESP2t1YmVybmV0ZXM6Ly9pc3Rpby1pbmdyZXNzZ2F0ZXdheS02Nzk5NWM0ODZjLXFwOGpyLmlzdGlvLXN5c3RlbQpBChdkZXN0aW5hdGlvbi5zZXJ2aWNlLnVpZBImEiRpc3RpbzovL2RlZmF1bHQvc2VydmljZXMvcHJvZHVjdHBhZ2UKQwoYZGVzdGluYXRpb24uc2VydmljZS5ob3N0EicSJXByb2R1Y3RwYWdlLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwKKgodZGVzdGluYXRpb24uc2VydmljZS5uYW1lc3BhY2USCRIHZGVmYXVsdAopChhkZXN0aW5hdGlvbi5zZXJ2aWNlLm5hbWUSDRILcHJvZHVjdHBhZ2U=",
 			"x-request-id": "92a6c0f7-0250-944b-9cfc-ae10cbcedd8e"
 		  },
 		  "path": "/api/v1/products",
@@ -279,7 +277,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == false {
+	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == false {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
 
@@ -412,7 +410,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "istio/authz/allow" || event.Revision != "" || *event.Result == true {
+	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
 }
@@ -452,7 +450,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Query != "data.istio.authz.allow" || event.Revision != "" || event.Result != nil {
+	if event.Error == nil || event.Query != "data.envoy.authz.allow" || event.Revision != "" || event.Result != nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 }
@@ -485,7 +483,7 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Path != "istio/authz/allow" || event.Revision != "" || event.Result != nil {
+	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 }
@@ -560,12 +558,12 @@ func TestConfigValidWithPath(t *testing.T) {
 		path string
 		want string
 	}{
-		"empty_path":               {path: "", want: "data.istio.authz.allow"},
+		"empty_path":               {path: "", want: "data.envoy.authz.allow"},
 		"path_no_lt_slash":         {path: "test/allow/main", want: "data.test.allow.main"},
 		"path_with_leading_slash":  {path: "/test/allow/main", want: "data.test.allow.main"},
 		"path_with_trailing_slash": {path: "test/allow/main/", want: "data.test.allow.main"},
 		"path_with_lt_slash":       {path: "/test/allow/main/", want: "data.test.allow.main"},
-		"path_with_periods":        {path: "test/com.foo.istio.ingress/allow/main/", want: "data.test[\"com.foo.istio.ingress\"].allow.main"},
+		"path_with_periods":        {path: "test/com.foo.envoy.ingress/allow/main/", want: "data.test[\"com.foo.envoy.ingress\"].allow.main"},
 	}
 
 	for name, tc := range tests {
@@ -1151,7 +1149,7 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 
 	// Define a RBAC policy to allow or deny requests based on user roles
 	module := `
-		package istio.authz
+		package envoy.authz
 
 		import input.attributes.request.http as http_request
 
@@ -1209,7 +1207,7 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 		panic(err)
 	}
 
-	path := "istio/authz/allow"
+	path := "envoy/authz/allow"
 	parsedQuery, err := ast.ParseBody("data." + strings.Replace(path, "/", ".", -1))
 	if err != nil {
 		panic(err)
@@ -1231,7 +1229,7 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
 	module := `
-		package istio.authz
+		package envoy.authz
 
 		default allow = {
 		  "allowed": false,
@@ -1253,7 +1251,7 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 		panic(err)
 	}
 
-	query := "data.istio.authz.allow"
+	query := "data.envoy.authz.allow"
 	parsedQuery, err := ast.ParseBody(query)
 	if err != nil {
 		panic(err)
@@ -1278,7 +1276,7 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
 	module := `
-		package istio.authz
+		package envoy.authz
 
 		default allow = 1
 		`
@@ -1288,7 +1286,7 @@ func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool
 		panic(err)
 	}
 
-	query := "data.istio.authz.allow"
+	query := "data.envoy.authz.allow"
 	parsedQuery, err := ast.ParseBody(query)
 	if err != nil {
 		panic(err)

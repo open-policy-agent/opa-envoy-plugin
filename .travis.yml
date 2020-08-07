@@ -1,6 +1,6 @@
 sudo: required
 language: go
-go_import_path: github.com/open-policy-agent/opa-istio-plugin
+go_import_path: github.com/open-policy-agent/opa-envoy-plugin
 go:
 - '1.13'
 services:
@@ -16,7 +16,7 @@ jobs:
           skip_cleanup: true
           script: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD && make deploy-travis
           on:
-            repo: open-policy-agent/opa-istio-plugin
+            repo: open-policy-agent/opa-envoy-plugin
             branch: master
             tags: false
     - stage: e2e
@@ -41,6 +41,6 @@ jobs:
       - curl -L https://git.io/getLatestIstio | ISTIO_VERSION=${ISTIO_VERSION} sh - && mv istio-${ISTIO_VERSION} /tmp && cd /tmp/istio-${ISTIO_VERSION} && for i in install/kubernetes/helm/istio-init/files/crd*yaml; do kubectl apply -f $i; done && kubectl apply -f install/kubernetes/istio-demo.yaml && cd -
       - kubectl -n istio-system wait --for=condition=available --timeout=600s --all deployment
       script:
-      - make update-quickstart-version && make test-e2e
+      - make update-istio-quickstart-version && make test-e2e
       after_script:
       - kind delete cluster
