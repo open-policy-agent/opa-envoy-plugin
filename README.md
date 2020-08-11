@@ -330,7 +330,8 @@ The `input` value defined for your policy will resemble the JSON below:
   },
   "parsed_body":{"firstname": "Charlie", "lastname": "Opa"},
   "parsed_path":["people"],
-  "parsed_query": {"lang": ["en"]}
+  "parsed_query": {"lang": ["en"]},
+  "truncated_body": false
 }
 ```
 
@@ -379,6 +380,10 @@ allow {
    input.parsed_body.lastname == "Opa"
 }
 ```
+
+The `truncated_body` field in the input represents if the HTTP request body is truncated. The body is considered to be
+truncated, if the value of the `Content-Length` header exceeds the size of the request body.
+
 
 ## Example Policy with Object Response
 
