@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/open-policy-agent/opa/topdown"
 	"io"
 	"net"
 	"net/url"
@@ -189,11 +190,21 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 
 func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (resp *ext_authz.CheckResponse, err error) {
 	start := time.Now()
+
+	result := evalResult{}
+	result.metrics = metrics.New()
+	result.metrics.Timer(metrics.ServerHandler).Start()
+	result.decisionID, err = uuid4()
+	if err != nil {
+		logrus.WithField("err", err).Error("Unable to generate decision ID.")
+		return nil, err
+	}
+
 	var input map[string]interface{}
-	var result *evalResult
 
 	defer func() {
-		logErr := p.log(ctx, input, result, err)
+		result.metrics.Timer(metrics.ServerHandler).Stop()
+		logErr := p.log(ctx, input, &result, err)
 		if logErr != nil {
 			resp = &ext_authz.CheckResponse{
 				Status: &rpc_status.Status{
@@ -222,19 +233,20 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
-	parsedBody, err := getParsedBody(req)
+	parsedBody, isBodyTruncated, err := getParsedBody(req)
 	if err != nil {
 		return nil, err
 	}
 
 	input["parsed_body"] = parsedBody
+	input["truncated_body"] = isBodyTruncated
 
 	inputValue, err := ast.InterfaceToValue(input)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err = p.eval(ctx, inputValue)
+	err = p.eval(ctx, inputValue, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -322,21 +334,13 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckReq
 	return resp, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opts ...func(*rego.Rego)) (*evalResult, error) {
-	result := &evalResult{}
-	result.metrics = metrics.New()
-	result.metrics.Timer(metrics.ServerHandler).Start()
+func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, result *evalResult, opts ...func(*rego.Rego)) error {
 
 	err := storage.Txn(ctx, p.manager.Store, storage.TransactionParams{}, func(txn storage.Transaction) error {
 
 		var err error
 
 		result.revision, err = getRevision(ctx, p.manager.Store, txn)
-		if err != nil {
-			return err
-		}
-
-		result.decisionID, err = uuid4()
 		if err != nil {
 			return err
 		}
@@ -364,8 +368,6 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 			rego.EvalMetrics(result.metrics),
 		)
 
-		result.metrics.Timer(metrics.ServerHandler).Stop()
-
 		if err != nil {
 			return err
 		} else if len(rs) == 0 {
@@ -378,7 +380,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, opt
 		return nil
 	})
 
-	return result, err
+	return err
 }
 
 func (p *envoyExtAuthzGrpcServer) constructPreparedQuery(txn storage.Transaction, m metrics.Metrics, opts []func(*rego.Rego)) error {
@@ -412,7 +414,6 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 	info := &server.Info{
 		Timestamp: time.Now(),
 		Input:     &input,
-		Error:     err,
 	}
 
 	if p.cfg.Query != "" {
@@ -423,13 +424,20 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 		info.Path = p.cfg.Path
 	}
 
-	if result != nil {
-		info.Revision = result.revision
-		info.DecisionID = result.decisionID
-		info.Metrics = result.metrics
-	}
+	info.Revision = result.revision
+	info.DecisionID = result.decisionID
+	info.Metrics = result.metrics
 
-	if err == nil {
+	if err != nil {
+		switch err.(type) {
+		case *storage.Error, *ast.Error, ast.Errors, *topdown.Error:
+			break
+		default:
+			// Wrap errors that may not serialize to JSON well (e.g., fmt.Errorf, etc.)
+			err = &internalError{Message: err.Error()}
+		}
+		info.Error = err
+	} else {
 		var x interface{}
 		if result != nil {
 			x = result.decision
@@ -604,9 +612,24 @@ func getParsedPathAndQuery(req *ext_authz.CheckRequest) ([]interface{}, map[stri
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(req *ext_authz.CheckRequest) (interface{}, error) {
+func getParsedBody(req *ext_authz.CheckRequest) (interface{}, bool, error) {
 	body := req.GetAttributes().GetRequest().GetHttp().GetBody()
 	headers := req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+
+	if body == "" {
+		return nil, false, nil
+	}
+
+	if val, ok := headers["content-length"]; ok {
+		cl, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if cl != -1 && cl > int64(len(body)) {
+			return nil, true, nil
+		}
+	}
 
 	var data interface{}
 
@@ -614,12 +637,12 @@ func getParsedBody(req *ext_authz.CheckRequest) (interface{}, error) {
 		if strings.Contains(val, "application/json") {
 			err := util.Unmarshal([]byte(body), &data)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 		}
 	}
 
-	return data, nil
+	return data, false, nil
 }
 
 func stringPathToDataRef(s string) (r ast.Ref) {
@@ -647,4 +670,12 @@ func stringPathToRef(s string) (r ast.Ref) {
 		}
 	}
 	return r
+}
+
+type internalError struct {
+	Message string `json:"message"`
+}
+
+func (e *internalError) Error() string {
+	return e.Message
 }

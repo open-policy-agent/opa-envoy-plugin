@@ -410,7 +410,8 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true {
+	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true ||
+		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
 }
@@ -450,8 +451,174 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Query != "data.envoy.authz.allow" || event.Revision != "" || event.Result != nil {
+	if event.Error == nil || event.Query != "data.envoy.authz.allow" || event.Revision != "" || event.Result != nil ||
+		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+}
+
+func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
+
+	exampleDeniedRequestTruncatedBody := `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "id": "13359530607844510314",
+		  "headers": {
+			"content-type": "application/json",
+			"content-length": "100000"
+		  },
+		  "method": "GET",
+		  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\", \"dept\": {\"it\": \"eng\"}}",
+		}
+	  }
+	}
+  }`
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequestTruncatedBody), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServerWithTruncatedBody(customLogger, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
+		t.Fatal("Expected request to be denied but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Path != "data.envoy.authz.allow" || *event.Result == true ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	input := *event.Input
+	inputMap, _ := input.(map[string]interface{})
+	isTruncated, _ := inputMap["truncated_body"].(bool)
+
+	if !isTruncated {
+		t.Fatal("Expected truncated request body")
+	}
+}
+
+func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
+
+	exampleDeniedRequestTruncatedBody := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "id": "13359530607844510314",
+			  "headers": {
+				"content-type": "application/json",
+				"content-length": "100000"
+			  },
+			  "method": "GET",
+			  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\", \"dept\": {\"it\": \"eng\"}}",
+			}
+		  }
+		}
+	}`
+
+	exampleAllowedRequestTruncatedBody := `{
+		"attributes": {
+			"request": {
+				"http": {
+				  "id": "13359530607844510314",
+				  "headers": {
+					"content-type": "application/json",
+					"content-length": "62"
+				  },
+				  "method": "GET",
+				  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\", \"dept\": {\"it\": \"eng\"}}",
+				}
+			}
+		}
+	}`
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequestTruncatedBody), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServerWithTruncatedBody(customLogger, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// denied decision
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
+		t.Fatal("Expected request to be denied but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Path != "data.envoy.authz.allow" || *event.Result == true ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	input := *event.Input
+	inputMap, _ := input.(map[string]interface{})
+	isTruncated, _ := inputMap["truncated_body"].(bool)
+
+	if !isTruncated {
+		t.Fatal("Expected truncated request body")
+	}
+
+	// allowed decision
+	if err := util.Unmarshal([]byte(exampleAllowedRequestTruncatedBody), &req); err != nil {
+		panic(err)
+	}
+
+	output, err = server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// denied decision
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	if len(customLogger.events) != 2 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event = customLogger.events[1]
+
+	if event.Error != nil || event.Path != "data.envoy.authz.allow" || *event.Result == false ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	input = *event.Input
+	inputMap, _ = input.(map[string]interface{})
+	isTruncated, _ = inputMap["truncated_body"].(bool)
+
+	if isTruncated {
+		t.Fatal("Unexpected truncated request body")
 	}
 }
 
@@ -483,7 +650,8 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil {
+	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 }
@@ -1021,6 +1189,33 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
+	requestEmptyContent := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": ""
+			}
+		  }
+		}
+	  }`
+
+	requestBodyTruncated := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json",
+				"content-length": "1000"
+			  },
+			  "body": "true"
+			}
+		  }
+		}
+	  }`
+
 	expectedNumber := json.Number("42")
 
 	expectedObject := map[string]interface{}{}
@@ -1029,28 +1224,33 @@ func TestGetParsedBody(t *testing.T) {
 
 	expectedArray := []interface{}{"hello", "opa"}
 
-	var data interface{}
-
 	tests := map[string]struct {
-		input *ext_authz.CheckRequest
-		want  interface{}
-		err   error
+		input           *ext_authz.CheckRequest
+		want            interface{}
+		isBodyTruncated bool
+		err             error
 	}{
-		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: data, err: nil},
-		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: data, err: nil},
-		"content_type_json_string":  {input: createCheckRequest(requestContentTypeJSONString), want: "foo", err: nil},
-		"content_type_json_boolean": {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, err: nil},
-		"content_type_json_number":  {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, err: nil},
-		"content_type_json_null":    {input: createCheckRequest(requestContentTypeJSONNull), want: nil, err: nil},
-		"content_type_json_object":  {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, err: nil},
-		"content_type_json_array":   {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, err: nil},
+		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_json_string":  {input: createCheckRequest(requestContentTypeJSONString), want: "foo", isBodyTruncated: false, err: nil},
+		"content_type_json_boolean": {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, isBodyTruncated: false, err: nil},
+		"content_type_json_number":  {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, isBodyTruncated: false, err: nil},
+		"content_type_json_null":    {input: createCheckRequest(requestContentTypeJSONNull), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_json_object":  {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, isBodyTruncated: false, err: nil},
+		"content_type_json_array":   {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, isBodyTruncated: false, err: nil},
+		"empty_content":             {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
+		"body_truncated":            {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := getParsedBody(tc.input)
+			got, isBodyTruncated, err := getParsedBody(tc.input)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
+			}
+
+			if isBodyTruncated != tc.isBodyTruncated {
+				t.Fatalf("expected isBodyTruncated: %v, got: %v", tc.isBodyTruncated, got)
 			}
 
 			if err != tc.err {
@@ -1072,7 +1272,7 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
-	_, err := getParsedBody(createCheckRequest(requestContentTypeJSONInvalid))
+	_, _, err := getParsedBody(createCheckRequest(requestContentTypeJSONInvalid))
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
@@ -1308,6 +1508,45 @@ func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool
 	return s
 }
 
+func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+
+	module := `
+		package envoy.authz
+
+		default allow = false
+
+		allow {
+			not input.truncated_body
+		}
+		`
+
+	m, err := getPluginManager(module, customLogger)
+	if err != nil {
+		panic(err)
+	}
+
+	path := "data.envoy.authz.allow"
+	parsedQuery, err := ast.ParseBody(path)
+	if err != nil {
+		panic(err)
+	}
+
+	s := &envoyExtAuthzGrpcServer{
+		cfg: Config{
+			Addr:        ":50052",
+			Path:        path,
+			DryRun:      dryRun,
+			parsedQuery: parsedQuery,
+		},
+		manager:             m,
+		preparedQueryDoOnce: new(sync.Once),
+	}
+
+	m.RegisterCompilerTrigger(s.compilerUpdated)
+
+	return s
+}
+
 func createExtReqWithPath(path string) *ext_authz.CheckRequest {
 	requestString := fmt.Sprintf(`{
 	  "attributes": {
@@ -1368,6 +1607,14 @@ func TestParsedPathAndQuery(t *testing.T) {
 		if !reflect.DeepEqual(actualQuery, tt.expectedQuery) {
 			t.Errorf("parsed_query (%s): expected %s, actual %s", tt.request, tt.expectedQuery, actualQuery)
 		}
+	}
+}
+
+func TestLogWithASTError(t *testing.T) {
+	server := testAuthzServer(&testPlugin{}, false)
+	err := server.log(context.Background(), nil, &evalResult{}, &ast.Error{Code: "foo"})
+	if err != nil {
+		panic(err)
 	}
 }
 
