@@ -2,12 +2,14 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-VERSION := $(shell ./build/get-opa-version.sh)-envoy$(shell ./build/get-plugin-rev.sh)
-VERSION_ISTIO := $(shell ./build/get-opa-version.sh)-istio$(shell ./build/get-plugin-rev.sh)
+VERSION_OPA := $(shell ./build/get-opa-version.sh)
+VERSION := $(VERSION_OPA)-envoy$(shell ./build/get-plugin-rev.sh)
+VERSION_ISTIO := $(VERSION_OPA)-istio$(shell ./build/get-plugin-rev.sh)
 
 PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 
 GO := go
+GOVERSION := $(shell cat ./.go-version)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
@@ -16,6 +18,16 @@ BIN := opa_envoy_$(GOOS)_$(GOARCH)
 
 REPOSITORY := openpolicyagent
 IMAGE := $(REPOSITORY)/opa
+
+ifeq ($(shell tty > /dev/null && echo 1 || echo 0), 1)
+DOCKER_FLAGS := --rm -it
+else
+DOCKER_FLAGS := --rm
+endif
+
+RELEASE_BUILD_IMAGE := golang:$(GOVERSION)
+
+RELEASE_DIR ?= _release/$(VERSION_OPA)
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -29,7 +41,7 @@ LDFLAGS := "-X github.com/open-policy-agent/opa/version.Version=$(VERSION) \
 GO15VENDOREXPERIMENT := 1
 export GO15VENDOREXPERIMENT
 
-.PHONY: all build build-mac build-linux clean check check-fmt check-vet check-lint \
+.PHONY: all build build-darwin build-linux build-windows clean check check-fmt check-vet check-lint \
     deps deploy-travis generate image image-quick push push-latest tag-latest \
     test test-cluster test-e2e update-opa update-istio-quickstart-version version
 
@@ -53,11 +65,14 @@ generate:
 build: generate
 	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
 
-build-mac:
+build-darwin:
 	@$(MAKE) build GOOS=darwin
 
 build-linux:
 	@$(MAKE) build GOOS=linux
+
+build-windows:
+	@$(MAKE) build GOOS=windows
 
 image:
 	@$(MAKE) build-linux
@@ -112,3 +127,31 @@ check-vet:
 
 check-lint:
 	./build/check-lint.sh
+
+.PHONY: release
+release:
+	docker run $(DOCKER_FLAGS) \
+		-v $(PWD)/$(RELEASE_DIR):/$(RELEASE_DIR) \
+		-v $(PWD):/_src \
+		$(RELEASE_BUILD_IMAGE) \
+		/_src/build/build-release.sh --version=$(VERSION_OPA) --output-dir=/$(RELEASE_DIR) --source-url=/_src
+
+
+.PHONY: release-build-linux
+release-build-linux: ensure-release-dir build-linux
+	mv opa_envoy_linux_$(GOARCH) $(RELEASE_DIR)/
+
+.PHONY: release-build-darwin
+release-build-darwin: ensure-release-dir build-darwin
+	mv opa_envoy_darwin_$(GOARCH) $(RELEASE_DIR)/
+
+.PHONY: release-build-windows
+release-build-windows: ensure-release-dir build-windows
+	mv opa_envoy_windows_$(GOARCH) $(RELEASE_DIR)/opa_envoy_windows_$(GOARCH).exe
+
+.PHONY: ensure-release-dir
+ensure-release-dir:
+	mkdir -p $(RELEASE_DIR)
+
+.PHONY: build-all-platforms
+build-all-platforms: release-build-linux release-build-darwin release-build-windows
