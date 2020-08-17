@@ -87,7 +87,9 @@ var DefaultBuiltins = [...]*Builtin{
 	CastArray,
 
 	// Regular Expressions
+	RegexIsValid,
 	RegexMatch,
+	RegexMatchDeprecated,
 	RegexSplit,
 	GlobsMatch,
 	RegexTemplateMatch,
@@ -668,10 +670,21 @@ var ToNumber = &Builtin{
 // RegexMatch takes two strings and evaluates to true if the string in the second
 // position matches the pattern in the first position.
 var RegexMatch = &Builtin{
-	Name: "re_match",
+	Name: "regex.match",
 	Decl: types.NewFunction(
 		types.Args(
 			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// RegexIsValid returns true if the regex pattern string is valid, otherwise false.
+var RegexIsValid = &Builtin{
+	Name: "regex.is_valid",
+	Decl: types.NewFunction(
+		types.Args(
 			types.S,
 		),
 		types.B,
@@ -1124,6 +1137,20 @@ var JSONRemove = &Builtin{
 					),
 				),
 			),
+		),
+		types.A,
+	),
+}
+
+// ObjectGet returns takes an object and returns a value under its key if
+// present, otherwise it returns the default.
+var ObjectGet = &Builtin{
+	Name: "object.get",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+			types.A,
+			types.A,
 		),
 		types.A,
 	),
@@ -1971,6 +1998,36 @@ var netCidrContainsMatchesOperandType = types.NewAny(
 )
 
 /**
+ * Semantic Versions
+ */
+
+// SemVerIsValid validiates a the term is a valid SemVer as a string, returns
+// false for all other input
+var SemVerIsValid = &Builtin{
+	Name: "semver.is_valid",
+	Decl: types.NewFunction(
+		types.Args(
+			types.A,
+		),
+		types.B,
+	),
+}
+
+// SemVerCompare compares valid SemVer formatted version strings. Given two
+// version strings, if A < B returns -1, if A > B returns 1. If A == B, returns
+// 0
+var SemVerCompare = &Builtin{
+	Name: "semver.compare",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.N,
+	),
+}
+
+/**
  * Deprecated built-ins.
  */
 
@@ -2057,53 +2114,25 @@ var CastObject = &Builtin{
 	),
 }
 
-// ObjectGet returns takes an object and returns a value under its key if
-// present, otherwise it returns the default.
-var ObjectGet = &Builtin{
-	Name: "object.get",
+// RegexMatchDeprecated declares `re_match` which has been deprecated. Use `regex.match` instead.
+var RegexMatchDeprecated = &Builtin{
+	Name: "re_match",
 	Decl: types.NewFunction(
 		types.Args(
-			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
-			types.A,
-			types.A,
-		),
-		types.A,
-	),
-}
-
-// SemVerIsValid validiates a the term is a valid SemVer as a string, returns
-// false for all other input
-var SemVerIsValid = &Builtin{
-	Name: "semver.is_valid",
-	Decl: types.NewFunction(
-		types.Args(
-			types.A,
+			types.S,
+			types.S,
 		),
 		types.B,
-	),
-}
-
-// SemVerCompare compares valid SemVer formatted version strings. Given two
-// version strings, if A < B returns -1, if A > B returns 1. If A == B, returns
-// 0
-var SemVerCompare = &Builtin{
-	Name: "semver.compare",
-	Decl: types.NewFunction(
-		types.Args(
-			types.S,
-			types.S,
-		),
-		types.N,
 	),
 }
 
 // Builtin represents a built-in function supported by OPA. Every built-in
 // function is uniquely identified by a name.
 type Builtin struct {
-	Name     string          // Unique name of built-in function, e.g., <name>(arg1,arg2,...,argN)
-	Infix    string          // Unique name of infix operator. Default should be unset.
-	Decl     *types.Function // Built-in function type declaration.
-	Relation bool            // Indicates if the built-in acts as a relation.
+	Name     string          `json:"name"`               // Unique name of built-in function, e.g., <name>(arg1,arg2,...,argN)
+	Decl     *types.Function `json:"decl"`               // Built-in function type declaration.
+	Infix    string          `json:"infix,omitempty"`    // Unique name of infix operator. Default should be unset.
+	Relation bool            `json:"relation,omitempty"` // Indicates if the built-in acts as a relation.
 }
 
 // Expr creates a new expression for the built-in with the given operands.

@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/pflag"
 
@@ -30,11 +31,11 @@ func addFailFlag(fs *pflag.FlagSet, fail *bool, value bool) {
 }
 
 func addDataFlag(fs *pflag.FlagSet, paths *repeatedStringFlag) {
-	fs.VarP(paths, "data", "d", "set data file(s) or directory path(s)")
+	fs.VarP(paths, "data", "d", "set policy or data file(s). This flag can be repeated.")
 }
 
 func addBundleFlag(fs *pflag.FlagSet, paths *repeatedStringFlag) {
-	fs.VarP(paths, "bundle", "b", "set bundle file(s) or directory path(s)")
+	fs.VarP(paths, "bundle", "b", "set bundle file(s) or directory path(s). This flag can be repeated.")
 }
 
 func addBundleModeFlag(fs *pflag.FlagSet, bundle *bool, value bool) {
@@ -46,7 +47,7 @@ func addInputFlag(fs *pflag.FlagSet, inputPath *string) {
 }
 
 func addImportFlag(fs *pflag.FlagSet, imports *repeatedStringFlag) {
-	fs.VarP(imports, "import", "", "set query import(s)")
+	fs.VarP(imports, "import", "", "set query import(s). This flag can be repeated.")
 }
 
 func addPackageFlag(fs *pflag.FlagSet, pkg *string) {
@@ -117,6 +118,10 @@ func addBundleVerificationExcludeFilesFlag(fs *pflag.FlagSet, excludeNames *[]st
 	fs.StringSliceVarP(excludeNames, "exclude-files-verify", "", []string{}, "set file names to exclude during bundle verification")
 }
 
+func addCapabilitiesFlag(fs *pflag.FlagSet, f *capabilitiesFlag) {
+	fs.VarP(f, "capabilities", "", "set capabilities.json file path")
+}
+
 const (
 	explainModeOff   = "off"
 	explainModeFull  = "full"
@@ -130,4 +135,34 @@ func newExplainFlag(modes []string) *util.EnumFlag {
 
 func setExplainFlag(fs *pflag.FlagSet, explain *util.EnumFlag) {
 	fs.VarP(explain, "explain", "", "enable query explanations")
+}
+
+type capabilitiesFlag struct {
+	C    *ast.Capabilities
+	path string
+}
+
+func newcapabilitiesFlag() *capabilitiesFlag {
+	return &capabilitiesFlag{
+		C: ast.CapabilitiesForThisVersion(),
+	}
+}
+
+func (f *capabilitiesFlag) Type() string {
+	return "string"
+}
+
+func (f *capabilitiesFlag) String() string {
+	return f.path
+}
+
+func (f *capabilitiesFlag) Set(s string) error {
+	f.path = s
+	fd, err := os.Open(s)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+	f.C, err = ast.LoadCapabilitiesJSON(fd)
+	return err
 }
