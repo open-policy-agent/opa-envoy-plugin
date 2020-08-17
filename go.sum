@@ -93,6 +93,8 @@ github.com/open-policy-agent/opa v0.21.1 h1:c4lUnB0mO2KssiUnyh6Y9IGhggvXI3EgObkm
 github.com/open-policy-agent/opa v0.21.1/go.mod h1:cZaTfhxsj7QdIiUI0U9aBtOLLTqVNe+XE60+9kZKLHw=
 github.com/open-policy-agent/opa v0.22.0 h1:KZvn0uMQIorBIwYk8Vc89dp8No9FIEF8eFl0sc1r/1U=
 github.com/open-policy-agent/opa v0.22.0/go.mod h1:rrwxoT/b011T0cyj+gg2VvxqTtn6N3gp/jzmr3fjW44=
+github.com/open-policy-agent/opa v0.23.0 h1:9SqWUD545w+NtNNldzK1GW3XRjsbTXIomnXgQoDMJcU=
+github.com/open-policy-agent/opa v0.23.0/go.mod h1:rrwxoT/b011T0cyj+gg2VvxqTtn6N3gp/jzmr3fjW44=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/peterh/liner v0.0.0-20170211195444-bf27d3ba8e1d/go.mod h1:xIteQHvHuaLYG9IFj6mSxM0fCKrs34IrEQUhOYuGPHc=
 github.com/peterh/liner v1.1.0 h1:f+aAedNJA6uk7+6rXsYBnhdo4Xux7ESLe+kcuVUF5os=

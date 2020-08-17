@@ -124,7 +124,7 @@ To deploy OPA-Envoy include the following container in your Kubernetes Deploymen
 
 ```yaml
 containers:
-- image: openpolicyagent/opa:0.22.0-envoy
+- image: openpolicyagent/opa:0.23.0-envoy
   imagePullPolicy: IfNotPresent
   name: opa-envoy
   volumeMounts:

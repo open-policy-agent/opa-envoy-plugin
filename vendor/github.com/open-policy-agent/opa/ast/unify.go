@@ -42,7 +42,7 @@ func (u *unifier) unify(a *Term, b *Term) {
 				u.markUnknown(a, b)
 				u.markUnknown(b, a)
 			}
-		case Array, Object:
+		case *Array, Object:
 			u.unifyAll(a, b)
 		case Ref:
 			if u.isSafe(b[0].Value.(Var)) {
@@ -57,7 +57,7 @@ func (u *unifier) unify(a *Term, b *Term) {
 			switch b := b.Value.(type) {
 			case Var:
 				u.markSafe(b)
-			case Array, Object:
+			case *Array, Object:
 				u.markAllSafe(b)
 			}
 		}
@@ -66,14 +66,14 @@ func (u *unifier) unify(a *Term, b *Term) {
 		switch b := b.Value.(type) {
 		case Var:
 			u.markSafe(b)
-		case Array:
+		case *Array:
 			u.markAllSafe(b)
 		}
 	case *ObjectComprehension:
 		switch b := b.Value.(type) {
 		case Var:
 			u.markSafe(b)
-		case Object:
+		case *object:
 			u.markAllSafe(b)
 		}
 	case *SetComprehension:
@@ -82,27 +82,27 @@ func (u *unifier) unify(a *Term, b *Term) {
 			u.markSafe(b)
 		}
 
-	case Array:
+	case *Array:
 		switch b := b.Value.(type) {
 		case Var:
 			u.unifyAll(b, a)
 		case Ref, *ArrayComprehension, *ObjectComprehension, *SetComprehension:
 			u.markAllSafe(a)
-		case Array:
-			if len(a) == len(b) {
-				for i := range a {
-					u.unify(a[i], b[i])
+		case *Array:
+			if a.Len() == b.Len() {
+				for i := 0; i < a.Len(); i++ {
+					u.unify(a.Elem(i), b.Elem(i))
 				}
 			}
 		}
 
-	case Object:
+	case *object:
 		switch b := b.Value.(type) {
 		case Var:
 			u.unifyAll(b, a)
 		case Ref:
 			u.markAllSafe(a)
-		case Object:
+		case *object:
 			if a.Len() == b.Len() {
 				a.Iter(func(k, v *Term) error {
 					if v2 := b.Get(k); v2 != nil {

@@ -95,9 +95,12 @@ type Compiler struct {
 	pathExists           func([]string) (bool, error)
 	after                map[string][]CompilerStageDefinition
 	metrics              metrics.Metrics
-	builtins             map[string]*Builtin
-	unsafeBuiltinsMap    map[string]struct{}
-	comprehensionIndices map[*Term]*ComprehensionIndex
+	capabilities         *Capabilities                 // user-supplied capabilities
+	builtins             map[string]*Builtin           // universe of built-in functions
+	customBuiltins       map[string]*Builtin           // user-supplied custom built-in functions (deprecated: use capabilities)
+	unsafeBuiltinsMap    map[string]struct{}           // user-supplied set of unsafe built-ins functions to block (deprecated: use capabilities)
+	comprehensionIndices map[*Term]*ComprehensionIndex // comprehension key index
+	initialized          bool                          // indicates if init() has been called
 }
 
 // CompilerStage defines the interface for stages in the compiler.
@@ -228,12 +231,6 @@ func NewCompiler() *Compiler {
 	c.ModuleTree = NewModuleTree(nil)
 	c.RuleTree = NewRuleTree(c.ModuleTree)
 
-	// Initialize the compiler with the statically compiled built-in functions.
-	// If the caller customizes the compiler, a copy will be made.
-	c.builtins = BuiltinMap
-	checker := newTypeChecker()
-	c.TypeEnv = checker.checkLanguageBuiltins(nil, c.builtins)
-
 	c.stages = []struct {
 		name       string
 		metricName string
@@ -300,26 +297,27 @@ func (c *Compiler) WithMetrics(metrics metrics.Metrics) *Compiler {
 	return c
 }
 
-// WithBuiltins adds a set of custom built-in functions to the compiler.
-func (c *Compiler) WithBuiltins(builtins map[string]*Builtin) *Compiler {
-	if len(builtins) == 0 {
-		return c
-	}
-	cpy := make(map[string]*Builtin, len(c.builtins)+len(builtins))
-	for k, v := range c.builtins {
-		cpy[k] = v
-	}
-	for k, v := range builtins {
-		cpy[k] = v
-	}
-	c.builtins = cpy
-	// Build type env for custom functions and wrap existing one.
-	checker := newTypeChecker()
-	c.TypeEnv = checker.checkLanguageBuiltins(c.TypeEnv, builtins)
+// WithCapabilities sets capabilities to enable during compilation. Capabilities allow the caller
+// to specify the set of built-in functions available to the policy. In the future, capabilities
+// may be able to restrict access to other language features. Capabilities allow callers to check
+// if policies are compatible with a particular version of OPA. If policies are a compiled for a
+// specific version of OPA, there is no guarantee that _this_ version of OPA can evaluate them
+// successfully.
+func (c *Compiler) WithCapabilities(capabilities *Capabilities) *Compiler {
+	c.capabilities = capabilities
 	return c
 }
 
-// WithUnsafeBuiltins will add all built-ins in the map to the "blacklist".
+// WithBuiltins is deprecated. Use WithCapabilities instead.
+func (c *Compiler) WithBuiltins(builtins map[string]*Builtin) *Compiler {
+	c.customBuiltins = make(map[string]*Builtin)
+	for k, v := range builtins {
+		c.customBuiltins[k] = v
+	}
+	return c
+}
+
+// WithUnsafeBuiltins is deprecated. Use WithCapabilities instead.
 func (c *Compiler) WithUnsafeBuiltins(unsafeBuiltins map[string]struct{}) *Compiler {
 	for name := range unsafeBuiltins {
 		c.unsafeBuiltinsMap[name] = struct{}{}
@@ -329,6 +327,7 @@ func (c *Compiler) WithUnsafeBuiltins(unsafeBuiltins map[string]struct{}) *Compi
 
 // QueryCompiler returns a new QueryCompiler object.
 func (c *Compiler) QueryCompiler() QueryCompiler {
+	c.init()
 	return newQueryCompiler(c)
 }
 
@@ -337,6 +336,8 @@ func (c *Compiler) QueryCompiler() QueryCompiler {
 // compiler. If the compilation process fails for any reason, the compiler will
 // contain a slice of errors.
 func (c *Compiler) Compile(modules map[string]*Module) {
+
+	c.init()
 
 	c.Modules = make(map[string]*Module, len(modules))
 
@@ -874,6 +875,7 @@ func (c *Compiler) runStageAfter(metricName string, s CompilerStage) *Error {
 }
 
 func (c *Compiler) compile() {
+
 	defer func() {
 		if r := recover(); r != nil && r != errLimitReached {
 			panic(r)
@@ -892,6 +894,31 @@ func (c *Compiler) compile() {
 			}
 		}
 	}
+}
+
+func (c *Compiler) init() {
+
+	if c.initialized {
+		return
+	}
+
+	if c.capabilities == nil {
+		c.capabilities = CapabilitiesForThisVersion()
+	}
+
+	c.builtins = make(map[string]*Builtin, len(c.capabilities.Builtins)+len(c.customBuiltins))
+
+	for _, bi := range c.capabilities.Builtins {
+		c.builtins[bi.Name] = bi
+	}
+
+	for name, bi := range c.customBuiltins {
+		c.builtins[name] = bi
+	}
+
+	tc := newTypeChecker()
+	c.TypeEnv = tc.checkLanguageBuiltins(nil, c.builtins)
+	c.initialized = true
 }
 
 func (c *Compiler) err(err *Error) {
@@ -1150,7 +1177,7 @@ func (c *Compiler) rewriteLocalVars() {
 				}
 
 				switch v := term.Value.(type) {
-				case Object:
+				case *object:
 					// Make a copy of the object because the keys may be mutated.
 					cpy, _ := v.Map(func(k, v *Term) (*Term, *Term, error) {
 						if vark, ok := k.Value.(Var); ok {
@@ -1225,7 +1252,7 @@ func (vis *ruleArgLocalRewriter) Visit(x interface{}) Visitor {
 		}
 		t.Value = gv
 		return nil
-	case Object:
+	case *object:
 		if cpy, err := v.Map(func(k, v *Term) (*Term, *Term, error) {
 			vcpy := v.Copy()
 			Walk(vis, vcpy)
@@ -1528,7 +1555,7 @@ func (ci *ComprehensionIndex) String() string {
 	if ci == nil {
 		return ""
 	}
-	return fmt.Sprintf("<keys: %v>", Array(ci.Keys))
+	return fmt.Sprintf("<keys: %v>", NewArray(ci.Keys...))
 }
 
 func buildComprehensionIndices(arity func(Ref) int, candidates VarSet, node interface{}, result map[*Term]*ComprehensionIndex) (n uint64) {
@@ -2566,7 +2593,7 @@ func resolveRef(globals map[Var]Ref, ignore *declaredVarStack, ref Ref) Ref {
 			} else {
 				r = append(r, x)
 			}
-		case Ref, Array, Object, Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
+		case Ref, *Array, Object, Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
 			r = append(r, resolveRefsInTerm(globals, ignore, x))
 		default:
 			r = append(r, x)
@@ -2594,10 +2621,10 @@ func resolveRefsInRule(globals map[Var]Ref, rule *Rule) error {
 			vars.Add(x)
 
 		// Object keys cannot be pattern matched so only walk values.
-		case Object:
-			for _, k := range x.Keys() {
-				vis.Walk(x.Get(k))
-			}
+		case *object:
+			x.Foreach(func(k, v *Term) {
+				vis.Walk(v)
+			})
 
 		// Skip terms that could contain vars that cannot be pattern matched.
 		case Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
@@ -2682,7 +2709,7 @@ func resolveRefsInTerm(globals map[Var]Ref, ignore *declaredVarStack, term *Term
 		cpy := *term
 		cpy.Value = fqn
 		return &cpy
-	case Object:
+	case *object:
 		cpy := *term
 		cpy.Value, _ = v.Map(func(k, v *Term) (*Term, *Term, error) {
 			k = resolveRefsInTerm(globals, ignore, k)
@@ -2690,9 +2717,9 @@ func resolveRefsInTerm(globals map[Var]Ref, ignore *declaredVarStack, term *Term
 			return k, v, nil
 		})
 		return &cpy
-	case Array:
+	case *Array:
 		cpy := *term
-		cpy.Value = Array(resolveRefsInTermSlice(globals, ignore, v))
+		cpy.Value = NewArray(resolveRefsInTermArray(globals, ignore, v)...)
 		return &cpy
 	case Call:
 		cpy := *term
@@ -2736,6 +2763,14 @@ func resolveRefsInTerm(globals map[Var]Ref, ignore *declaredVarStack, term *Term
 	default:
 		return term
 	}
+}
+
+func resolveRefsInTermArray(globals map[Var]Ref, ignore *declaredVarStack, terms *Array) []*Term {
+	cpy := make([]*Term, terms.Len())
+	for i := 0; i < terms.Len(); i++ {
+		cpy[i] = resolveRefsInTerm(globals, ignore, terms.Elem(i))
+	}
+	return cpy
 }
 
 func resolveRefsInTermSlice(globals map[Var]Ref, ignore *declaredVarStack, terms []*Term) []*Term {
@@ -2948,19 +2983,20 @@ func rewriteDynamicsOne(original *Expr, f *equalityFactory, term *Term, result B
 		generated.With = original.With
 		result.Append(generated)
 		return result, result[len(result)-1].Operand(0)
-	case Array:
-		for i := 0; i < len(v); i++ {
-			result, v[i] = rewriteDynamicsOne(original, f, v[i], result)
+	case *Array:
+		for i := 0; i < v.Len(); i++ {
+			var t *Term
+			result, t = rewriteDynamicsOne(original, f, v.Elem(i), result)
+			v.set(i, t)
 		}
 		return result, term
-	case Object:
+	case *object:
 		cpy := NewObject()
-		for _, key := range v.Keys() {
-			value := v.Get(key)
+		v.Foreach(func(key, value *Term) {
 			result, key = rewriteDynamicsOne(original, f, key, result)
 			result, value = rewriteDynamicsOne(original, f, value, result)
 			cpy.Insert(key, value)
-		}
+		})
 		return result, NewTerm(cpy).SetLocation(term.Location)
 	case Set:
 		cpy := NewSet()
@@ -3071,9 +3107,9 @@ func expandExprTerm(gen *localVarGenerator, term *Term) (support []*Expr, output
 		support = append(support, expr)
 	case Ref:
 		support = expandExprRef(gen, v)
-	case Array:
-		support = expandExprTermSlice(gen, v)
-	case Object:
+	case *Array:
+		support = expandExprTermArray(gen, v)
+	case *object:
 		cpy, _ := v.Map(func(k, v *Term) (*Term, *Term, error) {
 			extras1, expandedKey := expandExprTerm(gen, k)
 			extras2, expandedValue := expandExprTerm(gen, v)
@@ -3137,11 +3173,20 @@ func expandExprRef(gen *localVarGenerator, v []*Term) (support []*Expr) {
 	// first item in the slice.
 	var subject = v[0]
 	switch subject.Value.(type) {
-	case Array, Object, Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
+	case *Array, Object, Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
 		f := newEqualityFactory(gen)
 		assignToLocal := f.Generate(subject)
 		support = append(support, assignToLocal)
 		v[0] = assignToLocal.Operand(0)
+	}
+	return
+}
+
+func expandExprTermArray(gen *localVarGenerator, arr *Array) (support []*Expr) {
+	for i := 0; i < arr.Len(); i++ {
+		extras, v := expandExprTerm(gen, arr.Elem(i))
+		arr.set(i, v)
+		support = append(support, extras...)
 	}
 	return
 }
@@ -3392,9 +3437,9 @@ func rewriteDeclaredAssignment(g *localVarGenerator, stack *localDeclaredVars, e
 				t.Value = gv
 			}
 			return true
-		case Array:
+		case *Array:
 			return false
-		case Object:
+		case *object:
 			v.Foreach(func(_, v *Term) {
 				WalkTerms(v, vis)
 			})
@@ -3442,7 +3487,7 @@ func rewriteDeclaredVarsInTerm(g *localVarGenerator, stack *localDeclaredVars, t
 			return true, errs
 		}
 		return false, errs
-	case Object:
+	case *object:
 		cpy, _ := v.Map(func(k, v *Term) (*Term, *Term, error) {
 			kcpy := k.Copy()
 			errs = rewriteDeclaredVarsInTermRecursive(g, stack, kcpy, errs)

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
@@ -24,6 +25,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/types"
 	"github.com/open-policy-agent/opa/util"
 )
@@ -80,20 +82,22 @@ type preparedQuery struct {
 // EvalContext defines the set of options allowed to be set at evaluation
 // time. Any other options will need to be set on a new Rego object.
 type EvalContext struct {
-	hasInput         bool
-	rawInput         *interface{}
-	parsedInput      ast.Value
-	metrics          metrics.Metrics
-	txn              storage.Transaction
-	instrument       bool
-	instrumentation  *topdown.Instrumentation
-	partialNamespace string
-	queryTracers     []topdown.QueryTracer
-	compiledQuery    compiledQuery
-	unknowns         []string
-	disableInlining  []ast.Ref
-	parsedUnknowns   []*ast.Term
-	indexing         bool
+	hasInput               bool
+	time                   time.Time
+	rawInput               *interface{}
+	parsedInput            ast.Value
+	metrics                metrics.Metrics
+	txn                    storage.Transaction
+	instrument             bool
+	instrumentation        *topdown.Instrumentation
+	partialNamespace       string
+	queryTracers           []topdown.QueryTracer
+	compiledQuery          compiledQuery
+	unknowns               []string
+	disableInlining        []ast.Ref
+	parsedUnknowns         []*ast.Term
+	indexing               bool
+	interQueryBuiltinCache cache.InterQueryCache
 }
 
 // EvalOption defines a function to set an option on an EvalConfig
@@ -193,6 +197,22 @@ func EvalParsedUnknowns(unknowns []*ast.Term) EvalOption {
 func EvalRuleIndexing(enabled bool) EvalOption {
 	return func(e *EvalContext) {
 		e.indexing = enabled
+	}
+}
+
+// EvalTime sets the wall clock time to use during policy evaluation.
+// time.now_ns() calls will return this value.
+func EvalTime(x time.Time) EvalOption {
+	return func(e *EvalContext) {
+		e.time = x
+	}
+}
+
+// EvalInterQueryBuiltinCache sets the inter-query cache that built-in functions can utilize
+// during evaluation.
+func EvalInterQueryBuiltinCache(c cache.InterQueryCache) EvalOption {
+	return func(e *EvalContext) {
+		e.interQueryBuiltinCache = c
 	}
 }
 
@@ -476,6 +496,7 @@ type Rego struct {
 	termVarID              int
 	dump                   io.Writer
 	runtime                *ast.Term
+	time                   time.Time
 	builtinDecls           map[string]*ast.Builtin
 	builtinFuncs           map[string]*topdown.Builtin
 	unsafeBuiltins         map[string]struct{}
@@ -483,6 +504,7 @@ type Rego struct {
 	bundlePaths            []string
 	bundles                map[string]*bundle.Bundle
 	skipBundleVerification bool
+	interQueryBuiltinCache cache.InterQueryCache
 }
 
 // Function represents a built-in function that is callable in Rego.
@@ -921,6 +943,15 @@ func Runtime(term *ast.Term) func(r *Rego) {
 	}
 }
 
+// Time sets the wall clock time to use during policy evaluation. Prepared queries
+// do not inherit this parameter. Use EvalTime to set the wall clock time when
+// executing a prepared query.
+func Time(x time.Time) func(r *Rego) {
+	return func(r *Rego) {
+		r.time = x
+	}
+}
+
 // PrintTrace is a helper function to write a human-readable version of the
 // trace to the writer w.
 func PrintTrace(w io.Writer, r *Rego) {
@@ -953,6 +984,14 @@ func UnsafeBuiltins(unsafeBuiltins map[string]struct{}) func(r *Rego) {
 func SkipBundleVerification(yes bool) func(r *Rego) {
 	return func(r *Rego) {
 		r.skipBundleVerification = yes
+	}
+}
+
+// InterQueryBuiltinCache sets the inter-query cache that built-in functions can utilize
+// during evaluation.
+func InterQueryBuiltinCache(c cache.InterQueryCache) func(r *Rego) {
+	return func(r *Rego) {
+		r.interQueryBuiltinCache = c
 	}
 }
 
@@ -1025,6 +1064,8 @@ func (r *Rego) Eval(ctx context.Context) (ResultSet, error) {
 		EvalTransaction(r.txn),
 		EvalMetrics(r.metrics),
 		EvalInstrument(r.instrument),
+		EvalTime(r.time),
+		EvalInterQueryBuiltinCache(r.interQueryBuiltinCache),
 	}
 
 	for _, qt := range r.queryTracers {
@@ -1092,6 +1133,7 @@ func (r *Rego) Partial(ctx context.Context) (*PartialQueries, error) {
 		EvalTransaction(r.txn),
 		EvalMetrics(r.metrics),
 		EvalInstrument(r.instrument),
+		EvalInterQueryBuiltinCache(r.interQueryBuiltinCache),
 	}
 
 	for _, t := range r.queryTracers {
@@ -1650,7 +1692,12 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithMetrics(ectx.metrics).
 		WithInstrumentation(ectx.instrumentation).
 		WithRuntime(r.runtime).
-		WithIndexing(ectx.indexing)
+		WithIndexing(ectx.indexing).
+		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache)
+
+	if !ectx.time.IsZero() {
+		q = q.WithTime(ectx.time)
+	}
 
 	for i := range ectx.queryTracers {
 		q = q.WithQueryTracer(ectx.queryTracers[i])
@@ -1838,7 +1885,12 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithIndexing(ectx.indexing).
 		WithPartialNamespace(ectx.partialNamespace).
 		WithSkipPartialNamespace(r.skipPartialNamespace).
-		WithShallowInlining(r.shallowInlining)
+		WithShallowInlining(r.shallowInlining).
+		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache)
+
+	if !ectx.time.IsZero() {
+		q = q.WithTime(ectx.time)
+	}
 
 	for i := range ectx.queryTracers {
 		q = q.WithQueryTracer(ectx.queryTracers[i])

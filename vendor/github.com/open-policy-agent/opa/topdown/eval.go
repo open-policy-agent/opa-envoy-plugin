@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
+	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/topdown/copypropagation"
 )
 
@@ -30,42 +32,45 @@ func (f *queryIDFactory) Next() uint64 {
 }
 
 type eval struct {
-	ctx                context.Context
-	seed               io.Reader
-	queryID            uint64
-	queryIDFact        *queryIDFactory
-	parent             *eval
-	caller             *eval
-	cancel             Cancel
-	query              ast.Body
-	queryCompiler      ast.QueryCompiler
-	index              int
-	indexing           bool
-	bindings           *bindings
-	store              storage.Store
-	baseCache          *baseCache
-	txn                storage.Transaction
-	compiler           *ast.Compiler
-	input              *ast.Term
-	data               *ast.Term
-	targetStack        *refStack
-	tracers            []QueryTracer
-	traceEnabled       bool
-	plugTraceVars      bool
-	instr              *Instrumentation
-	builtins           map[string]*Builtin
-	builtinCache       builtins.Cache
-	virtualCache       *virtualCache
-	comprehensionCache *comprehensionCache
-	saveSet            *saveSet
-	saveStack          *saveStack
-	saveSupport        *saveSupport
-	saveNamespace      *ast.Term
-	skipSaveNamespace  bool
-	inliningControl    *inliningControl
-	genvarprefix       string
-	genvarid           int
-	runtime            *ast.Term
+	ctx                    context.Context
+	metrics                metrics.Metrics
+	seed                   io.Reader
+	time                   *ast.Term
+	queryID                uint64
+	queryIDFact            *queryIDFactory
+	parent                 *eval
+	caller                 *eval
+	cancel                 Cancel
+	query                  ast.Body
+	queryCompiler          ast.QueryCompiler
+	index                  int
+	indexing               bool
+	bindings               *bindings
+	store                  storage.Store
+	baseCache              *baseCache
+	txn                    storage.Transaction
+	compiler               *ast.Compiler
+	input                  *ast.Term
+	data                   *ast.Term
+	targetStack            *refStack
+	tracers                []QueryTracer
+	traceEnabled           bool
+	plugTraceVars          bool
+	instr                  *Instrumentation
+	builtins               map[string]*Builtin
+	builtinCache           builtins.Cache
+	virtualCache           *virtualCache
+	comprehensionCache     *comprehensionCache
+	interQueryBuiltinCache cache.InterQueryCache
+	saveSet                *saveSet
+	saveStack              *saveStack
+	saveSupport            *saveSupport
+	saveNamespace          *ast.Term
+	skipSaveNamespace      bool
+	inliningControl        *inliningControl
+	genvarprefix           string
+	genvarid               int
+	runtime                *ast.Term
 }
 
 func (e *eval) Run(iter evalIterator) error {
@@ -566,19 +571,24 @@ func (e *eval) evalNotPartialSupport(negationID uint64, expr *ast.Expr, unknowns
 	}
 
 	// Save expression that refers to support rule set.
-	expr = expr.Copy()
+
+	terms := expr.Terms
+	expr.Terms = nil // Prevent unnecessary copying the terms.
+	cpy := expr.Copy()
+	expr.Terms = terms
+
 	if len(args) > 0 {
 		terms := make([]*ast.Term, len(args)+1)
 		terms[0] = term
 		for i := 0; i < len(args); i++ {
 			terms[i+1] = args[i]
 		}
-		expr.Terms = terms
+		cpy.Terms = terms
 	} else {
-		expr.Terms = term
+		cpy.Terms = term
 	}
 
-	return e.saveInlinedNegatedExprs([]*ast.Expr{expr}, func() error {
+	return e.saveInlinedNegatedExprs([]*ast.Expr{cpy}, func() error {
 		return e.next(iter)
 	})
 }
@@ -611,16 +621,19 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 	}
 
 	bctx := BuiltinContext{
-		Context:      e.ctx,
-		Seed:         e.seed,
-		Cancel:       e.cancel,
-		Runtime:      e.runtime,
-		Cache:        e.builtinCache,
-		Location:     e.query[e.index].Location,
-		QueryTracers: e.tracers,
-		TraceEnabled: e.traceEnabled,
-		QueryID:      e.queryID,
-		ParentID:     parentID,
+		Context:                e.ctx,
+		Metrics:                e.metrics,
+		Seed:                   e.seed,
+		Time:                   e.time,
+		Cancel:                 e.cancel,
+		Runtime:                e.runtime,
+		Cache:                  e.builtinCache,
+		InterQueryBuiltinCache: e.interQueryBuiltinCache,
+		Location:               e.query[e.index].Location,
+		QueryTracers:           e.tracers,
+		TraceEnabled:           e.traceEnabled,
+		QueryID:                e.queryID,
+		ParentID:               parentID,
 	}
 
 	eval := evalBuiltin{
@@ -663,11 +676,11 @@ func (e *eval) biunify(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) err
 		case ast.Var, ast.String, ast.Ref:
 			return e.biunifyValues(a, b, b1, b2, iter)
 		}
-	case ast.Array:
+	case *ast.Array:
 		switch vB := b.Value.(type) {
 		case ast.Var, ast.Ref, *ast.ArrayComprehension:
 			return e.biunifyValues(a, b, b1, b2, iter)
-		case ast.Array:
+		case *ast.Array:
 			return e.biunifyArrays(vA, vB, b1, b2, iter)
 		}
 	case ast.Object:
@@ -683,18 +696,18 @@ func (e *eval) biunify(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) err
 	return nil
 }
 
-func (e *eval) biunifyArrays(a, b ast.Array, b1, b2 *bindings, iter unifyIterator) error {
-	if len(a) != len(b) {
+func (e *eval) biunifyArrays(a, b *ast.Array, b1, b2 *bindings, iter unifyIterator) error {
+	if a.Len() != b.Len() {
 		return nil
 	}
 	return e.biunifyArraysRec(a, b, b1, b2, iter, 0)
 }
 
-func (e *eval) biunifyArraysRec(a, b ast.Array, b1, b2 *bindings, iter unifyIterator, idx int) error {
-	if idx == len(a) {
+func (e *eval) biunifyArraysRec(a, b *ast.Array, b1, b2 *bindings, iter unifyIterator, idx int) error {
+	if idx == a.Len() {
 		return iter()
 	}
-	return e.biunify(a[idx], b[idx], b1, b2, func() error {
+	return e.biunify(a.Elem(idx), b.Elem(idx), b1, b2, func() error {
 		return e.biunifyArraysRec(a, b, b1, b2, iter, idx+1)
 	})
 }
@@ -715,18 +728,19 @@ func (e *eval) biunifyObjects(a, b ast.Object, b1, b2 *bindings, iter unifyItera
 		b = plugKeys(b, b2)
 	}
 
-	return e.biunifyObjectsRec(a, b, b1, b2, iter, a.Keys(), 0)
+	return e.biunifyObjectsRec(a, b, b1, b2, iter, a, 0)
 }
 
-func (e *eval) biunifyObjectsRec(a, b ast.Object, b1, b2 *bindings, iter unifyIterator, keys []*ast.Term, idx int) error {
-	if idx == len(keys) {
+func (e *eval) biunifyObjectsRec(a, b ast.Object, b1, b2 *bindings, iter unifyIterator, keys ast.Object, idx int) error {
+	if idx == keys.Len() {
 		return iter()
 	}
-	v2 := b.Get(keys[idx])
+	key, _ := keys.Elem(idx)
+	v2 := b.Get(key)
 	if v2 == nil {
 		return nil
 	}
-	return e.biunify(a.Get(keys[idx]), v2, b1, b2, func() error {
+	return e.biunify(a.Get(key), v2, b1, b2, func() error {
 		return e.biunifyObjectsRec(a, b, b1, b2, iter, keys, idx+1)
 	})
 }
@@ -939,7 +953,7 @@ func (e *eval) buildComprehensionCacheArray(x *ast.ArrayComprehension, keys []*a
 		head := child.bindings.Plug(x.Term)
 		cached := node.Get(values)
 		if cached != nil {
-			cached.Value = append(cached.Value.(ast.Array), head)
+			cached.Value = cached.Value.(*ast.Array).Append(head)
 		} else {
 			node.Put(values, ast.ArrayTerm(head))
 		}
@@ -1038,10 +1052,10 @@ func (e *eval) biunifyComprehensionPartial(a, b *ast.Term, b1, b2 *bindings, swa
 }
 
 func (e *eval) biunifyComprehensionArray(x *ast.ArrayComprehension, b *ast.Term, b1, b2 *bindings, iter unifyIterator) error {
-	result := ast.Array{}
+	result := ast.NewArray()
 	child := e.closure(x.Body)
 	err := child.Run(func(child *eval) error {
-		result = append(result, child.bindings.Plug(x.Term))
+		result = result.Append(child.bindings.Plug(x.Term))
 		return nil
 	})
 	if err != nil {
@@ -1488,7 +1502,7 @@ func (e evalFunc) evalOneRule(iter unifyIterator, rule *ast.Rule, prev *ast.Term
 
 	child := e.e.child(rule.Body)
 
-	args := make(ast.Array, len(e.terms)-1)
+	args := make([]*ast.Term, len(e.terms)-1)
 
 	for i := range rule.Head.Args {
 		args[i] = rule.Head.Args[i]
@@ -1502,9 +1516,18 @@ func (e evalFunc) evalOneRule(iter unifyIterator, rule *ast.Rule, prev *ast.Term
 
 	child.traceEnter(rule)
 
-	err := child.biunifyArrays(e.terms[1:], args, e.e.bindings, child.bindings, func() error {
+	err := child.biunifyArrays(ast.NewArray(e.terms[1:]...), ast.NewArray(args...), e.e.bindings, child.bindings, func() error {
 		return child.eval(func(child *eval) error {
 			child.traceExit(rule)
+
+			// Partial evaluation must save an expression that tests the output value if the output value
+			// was not captured to handle the case where the output value may be `false`.
+			if len(rule.Head.Args) == len(e.terms)-1 && e.e.saveSet.Contains(rule.Head.Value, child.bindings) {
+				err := e.e.saveExpr(ast.NewExpr(rule.Head.Value), child.bindings, iter)
+				child.traceRedo(rule)
+				return err
+			}
+
 			result = child.bindings.Plug(rule.Head.Value)
 
 			if len(rule.Head.Args) == len(e.terms)-1 {
@@ -1634,8 +1657,8 @@ func (e evalTree) enumerate(iter unifyIterator) error {
 
 	if doc != nil {
 		switch doc := doc.(type) {
-		case ast.Array:
-			for i := range doc {
+		case *ast.Array:
+			for i := 0; i < doc.Len(); i++ {
 				k := ast.IntNumberTerm(i)
 				err := e.e.biunify(k, e.ref[e.pos], e.bindings, e.bindings, func() error {
 					return e.next(iter, k)
@@ -2400,8 +2423,8 @@ func (e evalTerm) next(iter unifyIterator, plugged *ast.Term) error {
 func (e evalTerm) enumerate(iter unifyIterator) error {
 
 	switch v := e.term.Value.(type) {
-	case ast.Array:
-		for i := range v {
+	case *ast.Array:
+		for i := 0; i < v.Len(); i++ {
 			k := ast.IntNumberTerm(i)
 			err := e.e.biunify(k, e.ref[e.pos], e.bindings, e.bindings, func() error {
 				return e.next(iter, k)
@@ -2468,7 +2491,7 @@ func (e evalTerm) get(plugged *ast.Term) (*ast.Term, *bindings) {
 				return t, b
 			}
 		}
-	case ast.Array:
+	case *ast.Array:
 		term := v.Get(plugged)
 		if term != nil {
 			return e.termbindings.apply(term)
