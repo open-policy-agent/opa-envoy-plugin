@@ -2,7 +2,7 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-FROM gcr.io/distroless/base:nonroot
+FROM gcr.io/distroless/static:nonroot
 
 MAINTAINER Ashutosh Narkar <anarkar4387@gmail.com>
 
