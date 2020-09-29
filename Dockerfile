@@ -2,9 +2,9 @@
 # Use of this source code is governed by an Apache2
 # license that can be found in the LICENSE file.
 
-FROM gcr.io/distroless/base
+FROM gcr.io/distroless/base:nonroot
 
-MAINTAINER Ashutosh Narkar  <anarkar4387@gmail.com>
+MAINTAINER Ashutosh Narkar <anarkar4387@gmail.com>
 
 WORKDIR /app
 
