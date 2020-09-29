@@ -42,7 +42,7 @@ GO15VENDOREXPERIMENT := 1
 export GO15VENDOREXPERIMENT
 
 .PHONY: all build build-darwin build-linux build-windows clean check check-fmt check-vet check-lint \
-    deps deploy-travis generate image image-quick push push-latest tag-latest \
+    deploy-travis generate image image-quick push push-latest tag-latest \
     test test-cluster test-e2e update-opa update-istio-quickstart-version version
 
 ######################################################
@@ -51,13 +51,10 @@ export GO15VENDOREXPERIMENT
 #
 ######################################################
 
-all: deps build test check
+all: build test check
 
 version:
 	@echo $(VERSION)
-
-deps:
-	@./build/install-deps.sh
 
 generate:
 	$(GO) generate ./...

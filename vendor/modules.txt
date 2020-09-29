@@ -143,6 +143,9 @@ github.com/spf13/cobra
 github.com/spf13/pflag
 # github.com/yashtewari/glob-intersection v0.0.0-20180916065949-5c77d914dd0b
 github.com/yashtewari/glob-intersection
+# golang.org/x/lint v0.0.0-20190313153728-d0100b6bd8b3
+golang.org/x/lint
+golang.org/x/lint/golint
 # golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
 golang.org/x/net/context
 golang.org/x/net/http/httpguts
@@ -159,6 +162,18 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+# golang.org/x/tools v0.0.0-20190920225731-5eefd052ad72
+golang.org/x/tools/cmd/goimports
+golang.org/x/tools/go/ast/astutil
+golang.org/x/tools/go/gcexportdata
+golang.org/x/tools/go/internal/gcimporter
+golang.org/x/tools/go/internal/packagesdriver
+golang.org/x/tools/go/packages
+golang.org/x/tools/internal/fastwalk
+golang.org/x/tools/internal/gopathwalk
+golang.org/x/tools/internal/imports
+golang.org/x/tools/internal/module
+golang.org/x/tools/internal/semver
 # google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/status

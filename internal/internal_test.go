@@ -1062,7 +1062,7 @@ func TestGetResponseHttpStatus(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	input["http_status"] = json.Number(301)
+	input["http_status"] = json.Number("1")
 	result, err = getResponseHTTPStatus(input)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
