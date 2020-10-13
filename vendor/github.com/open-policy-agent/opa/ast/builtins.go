@@ -130,11 +130,13 @@ var DefaultBuiltins = [...]*Builtin{
 	JSONUnmarshal,
 	Base64Encode,
 	Base64Decode,
+	Base64IsValid,
 	Base64UrlEncode,
 	Base64UrlDecode,
 	URLQueryDecode,
 	URLQueryEncode,
 	URLQueryEncodeObject,
+	URLQueryDecodeObject,
 	YAMLMarshal,
 	YAMLUnmarshal,
 
@@ -218,6 +220,7 @@ var DefaultBuiltins = [...]*Builtin{
 	NetCIDRContains,
 	NetCIDRContainsMatches,
 	NetCIDRExpand,
+	NetCIDRMerge,
 
 	// Glob
 	GlobMatch,
@@ -1230,6 +1233,15 @@ var Base64Decode = &Builtin{
 	),
 }
 
+// Base64IsValid verifies the input string is base64 encoded.
+var Base64IsValid = &Builtin{
+	Name: "base64.is_valid",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.B,
+	),
+}
+
 // Base64UrlEncode serializes the input string into base64url encoding.
 var Base64UrlEncode = &Builtin{
 	Name: "base64url.encode",
@@ -1280,6 +1292,17 @@ var URLQueryEncodeObject = &Builtin{
 						types.NewArray(nil, types.S),
 						types.NewSet(types.S))))),
 		types.S,
+	),
+}
+
+// URLQueryDecodeObject decodes the given URL query string into an object.
+var URLQueryDecodeObject = &Builtin{
+	Name: "urlquery.decode_object",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewObject(nil, types.NewDynamicProperty(
+			types.S,
+			types.NewArray(nil, types.S))),
 	),
 }
 
@@ -1977,6 +2000,20 @@ var NetCIDRContainsMatches = &Builtin{
 		types.NewSet(types.NewArray([]types.Type{types.A, types.A}, nil)),
 	),
 }
+
+// NetCIDRMerge merges IP addresses and subnets into the smallest possible list of CIDRs.
+var NetCIDRMerge = &Builtin{
+	Name: "net.cidr_merge",
+	Decl: types.NewFunction(
+		types.Args(netCidrMergeOperandType),
+		types.NewSet(types.S),
+	),
+}
+
+var netCidrMergeOperandType = types.NewAny(
+	types.NewArray(nil, types.NewAny(types.S)),
+	types.NewSet(types.S),
+)
 
 var netCidrContainsMatchesOperandType = types.NewAny(
 	types.S,
