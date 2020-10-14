@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
-	github.com/open-policy-agent/opa v0.23.2
+	github.com/open-policy-agent/opa v0.24.0
 	github.com/peterh/liner v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
@@ -16,8 +16,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5 // indirect
 	golang.org/x/lint v0.0.0-20190313153728-d0100b6bd8b3
-	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
-	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/net v0.0.0-20200927032502-5d4f70055728
 	golang.org/x/tools v0.0.0-20190920225731-5eefd052ad72
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514
 	google.golang.org/grpc v1.23.0

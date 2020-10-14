@@ -1102,8 +1102,6 @@ func (c *Compiler) rewriteLocalVars() {
 
 		WalkRules(mod, func(rule *Rule) bool {
 
-			var errs Errors
-
 			// Rewrite assignments contained in head of rule. Assignments can
 			// occur in rule head if they're inside a comprehension. Note,
 			// assigned vars in comprehensions in the head will be rewritten
@@ -1114,29 +1112,14 @@ func (c *Compiler) rewriteLocalVars() {
 			// This behaviour is consistent scoping inside the body. For example:
 			//
 			// p = xs { x := 2; xs = [x | x := 1] } becomes p = xs { __local0__ = 2; xs = [__local1__ | __local1__ = 1] }
-			WalkTerms(rule.Head, func(term *Term) bool {
-				stop := false
-				stack := newLocalDeclaredVars()
-				switch v := term.Value.(type) {
-				case *ArrayComprehension:
-					errs = rewriteDeclaredVarsInArrayComprehension(gen, stack, v, errs)
-					stop = true
-				case *SetComprehension:
-					errs = rewriteDeclaredVarsInSetComprehension(gen, stack, v, errs)
-					stop = true
-				case *ObjectComprehension:
-					errs = rewriteDeclaredVarsInObjectComprehension(gen, stack, v, errs)
-					stop = true
-				}
+			nestedXform := &rewriteNestedHeadVarLocalTransform{
+				gen:           gen,
+				RewrittenVars: c.RewrittenVars,
+			}
 
-				for k, v := range stack.rewritten {
-					c.RewrittenVars[k] = v
-				}
+			NewGenericVisitor(nestedXform.Visit).Walk(rule.Head)
 
-				return stop
-			})
-
-			for _, err := range errs {
+			for _, err := range nestedXform.errs {
 				c.err(err)
 			}
 
@@ -1169,49 +1152,89 @@ func (c *Compiler) rewriteLocalVars() {
 			rule.Body = body
 
 			// Rewrite vars in head that refer to locally declared vars in the body.
-			vis := NewGenericVisitor(func(x interface{}) bool {
+			localXform := rewriteHeadVarLocalTransform{declared: declared}
 
-				term, ok := x.(*Term)
-				if !ok {
-					return false
-				}
-
-				switch v := term.Value.(type) {
-				case *object:
-					// Make a copy of the object because the keys may be mutated.
-					cpy, _ := v.Map(func(k, v *Term) (*Term, *Term, error) {
-						if vark, ok := k.Value.(Var); ok {
-							if gv, ok := declared[vark]; ok {
-								k = k.Copy()
-								k.Value = gv
-							}
-						}
-						return k, v, nil
-					})
-					term.Value = cpy
-				case Var:
-					if gv, ok := declared[v]; ok {
-						term.Value = gv
-						return true
-					}
-				}
-
-				return false
-			})
-
-			vis.Walk(rule.Head.Args)
+			for i := range rule.Head.Args {
+				rule.Head.Args[i], _ = transformTerm(localXform, rule.Head.Args[i])
+			}
 
 			if rule.Head.Key != nil {
-				vis.Walk(rule.Head.Key)
+				rule.Head.Key, _ = transformTerm(localXform, rule.Head.Key)
 			}
 
 			if rule.Head.Value != nil {
-				vis.Walk(rule.Head.Value)
+				rule.Head.Value, _ = transformTerm(localXform, rule.Head.Value)
 			}
 
 			return false
 		})
 	}
+}
+
+type rewriteNestedHeadVarLocalTransform struct {
+	gen           *localVarGenerator
+	errs          Errors
+	RewrittenVars map[Var]Var
+}
+
+func (xform *rewriteNestedHeadVarLocalTransform) Visit(x interface{}) bool {
+
+	if term, ok := x.(*Term); ok {
+
+		stop := false
+		stack := newLocalDeclaredVars()
+
+		switch x := term.Value.(type) {
+		case *object:
+			cpy, _ := x.Map(func(k, v *Term) (*Term, *Term, error) {
+				kcpy := k.Copy()
+				NewGenericVisitor(xform.Visit).Walk(kcpy)
+				vcpy := v.Copy()
+				NewGenericVisitor(xform.Visit).Walk(vcpy)
+				return kcpy, vcpy, nil
+			})
+			term.Value = cpy
+			stop = true
+		case *set:
+			cpy, _ := x.Map(func(v *Term) (*Term, error) {
+				vcpy := v.Copy()
+				NewGenericVisitor(xform.Visit).Walk(vcpy)
+				return vcpy, nil
+			})
+			term.Value = cpy
+			stop = true
+		case *ArrayComprehension:
+			xform.errs = rewriteDeclaredVarsInArrayComprehension(xform.gen, stack, x, xform.errs)
+			stop = true
+		case *SetComprehension:
+			xform.errs = rewriteDeclaredVarsInSetComprehension(xform.gen, stack, x, xform.errs)
+			stop = true
+		case *ObjectComprehension:
+			xform.errs = rewriteDeclaredVarsInObjectComprehension(xform.gen, stack, x, xform.errs)
+			stop = true
+		}
+
+		for k, v := range stack.rewritten {
+			xform.RewrittenVars[k] = v
+		}
+
+		return stop
+	}
+
+	return false
+}
+
+type rewriteHeadVarLocalTransform struct {
+	declared map[Var]Var
+}
+
+func (xform rewriteHeadVarLocalTransform) Transform(x interface{}) (interface{}, error) {
+	if v, ok := x.(Var); ok {
+		if gv, ok := xform.declared[v]; ok {
+			return gv, nil
+		}
+	}
+	return x, nil
 }
 
 func (c *Compiler) rewriteLocalArgVars(gen *localVarGenerator, stack *localDeclaredVars, rule *Rule) {
@@ -2200,7 +2223,7 @@ func reorderBodyForSafety(builtins map[string]*Builtin, arity func(Ref) int, glo
 
 			if len(unsafe[e]) == 0 {
 				delete(unsafe, e)
-				reordered = append(reordered, e)
+				reordered.Append(e)
 			}
 		}
 
@@ -2217,24 +2240,20 @@ func reorderBodyForSafety(builtins map[string]*Builtin, arity func(Ref) int, glo
 		if i > 0 {
 			g.Update(reordered[i-1].Vars(SafetyCheckVisitorParams))
 		}
-		vis := &bodySafetyVisitor{
+		xform := &bodySafetyTransformer{
 			builtins: builtins,
 			arity:    arity,
 			current:  e,
 			globals:  g,
 			unsafe:   unsafe,
 		}
-		NewGenericVisitor(vis.Visit).Walk(e)
+		NewGenericVisitor(xform.Visit).Walk(e)
 	}
-
-	// Need to reset expression indices as re-ordering may have
-	// changed them.
-	setExprIndices(reordered)
 
 	return reordered, unsafe
 }
 
-type bodySafetyVisitor struct {
+type bodySafetyTransformer struct {
 	builtins map[string]*Builtin
 	arity    func(Ref) int
 	current  *Expr
@@ -2242,70 +2261,70 @@ type bodySafetyVisitor struct {
 	unsafe   unsafeVars
 }
 
-func (vis *bodySafetyVisitor) Visit(x interface{}) bool {
-	switch x := x.(type) {
-	case *Expr:
-		cpy := *vis
-		cpy.current = x
-
-		switch ts := x.Terms.(type) {
-		case *SomeDecl:
-			NewGenericVisitor(cpy.Visit).Walk(ts)
-		case []*Term:
-			for _, t := range ts {
-				NewGenericVisitor(cpy.Visit).Walk(t)
-			}
-		case *Term:
-			NewGenericVisitor(cpy.Visit).Walk(ts)
+func (xform *bodySafetyTransformer) Visit(x interface{}) bool {
+	if term, ok := x.(*Term); ok {
+		switch x := term.Value.(type) {
+		case *object:
+			cpy, _ := x.Map(func(k, v *Term) (*Term, *Term, error) {
+				kcpy := k.Copy()
+				NewGenericVisitor(xform.Visit).Walk(kcpy)
+				vcpy := v.Copy()
+				NewGenericVisitor(xform.Visit).Walk(vcpy)
+				return kcpy, vcpy, nil
+			})
+			term.Value = cpy
+			return true
+		case *set:
+			cpy, _ := x.Map(func(v *Term) (*Term, error) {
+				vcpy := v.Copy()
+				NewGenericVisitor(xform.Visit).Walk(vcpy)
+				return vcpy, nil
+			})
+			term.Value = cpy
+			return true
+		case *ArrayComprehension:
+			xform.reorderArrayComprehensionSafety(x)
+			return true
+		case *ObjectComprehension:
+			xform.reorderObjectComprehensionSafety(x)
+			return true
+		case *SetComprehension:
+			xform.reorderSetComprehensionSafety(x)
+			return true
 		}
-		for i := range x.With {
-			NewGenericVisitor(cpy.Visit).Walk(x.With[i])
-		}
-		return true
-	case *ArrayComprehension:
-		vis.checkArrayComprehensionSafety(x)
-		return true
-	case *ObjectComprehension:
-		vis.checkObjectComprehensionSafety(x)
-		return true
-	case *SetComprehension:
-		vis.checkSetComprehensionSafety(x)
-		return true
 	}
 	return false
 }
 
-// Check term for safety. This is analogous to the rule head safety check.
-func (vis *bodySafetyVisitor) checkComprehensionSafety(tv VarSet, body Body) Body {
+func (xform *bodySafetyTransformer) reorderComprehensionSafety(tv VarSet, body Body) Body {
 	bv := body.Vars(SafetyCheckVisitorParams)
-	bv.Update(vis.globals)
+	bv.Update(xform.globals)
 	uv := tv.Diff(bv)
 	for v := range uv {
-		vis.unsafe.Add(vis.current, v)
+		xform.unsafe.Add(xform.current, v)
 	}
 
-	// Check body for safety, reordering as necessary.
-	r, u := reorderBodyForSafety(vis.builtins, vis.arity, vis.globals, body)
+	r, u := reorderBodyForSafety(xform.builtins, xform.arity, xform.globals, body)
 	if len(u) == 0 {
 		return r
 	}
 
-	vis.unsafe.Update(u)
+	xform.unsafe.Update(u)
 	return body
 }
 
-func (vis *bodySafetyVisitor) checkArrayComprehensionSafety(ac *ArrayComprehension) {
-	ac.Body = vis.checkComprehensionSafety(ac.Term.Vars(), ac.Body)
+func (xform *bodySafetyTransformer) reorderArrayComprehensionSafety(ac *ArrayComprehension) {
+	ac.Body = xform.reorderComprehensionSafety(ac.Term.Vars(), ac.Body)
 }
 
-func (vis *bodySafetyVisitor) checkObjectComprehensionSafety(oc *ObjectComprehension) {
+func (xform *bodySafetyTransformer) reorderObjectComprehensionSafety(oc *ObjectComprehension) {
 	tv := oc.Key.Vars()
 	tv.Update(oc.Value.Vars())
-	oc.Body = vis.checkComprehensionSafety(tv, oc.Body)
+	oc.Body = xform.reorderComprehensionSafety(tv, oc.Body)
 }
 
-func (vis *bodySafetyVisitor) checkSetComprehensionSafety(sc *SetComprehension) {
-	sc.Body = vis.checkComprehensionSafety(sc.Term.Vars(), sc.Body)
+func (xform *bodySafetyTransformer) reorderSetComprehensionSafety(sc *SetComprehension) {
+	sc.Body = xform.reorderComprehensionSafety(sc.Term.Vars(), sc.Body)
 }
 
 // reorderBodyForClosures returns a copy of the body ordered such that
@@ -2478,11 +2497,19 @@ func outputVarsForTerms(expr *Expr, safe VarSet) VarSet {
 		case *SetComprehension, *ArrayComprehension, *ObjectComprehension:
 			return true
 		case Ref:
-			if safe.Contains(r[0].Value.(Var)) {
-				output.Update(r.OutputVars())
-				return false
+			if v, ok := r[0].Value.(Var); ok {
+				if !safe.Contains(v) {
+					return true
+				}
+			} else {
+				for k := range r[0].Vars() {
+					if !safe.Contains(k) {
+						return true
+					}
+				}
 			}
-			return true
+			output.Update(r.OutputVars())
+			return false
 		}
 		return false
 	})
@@ -3033,6 +3060,13 @@ func rewriteDynamicsComprehensionBody(original *Expr, f *equalityFactory, body B
 }
 
 func rewriteExprTermsInHead(gen *localVarGenerator, rule *Rule) {
+	for i := range rule.Head.Args {
+		support, output := expandExprTerm(gen, rule.Head.Args[i])
+		for j := range support {
+			rule.Body.Append(support[j])
+		}
+		rule.Head.Args[i] = output
+	}
 	if rule.Head.Key != nil {
 		support, output := expandExprTerm(gen, rule.Head.Key)
 		for i := range support {
