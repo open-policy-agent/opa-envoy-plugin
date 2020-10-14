@@ -38,10 +38,6 @@ if [ $? -eq 0 ]; then
   # update vendor
   env GO111MODULE=on go mod vendor
 
-  # reverse changes to golang tools
-  # Issue: https://github.com/golang/go/issues/25922 and https://github.com/golang/go/issues/30515
-  git checkout vendor/golang.org/x/
-
   # add changes
   git add .
 fi 
