@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/open-policy-agent/opa/topdown"
 	"io"
 	"net"
 	"net/url"
@@ -37,6 +36,8 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown"
+	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/util"
 )
 
@@ -104,10 +105,11 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 	plugin := &envoyExtAuthzGrpcServer{
-		manager:             m,
-		cfg:                 *cfg,
-		server:              grpc.NewServer(),
-		preparedQueryDoOnce: new(sync.Once),
+		manager:                m,
+		cfg:                    *cfg,
+		server:                 grpc.NewServer(),
+		preparedQueryDoOnce:    new(sync.Once),
+		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
 	}
 
 	// Register Authorization Server
@@ -136,11 +138,12 @@ type Config struct {
 }
 
 type envoyExtAuthzGrpcServer struct {
-	cfg                 Config
-	server              *grpc.Server
-	manager             *plugins.Manager
-	preparedQuery       *rego.PreparedEvalQuery
-	preparedQueryDoOnce *sync.Once
+	cfg                    Config
+	server                 *grpc.Server
+	manager                *plugins.Manager
+	preparedQuery          *rego.PreparedEvalQuery
+	preparedQueryDoOnce    *sync.Once
+	interQueryBuiltinCache iCache.InterQueryCache
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
@@ -366,6 +369,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, res
 			rego.EvalParsedInput(input),
 			rego.EvalTransaction(txn),
 			rego.EvalMetrics(result.metrics),
+			rego.EvalInterQueryBuiltinCache(p.interQueryBuiltinCache),
 		)
 
 		if err != nil {
