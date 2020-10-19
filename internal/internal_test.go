@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync"
@@ -272,13 +274,14 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == false {
-		t.Fatal("Unexpected events:", customLogger.events)
+	if event.Error != nil || event.Path != "envoy/authz/allow" ||
+		event.Revision != "" || *event.Result == false {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	expected := []string{
@@ -429,7 +432,12 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServerWithIllegalDecision(customLogger, false)
+	module := `
+		package envoy.authz
+
+		default allow = 1
+		`
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
@@ -451,7 +459,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Query != "data.envoy.authz.allow" || event.Revision != "" || event.Result != nil ||
+	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -500,7 +508,7 @@ func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "data.envoy.authz.allow" || *event.Result == true ||
+	if event.Error != nil || event.Path != "envoy/authz/allow" || *event.Result == true ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -569,12 +577,12 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "data.envoy.authz.allow" || *event.Result == true ||
+	if event.Error != nil || event.Path != "envoy/authz/allow" || *event.Result == true ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -603,12 +611,12 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 2 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event = customLogger.events[1]
 
-	if event.Error != nil || event.Path != "data.envoy.authz.allow" || *event.Result == false ||
+	if event.Error != nil || event.Path != "envoy/authz/allow" || *event.Result == false ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -682,6 +690,58 @@ func TestCheckWithLoggerError(t *testing.T) {
 	expectedMsg := "Bad Logger Error"
 	if output.Status.Message != expectedMsg {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, output.Status.Message)
+	}
+}
+
+func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// http server that counts how often it was called, returns that number in JSON
+	count := 0
+	countMutex := sync.Mutex{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		countMutex.Lock()
+		count = count + 1
+		countMutex.Unlock()
+		fmt.Fprintf(w, `{"count": %d}`, count)
+	}))
+	defer ts.Close()
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	moduleFmt := `
+		package envoy.authz
+
+		default allow = false
+		allow {
+			resp := http.send({"url": "%s", "method":"GET",
+			  "force_cache": true, "force_cache_duration_seconds": 10})
+			resp.body.count == 1
+		}
+	`
+	module := fmt.Sprintf(moduleFmt, ts.URL)
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	// second call, should be cached
+	output, err = server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
 	}
 }
 
@@ -1402,28 +1462,29 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 			],
 		}`
 
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+}
+
+func testAuthzServerWithModule(module string, path string, customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 	m, err := getPluginManager(module, customLogger)
 	if err != nil {
 		panic(err)
 	}
 
-	path := "envoy/authz/allow"
-	parsedQuery, err := ast.ParseBody("data." + strings.Replace(path, "/", ".", -1))
+	query := "data." + strings.Replace(path, "/", ".", -1)
+	parsedQuery, err := ast.ParseBody(query)
 	if err != nil {
 		panic(err)
 	}
 
-	s := &envoyExtAuthzGrpcServer{
-		cfg: Config{
-			Addr:        ":50052",
-			Path:        path,
-			DryRun:      dryRun,
-			parsedQuery: parsedQuery,
-		},
-		manager:             m,
-		preparedQueryDoOnce: new(sync.Once),
+	cfg := Config{
+		Addr:        ":0",
+		Path:        path,
+		DryRun:      dryRun,
+		parsedQuery: parsedQuery,
 	}
-	return s
+	s := New(m, &cfg)
+	return s.(*envoyExtAuthzGrpcServer)
 }
 
 func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
@@ -1444,72 +1505,12 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 				"allowed": true,
 				"headers": {"x": "hello", "y": "world"}
 		    }
-		}`
+    }`
 
-	m, err := getPluginManager(module, customLogger)
-	if err != nil {
-		panic(err)
-	}
-
-	query := "data.envoy.authz.allow"
-	parsedQuery, err := ast.ParseBody(query)
-	if err != nil {
-		panic(err)
-	}
-
-	s := &envoyExtAuthzGrpcServer{
-		cfg: Config{
-			Addr:        ":50052",
-			Query:       query,
-			DryRun:      dryRun,
-			parsedQuery: parsedQuery,
-		},
-		manager:             m,
-		preparedQueryDoOnce: new(sync.Once),
-	}
-
-	m.RegisterCompilerTrigger(s.compilerUpdated)
-
-	return s
-}
-
-func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
-
-	module := `
-		package envoy.authz
-
-		default allow = 1
-		`
-
-	m, err := getPluginManager(module, customLogger)
-	if err != nil {
-		panic(err)
-	}
-
-	query := "data.envoy.authz.allow"
-	parsedQuery, err := ast.ParseBody(query)
-	if err != nil {
-		panic(err)
-	}
-
-	s := &envoyExtAuthzGrpcServer{
-		cfg: Config{
-			Addr:        ":50052",
-			Query:       query,
-			DryRun:      dryRun,
-			parsedQuery: parsedQuery,
-		},
-		manager:             m,
-		preparedQueryDoOnce: new(sync.Once),
-	}
-
-	m.RegisterCompilerTrigger(s.compilerUpdated)
-
-	return s
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }
 
 func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
-
 	module := `
 		package envoy.authz
 
@@ -1519,32 +1520,7 @@ func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) 
 			not input.truncated_body
 		}
 		`
-
-	m, err := getPluginManager(module, customLogger)
-	if err != nil {
-		panic(err)
-	}
-
-	path := "data.envoy.authz.allow"
-	parsedQuery, err := ast.ParseBody(path)
-	if err != nil {
-		panic(err)
-	}
-
-	s := &envoyExtAuthzGrpcServer{
-		cfg: Config{
-			Addr:        ":50052",
-			Path:        path,
-			DryRun:      dryRun,
-			parsedQuery: parsedQuery,
-		},
-		manager:             m,
-		preparedQueryDoOnce: new(sync.Once),
-	}
-
-	m.RegisterCompilerTrigger(s.compilerUpdated)
-
-	return s
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }
 
 func createExtReqWithPath(path string) *ext_authz.CheckRequest {
