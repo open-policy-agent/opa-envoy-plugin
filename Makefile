@@ -27,7 +27,7 @@ endif
 
 RELEASE_BUILD_IMAGE := golang:$(GOVERSION)
 
-RELEASE_DIR ?= _release/$(VERSION_OPA)
+RELEASE_DIR ?= _release/$(VERSION)
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -131,7 +131,7 @@ release:
 		-v $(PWD)/$(RELEASE_DIR):/$(RELEASE_DIR) \
 		-v $(PWD):/_src \
 		$(RELEASE_BUILD_IMAGE) \
-		/_src/build/build-release.sh --version=$(VERSION_OPA) --output-dir=/$(RELEASE_DIR) --source-url=/_src
+		/_src/build/build-release.sh --version=$(VERSION) --output-dir=/$(RELEASE_DIR) --source-url=/_src
 
 
 .PHONY: release-build-linux
