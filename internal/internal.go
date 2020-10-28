@@ -17,8 +17,6 @@ import (
 	"sync"
 	"time"
 
-	ctx "golang.org/x/net/context"
-
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_type "github.com/envoyproxy/go-control-plane/envoy/type"
@@ -191,7 +189,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
-func (p *envoyExtAuthzGrpcServer) Check(ctx ctx.Context, req *ext_authz.CheckRequest) (resp *ext_authz.CheckResponse, err error) {
+func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.CheckRequest) (resp *ext_authz.CheckResponse, err error) {
 	start := time.Now()
 
 	result := evalResult{}

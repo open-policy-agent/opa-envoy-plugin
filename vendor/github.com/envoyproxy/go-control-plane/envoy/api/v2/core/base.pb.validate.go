@@ -106,6 +106,173 @@ var _ interface {
 	ErrorName() string
 } = LocalityValidationError{}
 
+// Validate checks the field values on BuildVersion with the rules defined in
+// the proto definition for this message. If any rules are violated, an error
+// is returned.
+func (m *BuildVersion) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	if v, ok := interface{}(m.GetVersion()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return BuildVersionValidationError{
+				field:  "Version",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if v, ok := interface{}(m.GetMetadata()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return BuildVersionValidationError{
+				field:  "Metadata",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	return nil
+}
+
+// BuildVersionValidationError is the validation error returned by
+// BuildVersion.Validate if the designated constraints aren't met.
+type BuildVersionValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e BuildVersionValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e BuildVersionValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e BuildVersionValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e BuildVersionValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e BuildVersionValidationError) ErrorName() string { return "BuildVersionValidationError" }
+
+// Error satisfies the builtin error interface
+func (e BuildVersionValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sBuildVersion.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = BuildVersionValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = BuildVersionValidationError{}
+
+// Validate checks the field values on Extension with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *Extension) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for Name
+
+	// no validation rules for Category
+
+	// no validation rules for TypeDescriptor
+
+	if v, ok := interface{}(m.GetVersion()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return ExtensionValidationError{
+				field:  "Version",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	// no validation rules for Disabled
+
+	return nil
+}
+
+// ExtensionValidationError is the validation error returned by
+// Extension.Validate if the designated constraints aren't met.
+type ExtensionValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ExtensionValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ExtensionValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ExtensionValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ExtensionValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ExtensionValidationError) ErrorName() string { return "ExtensionValidationError" }
+
+// Error satisfies the builtin error interface
+func (e ExtensionValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sExtension.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ExtensionValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ExtensionValidationError{}
+
 // Validate checks the field values on Node with the rules defined in the proto
 // definition for this message. If any rules are violated, an error is returned.
 func (m *Node) Validate() error {
@@ -138,6 +305,57 @@ func (m *Node) Validate() error {
 	}
 
 	// no validation rules for BuildVersion
+
+	// no validation rules for UserAgentName
+
+	for idx, item := range m.GetExtensions() {
+		_, _ = idx, item
+
+		if v, ok := interface{}(item).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return NodeValidationError{
+					field:  fmt.Sprintf("Extensions[%v]", idx),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
+
+	for idx, item := range m.GetListeningAddresses() {
+		_, _ = idx, item
+
+		if v, ok := interface{}(item).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return NodeValidationError{
+					field:  fmt.Sprintf("ListeningAddresses[%v]", idx),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
+
+	switch m.UserAgentVersionType.(type) {
+
+	case *Node_UserAgentVersion:
+		// no validation rules for UserAgentVersion
+
+	case *Node_UserAgentBuildVersion:
+
+		if v, ok := interface{}(m.GetUserAgentBuildVersion()).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return NodeValidationError{
+					field:  "UserAgentBuildVersion",
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
 
 	return nil
 }
@@ -203,7 +421,22 @@ func (m *Metadata) Validate() error {
 		return nil
 	}
 
-	// no validation rules for FilterMetadata
+	for key, val := range m.GetFilterMetadata() {
+		_ = val
+
+		// no validation rules for FilterMetadata[key]
+
+		if v, ok := interface{}(val).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return MetadataValidationError{
+					field:  fmt.Sprintf("FilterMetadata[%v]", key),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
 
 	return nil
 }
@@ -336,6 +569,171 @@ var _ interface {
 	ErrorName() string
 } = RuntimeUInt32ValidationError{}
 
+// Validate checks the field values on RuntimeDouble with the rules defined in
+// the proto definition for this message. If any rules are violated, an error
+// is returned.
+func (m *RuntimeDouble) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	// no validation rules for DefaultValue
+
+	if len(m.GetRuntimeKey()) < 1 {
+		return RuntimeDoubleValidationError{
+			field:  "RuntimeKey",
+			reason: "value length must be at least 1 bytes",
+		}
+	}
+
+	return nil
+}
+
+// RuntimeDoubleValidationError is the validation error returned by
+// RuntimeDouble.Validate if the designated constraints aren't met.
+type RuntimeDoubleValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e RuntimeDoubleValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e RuntimeDoubleValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e RuntimeDoubleValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e RuntimeDoubleValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e RuntimeDoubleValidationError) ErrorName() string { return "RuntimeDoubleValidationError" }
+
+// Error satisfies the builtin error interface
+func (e RuntimeDoubleValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sRuntimeDouble.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = RuntimeDoubleValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = RuntimeDoubleValidationError{}
+
+// Validate checks the field values on RuntimeFeatureFlag with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *RuntimeFeatureFlag) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	if m.GetDefaultValue() == nil {
+		return RuntimeFeatureFlagValidationError{
+			field:  "DefaultValue",
+			reason: "value is required",
+		}
+	}
+
+	if v, ok := interface{}(m.GetDefaultValue()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return RuntimeFeatureFlagValidationError{
+				field:  "DefaultValue",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if len(m.GetRuntimeKey()) < 1 {
+		return RuntimeFeatureFlagValidationError{
+			field:  "RuntimeKey",
+			reason: "value length must be at least 1 bytes",
+		}
+	}
+
+	return nil
+}
+
+// RuntimeFeatureFlagValidationError is the validation error returned by
+// RuntimeFeatureFlag.Validate if the designated constraints aren't met.
+type RuntimeFeatureFlagValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e RuntimeFeatureFlagValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e RuntimeFeatureFlagValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e RuntimeFeatureFlagValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e RuntimeFeatureFlagValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e RuntimeFeatureFlagValidationError) ErrorName() string {
+	return "RuntimeFeatureFlagValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e RuntimeFeatureFlagValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sRuntimeFeatureFlag.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = RuntimeFeatureFlagValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = RuntimeFeatureFlagValidationError{}
+
 // Validate checks the field values on HeaderValue with the rules defined in
 // the proto definition for this message. If any rules are violated, an error
 // is returned.
@@ -351,10 +749,24 @@ func (m *HeaderValue) Validate() error {
 		}
 	}
 
+	if !_HeaderValue_Key_Pattern.MatchString(m.GetKey()) {
+		return HeaderValueValidationError{
+			field:  "Key",
+			reason: "value does not match regex pattern \"^[^\\x00\\n\\r]*$\"",
+		}
+	}
+
 	if len(m.GetValue()) > 16384 {
 		return HeaderValueValidationError{
 			field:  "Value",
 			reason: "value length must be at most 16384 bytes",
+		}
+	}
+
+	if !_HeaderValue_Value_Pattern.MatchString(m.GetValue()) {
+		return HeaderValueValidationError{
+			field:  "Value",
+			reason: "value does not match regex pattern \"^[^\\x00\\n\\r]*$\"",
 		}
 	}
 
@@ -414,6 +826,10 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = HeaderValueValidationError{}
+
+var _HeaderValue_Key_Pattern = regexp.MustCompile("^[^\x00\n\r]*$")
+
+var _HeaderValue_Value_Pattern = regexp.MustCompile("^[^\x00\n\r]*$")
 
 // Validate checks the field values on HeaderValueOption with the rules defined
 // in the proto definition for this message. If any rules are violated, an
@@ -689,6 +1105,91 @@ var _ interface {
 	ErrorName() string
 } = DataSourceValidationError{}
 
+// Validate checks the field values on RetryPolicy with the rules defined in
+// the proto definition for this message. If any rules are violated, an error
+// is returned.
+func (m *RetryPolicy) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	if v, ok := interface{}(m.GetRetryBackOff()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return RetryPolicyValidationError{
+				field:  "RetryBackOff",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if v, ok := interface{}(m.GetNumRetries()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return RetryPolicyValidationError{
+				field:  "NumRetries",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	return nil
+}
+
+// RetryPolicyValidationError is the validation error returned by
+// RetryPolicy.Validate if the designated constraints aren't met.
+type RetryPolicyValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e RetryPolicyValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e RetryPolicyValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e RetryPolicyValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e RetryPolicyValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e RetryPolicyValidationError) ErrorName() string { return "RetryPolicyValidationError" }
+
+// Error satisfies the builtin error interface
+func (e RetryPolicyValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sRetryPolicy.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = RetryPolicyValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = RetryPolicyValidationError{}
+
 // Validate checks the field values on RemoteDataSource with the rules defined
 // in the proto definition for this message. If any rules are violated, an
 // error is returned.
@@ -718,6 +1219,16 @@ func (m *RemoteDataSource) Validate() error {
 		return RemoteDataSourceValidationError{
 			field:  "Sha256",
 			reason: "value length must be at least 1 bytes",
+		}
+	}
+
+	if v, ok := interface{}(m.GetRetryPolicy()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return RemoteDataSourceValidationError{
+				field:  "RetryPolicy",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
 		}
 	}
 
@@ -976,100 +1487,6 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = TransportSocketValidationError{}
-
-// Validate checks the field values on SocketOption with the rules defined in
-// the proto definition for this message. If any rules are violated, an error
-// is returned.
-func (m *SocketOption) Validate() error {
-	if m == nil {
-		return nil
-	}
-
-	// no validation rules for Description
-
-	// no validation rules for Level
-
-	// no validation rules for Name
-
-	if _, ok := SocketOption_SocketState_name[int32(m.GetState())]; !ok {
-		return SocketOptionValidationError{
-			field:  "State",
-			reason: "value must be one of the defined enum values",
-		}
-	}
-
-	switch m.Value.(type) {
-
-	case *SocketOption_IntValue:
-		// no validation rules for IntValue
-
-	case *SocketOption_BufValue:
-		// no validation rules for BufValue
-
-	default:
-		return SocketOptionValidationError{
-			field:  "Value",
-			reason: "value is required",
-		}
-
-	}
-
-	return nil
-}
-
-// SocketOptionValidationError is the validation error returned by
-// SocketOption.Validate if the designated constraints aren't met.
-type SocketOptionValidationError struct {
-	field  string
-	reason string
-	cause  error
-	key    bool
-}
-
-// Field function returns field value.
-func (e SocketOptionValidationError) Field() string { return e.field }
-
-// Reason function returns reason value.
-func (e SocketOptionValidationError) Reason() string { return e.reason }
-
-// Cause function returns cause value.
-func (e SocketOptionValidationError) Cause() error { return e.cause }
-
-// Key function returns key value.
-func (e SocketOptionValidationError) Key() bool { return e.key }
-
-// ErrorName returns error name.
-func (e SocketOptionValidationError) ErrorName() string { return "SocketOptionValidationError" }
-
-// Error satisfies the builtin error interface
-func (e SocketOptionValidationError) Error() string {
-	cause := ""
-	if e.cause != nil {
-		cause = fmt.Sprintf(" | caused by: %v", e.cause)
-	}
-
-	key := ""
-	if e.key {
-		key = "key for "
-	}
-
-	return fmt.Sprintf(
-		"invalid %sSocketOption.%s: %s%s",
-		key,
-		e.field,
-		e.reason,
-		cause)
-}
-
-var _ error = SocketOptionValidationError{}
-
-var _ interface {
-	Field() string
-	Reason() string
-	Key() bool
-	Cause() error
-	ErrorName() string
-} = SocketOptionValidationError{}
 
 // Validate checks the field values on RuntimeFractionalPercent with the rules
 // defined in the proto definition for this message. If any rules are
