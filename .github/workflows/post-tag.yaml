@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       - name: Set TAG_NAME in Environment
         # Subsequent jobs will be have the computed tag name
