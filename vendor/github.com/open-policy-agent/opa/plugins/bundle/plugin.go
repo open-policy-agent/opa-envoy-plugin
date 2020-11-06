@@ -19,12 +19,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/open-policy-agent/opa/metrics"
-
 	"github.com/open-policy-agent/opa/ast"
-
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/download"
+	bundleUtils "github.com/open-policy-agent/opa/internal/bundle"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/storage"
 )
@@ -264,9 +263,9 @@ func (p *Plugin) initDownloaders() {
 }
 
 func (p *Plugin) loadAndActivateBundlesFromDisk(ctx context.Context) error {
-	for name := range p.config.Bundles {
+	for name, src := range p.config.Bundles {
 		if p.persistBundle(name) {
-			b, err := loadBundleFromDisk(p.bundlePersistPath, name)
+			b, err := loadBundleFromDisk(p.bundlePersistPath, name, src)
 			if err != nil {
 				p.logError(name, "Failed to load bundle from disk: %v", err)
 				return err
@@ -299,11 +298,14 @@ func (p *Plugin) newDownloader(name string, source *Source) *download.Downloader
 	conf := source.Config
 	client := p.manager.Client(source.Service)
 	path := source.Resource
-
-	return download.New(conf, client, path).WithCallback(func(ctx context.Context, u download.Update) {
+	callback := func(ctx context.Context, u download.Update) {
 		// wrap the callback to include the name of the bundle that was updated
 		p.oneShot(ctx, name, u)
-	}).WithBundleVerificationConfig(source.Signing)
+	}
+	return download.New(conf, client, path).
+		WithCallback(callback).
+		WithBundleVerificationConfig(source.Signing).
+		WithSizeLimitBytes(source.SizeLimitBytes)
 }
 
 func (p *Plugin) oneShot(ctx context.Context, name string, u download.Update) {
@@ -433,6 +435,7 @@ func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle) er
 			Ctx:      ctx,
 			Store:    p.manager.Store,
 			Txn:      txn,
+			TxnCtx:   params.Context,
 			Compiler: compiler,
 			Metrics:  p.status[name].Metrics,
 			Bundles:  map[string]*bundle.Bundle{name: b},
@@ -445,6 +448,13 @@ func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle) er
 		}
 
 		plugins.SetCompilerOnContext(params.Context, compiler)
+
+		resolvers, err := bundleUtils.LoadWasmResolversFromStore(ctx, p.manager.Store, txn, nil)
+		if err != nil {
+			return err
+		}
+
+		plugins.SetWasmResolversOnContext(params.Context, resolvers)
 
 		return activateErr
 	})
@@ -555,7 +565,7 @@ func saveCurrentBundleToDisk(path, filename string, b *bundle.Bundle) error {
 	return nil
 }
 
-func loadBundleFromDisk(path, name string) (*bundle.Bundle, error) {
+func loadBundleFromDisk(path, name string, src *Source) (*bundle.Bundle, error) {
 	bundlePath := filepath.Join(path, name, "bundle.tar.gz")
 
 	if _, err := os.Stat(bundlePath); err == nil {
@@ -565,12 +575,17 @@ func loadBundleFromDisk(path, name string) (*bundle.Bundle, error) {
 		}
 		defer f.Close()
 
-		b, err := bundle.NewReader(f).Read()
+		r := bundle.NewReader(f)
+
+		if src != nil {
+			r = r.WithBundleVerificationConfig(src.Signing)
+		}
+
+		b, err := r.Read()
 		if err != nil {
 			return nil, err
 		}
 		return &b, nil
-
 	} else if os.IsNotExist(err) {
 		return nil, nil
 	} else {

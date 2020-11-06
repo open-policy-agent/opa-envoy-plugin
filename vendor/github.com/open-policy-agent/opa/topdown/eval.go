@@ -31,6 +31,10 @@ func (f *queryIDFactory) Next() uint64 {
 	return curr
 }
 
+type builtinErrors struct {
+	errs []error
+}
+
 type eval struct {
 	ctx                    context.Context
 	metrics                metrics.Metrics
@@ -52,6 +56,7 @@ type eval struct {
 	compiler               *ast.Compiler
 	input                  *ast.Term
 	data                   *ast.Term
+	external               *resolverTrie
 	targetStack            *refStack
 	tracers                []QueryTracer
 	traceEnabled           bool
@@ -71,6 +76,7 @@ type eval struct {
 	genvarprefix           string
 	genvarid               int
 	runtime                *ast.Term
+	builtinErrors          *builtinErrors
 }
 
 func (e *eval) Run(iter evalIterator) error {
@@ -145,34 +151,38 @@ func (e *eval) unknown(x interface{}, b *bindings) bool {
 }
 
 func (e *eval) traceEnter(x ast.Node) {
-	e.traceEvent(EnterOp, x, "")
+	e.traceEvent(EnterOp, x, "", nil)
 }
 
 func (e *eval) traceExit(x ast.Node) {
-	e.traceEvent(ExitOp, x, "")
+	e.traceEvent(ExitOp, x, "", nil)
 }
 
 func (e *eval) traceEval(x ast.Node) {
-	e.traceEvent(EvalOp, x, "")
+	e.traceEvent(EvalOp, x, "", nil)
 }
 
 func (e *eval) traceFail(x ast.Node) {
-	e.traceEvent(FailOp, x, "")
+	e.traceEvent(FailOp, x, "", nil)
 }
 
 func (e *eval) traceRedo(x ast.Node) {
-	e.traceEvent(RedoOp, x, "")
+	e.traceEvent(RedoOp, x, "", nil)
 }
 
 func (e *eval) traceSave(x ast.Node) {
-	e.traceEvent(SaveOp, x, "")
+	e.traceEvent(SaveOp, x, "", nil)
 }
 
-func (e *eval) traceIndex(x ast.Node, msg string) {
-	e.traceEvent(IndexOp, x, msg)
+func (e *eval) traceIndex(x ast.Node, msg string, target *ast.Ref) {
+	e.traceEvent(IndexOp, x, msg, target)
 }
 
-func (e *eval) traceEvent(op Op, x ast.Node, msg string) {
+func (e *eval) traceWasm(x ast.Node, target *ast.Ref) {
+	e.traceEvent(WasmOp, x, "", target)
+}
+
+func (e *eval) traceEvent(op Op, x ast.Node, msg string, target *ast.Ref) {
 
 	if !e.traceEnabled {
 		return
@@ -190,6 +200,7 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string) {
 		Node:     x,
 		Location: x.Loc(),
 		Message:  msg,
+		Ref:      target,
 	}
 
 	// Skip plugging the local variables, unless any of the tracers
@@ -1243,7 +1254,7 @@ func (e *eval) getRules(ref ast.Ref) (*ast.IndexResult, error) {
 		b.WriteString(" rules)")
 		msg = b.String()
 	}
-	e.traceIndex(e.query[e.index], msg)
+	e.traceIndex(e.query[e.index], msg, &ref)
 	return result, err
 }
 
@@ -1320,43 +1331,49 @@ func (e *eval) resolveReadFromStorage(ref ast.Ref, a ast.Value) (ast.Value, erro
 		return a, nil
 	}
 
-	path, err := storage.NewPathForRef(ref)
-	if err != nil {
-		if !storage.IsNotFound(err) {
-			return nil, err
-		}
-		return a, nil
-	}
+	v, err := e.external.Resolve(e, ref)
 
-	blob, err := e.store.Read(e.ctx, e.txn, path)
-	if err != nil {
-		if !storage.IsNotFound(err) {
-			return nil, err
-		}
-		return a, nil
-	}
-
-	if len(path) == 0 {
-		obj := blob.(map[string]interface{})
-		if len(obj) > 0 {
-			cpy := make(map[string]interface{}, len(obj)-1)
-			for k, v := range obj {
-				if string(ast.SystemDocumentKey) == k {
-					continue
-				}
-				cpy[k] = v
-			}
-			blob = cpy
-		}
-	}
-
-	v, err := ast.InterfaceToValue(blob)
 	if err != nil {
 		return nil, err
+	} else if v == nil {
+
+		path, err := storage.NewPathForRef(ref)
+		if err != nil {
+			if !storage.IsNotFound(err) {
+				return nil, err
+			}
+			return a, nil
+		}
+
+		blob, err := e.store.Read(e.ctx, e.txn, path)
+		if err != nil {
+			if !storage.IsNotFound(err) {
+				return nil, err
+			}
+			return a, nil
+		}
+
+		if len(path) == 0 {
+			obj := blob.(map[string]interface{})
+			if len(obj) > 0 {
+				cpy := make(map[string]interface{}, len(obj)-1)
+				for k, v := range obj {
+					if string(ast.SystemDocumentKey) == k {
+						continue
+					}
+					cpy[k] = v
+				}
+				blob = cpy
+			}
+		}
+
+		v, err = ast.InterfaceToValue(blob)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	e.baseCache.Put(ref, v)
-
 	if a == nil {
 		return v, nil
 	}
@@ -1365,6 +1382,7 @@ func (e *eval) resolveReadFromStorage(ref ast.Ref, a ast.Value) (ast.Value, erro
 	if !ok {
 		return nil, mergeConflictErr(ref[0].Location)
 	}
+
 	return merged, nil
 }
 
@@ -1434,6 +1452,7 @@ func (e evalBuiltin) eval(iter unifyIterator) error {
 		e.e.instr.stopTimer(evalOpBuiltinCall)
 
 		var err error
+
 		if len(operands) == numDeclArgs {
 			if output.Value.Compare(ast.Boolean(false)) != 0 {
 				err = iter()
@@ -1441,9 +1460,23 @@ func (e evalBuiltin) eval(iter unifyIterator) error {
 		} else {
 			err = e.e.unify(e.terms[len(e.terms)-1], output, iter)
 		}
+
+		if err != nil {
+			err = Halt{Err: err}
+		}
+
 		e.e.instr.startTimer(evalOpBuiltinCall)
 		return err
 	})
+
+	if err != nil {
+		if h, ok := err.(Halt); !ok {
+			e.e.builtinErrors.errs = append(e.e.builtinErrors.errs, err)
+			err = nil
+		} else {
+			err = h.Err
+		}
+	}
 
 	e.e.instr.stopTimer(evalOpBuiltinCall)
 	return err

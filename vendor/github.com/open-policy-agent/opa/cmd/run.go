@@ -168,8 +168,6 @@ To skip bundle verification, use the --skip-verify flag.
 	runCommand.Flags().StringVarP(&cmdParams.rt.HistoryPath, "history", "H", historyPath(), "set path of history file")
 	cmdParams.rt.Addrs = runCommand.Flags().StringSliceP("addr", "a", []string{defaultAddr}, "set listening address of the server (e.g., [ip]:<port> for TCP, unix://<path> for UNIX domain socket)")
 	cmdParams.rt.DiagnosticAddrs = runCommand.Flags().StringSlice("diagnostic-addr", []string{}, "set read-only diagnostic listening address of the server for /health and /metric APIs (e.g., [ip]:<port> for TCP, unix://<path> for UNIX domain socket)")
-	runCommand.Flags().StringVarP(&cmdParams.rt.InsecureAddr, "insecure-addr", "", "", "set insecure listening address of the server")
-	runCommand.Flags().MarkDeprecated("insecure-addr", "use --addr instead")
 	runCommand.Flags().BoolVarP(&cmdParams.rt.H2CEnabled, "h2c", "", false, "enable H2C for HTTP listeners")
 	runCommand.Flags().StringVarP(&cmdParams.rt.OutputFormat, "format", "f", "pretty", "set shell output format, i.e, pretty, json")
 	runCommand.Flags().BoolVarP(&cmdParams.rt.Watch, "watch", "w", false, "watch command line files for changes")
@@ -183,6 +181,7 @@ To skip bundle verification, use the --skip-verify flag.
 	runCommand.Flags().VarP(cmdParams.logLevel, "log-level", "l", "set log level")
 	runCommand.Flags().VarP(cmdParams.logFormat, "log-format", "", "set log format")
 	runCommand.Flags().IntVar(&cmdParams.rt.GracefulShutdownPeriod, "shutdown-grace-period", 10, "set the time (in seconds) that the server will wait to gracefully shut down")
+	runCommand.Flags().IntVar(&cmdParams.rt.ShutdownWaitPeriod, "shutdown-wait-period", 0, "set the time (in seconds) that the server will wait before initiating shutdown")
 	addConfigOverrides(runCommand.Flags(), &cmdParams.rt.ConfigOverrides)
 	addConfigOverrideFiles(runCommand.Flags(), &cmdParams.rt.ConfigOverrideFiles)
 	addBundleModeFlag(runCommand.Flags(), &cmdParams.rt.BundleMode, false)
@@ -250,7 +249,11 @@ func initRuntime(ctx context.Context, params runCmdParams, args []string) (*runt
 
 	params.rt.SkipBundleVerification = params.skipBundleVerify
 
-	params.rt.BundleVerificationConfig = buildVerificationConfig(params.pubKey, params.pubKeyID, params.algorithm, params.scope, params.excludeVerifyFiles)
+	bvc, err := buildVerificationConfig(params.pubKey, params.pubKeyID, params.algorithm, params.scope, params.excludeVerifyFiles)
+	if err != nil {
+		return nil, err
+	}
+	params.rt.BundleVerificationConfig = bvc
 
 	if params.rt.BundleVerificationConfig != nil && !params.rt.BundleMode {
 		return nil, fmt.Errorf("enable bundle mode (ie. --bundle) to verify bundle files or directories")
