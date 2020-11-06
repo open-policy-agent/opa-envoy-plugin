@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/open-policy-agent/opa/topdown"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -417,6 +418,48 @@ func TestCheckDenyWithLogger(t *testing.T) {
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
+}
+
+func TestCheckContextTimeout(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
+	defer cancel()
+
+	time.Sleep(time.Millisecond * 1)
+	_, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	expectedErrMsg := "check request timed out before query execution: context deadline exceeded"
+	if err.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, err.Error())
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if event.Error.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
+	}
+
 }
 
 func TestCheckIllegalDecisionWithLogger(t *testing.T) {
@@ -914,8 +957,6 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("Result is %v\n", output)
-
 	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatalf("Expected request to be denied but got: %v", output)
 	}
@@ -1034,7 +1075,7 @@ func TestGetResponseStatus(t *testing.T) {
 	}
 }
 
-func TestGetResponeHeaders(t *testing.T) {
+func TestGetResponseHeaders(t *testing.T) {
 	input := make(map[string]interface{})
 
 	result, err := getResponseHeaders(input)
@@ -1591,6 +1632,35 @@ func TestLogWithASTError(t *testing.T) {
 	err := server.log(context.Background(), nil, &evalResult{}, &ast.Error{Code: "foo"})
 	if err != nil {
 		panic(err)
+	}
+}
+
+func TestLogWithCancelError(t *testing.T) {
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger, false)
+	err := server.log(context.Background(), nil, &evalResult{}, &topdown.Error{
+		Code:    topdown.CancelErr,
+		Message: "caller cancelled query execution",
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	expectedErrMsg := "eval_cancel_error: context deadline reached during query execution"
+	if event.Error.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
 	}
 }
 
