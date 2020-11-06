@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/open-policy-agent/opa/topdown"
 	"io"
 	"net"
 	"net/url"
@@ -34,7 +35,6 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/util"
 )
@@ -195,7 +195,9 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.Chec
 	result := evalResult{}
 	result.metrics = metrics.New()
 	result.metrics.Timer(metrics.ServerHandler).Start()
+
 	result.decisionID, err = uuid4()
+
 	if err != nil {
 		logrus.WithField("err", err).Error("Unable to generate decision ID.")
 		return nil, err
@@ -215,6 +217,11 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.Chec
 			}
 		}
 	}()
+
+	if ctx.Err() != nil {
+		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
+		return nil, err
+	}
 
 	bs, err := json.Marshal(req)
 	if err != nil {
@@ -432,8 +439,15 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 
 	if err != nil {
 		switch err.(type) {
-		case *storage.Error, *ast.Error, ast.Errors, *topdown.Error:
+		case *storage.Error, *ast.Error, ast.Errors:
 			break
+		case *topdown.Error:
+			if topdown.IsCancel(err) {
+				err = &topdown.Error{
+					Code:    topdown.CancelErr,
+					Message: "context deadline reached during query execution",
+				}
+			}
 		default:
 			// Wrap errors that may not serialize to JSON well (e.g., fmt.Errorf, etc.)
 			err = &internalError{Message: err.Error()}
