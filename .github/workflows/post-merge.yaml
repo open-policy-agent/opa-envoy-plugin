@@ -1,0 +1,93 @@
+name: Post Merge
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  go-build:
+    name: Go Build
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build Golang
+        run: make build
+        timeout-minutes: 15
+
+  go-test:
+    name: Go Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Unit Test Golang
+        run: make test
+        timeout-minutes: 15
+
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Golang Style and Lint Check
+        run: make check
+        timeout-minutes: 15
+
+  deploy:
+    name: Push Latest Release
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build and Push
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        # Only run if required secrets are provided
+        if: ${{ env.DOCKER_USER && env.DOCKER_PASSWORD }}
+        run: make deploy-ci
+
+  e2e:
+    name: End-to-End Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Run End-to-End Test
+        run: |
+          KIND_VERSION=0.4.0
+          ISTIO_VERSION=1.5.0
+
+          # Download and install kind
+          curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
+
+          # Create kind cluster
+          if [ -z $(kind get clusters) ]; then
+            kind create cluster
+          fi
+          export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+
+          # Download and install kubectl
+          curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
+
+          # Download and install Istio
+          curl -L https://git.io/getLatestIstio | ISTIO_VERSION=${ISTIO_VERSION} sh - && mv istio-${ISTIO_VERSION} /tmp && cd /tmp/istio-${ISTIO_VERSION} && for i in install/kubernetes/helm/istio-init/files/crd*yaml; do kubectl apply -f $i; done && kubectl apply -f install/kubernetes/istio-demo.yaml && cd -
+          kubectl -n istio-system wait --for=condition=available --timeout=600s --all deployment
+
+          # Install bats
+          sudo apt-get update -y
+          sudo apt-get install -y bats
+
+          # Run the test
+          make update-istio-quickstart-version && make test-e2e
+
+          # Delete the cluster
+          kind delete cluster

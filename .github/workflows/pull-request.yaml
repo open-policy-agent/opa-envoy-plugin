@@ -1,0 +1,37 @@
+name: PR Check
+
+on: [pull_request]
+
+jobs:
+  go-build:
+    name: Go Build
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build Golang
+        run: make build
+        timeout-minutes: 15
+
+  go-test:
+    name: Go Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Unit Test Golang
+        run: make test
+        timeout-minutes: 15
+
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Golang Style and Lint Check
+        run: make check
+        timeout-minutes: 15
