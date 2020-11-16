@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"strconv"
@@ -23,6 +24,10 @@ import (
 	ext_authz_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/protoc-gen-go/descriptor"
+	"github.com/jhump/protoreflect/desc"
+	"github.com/jhump/protoreflect/dynamic"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -141,6 +146,7 @@ type Config struct {
 	DryRun           bool   `json:"dry-run"`
 	EnableReflection bool   `json:"enable-reflection"`
 	parsedQuery      ast.Body
+	ProtoDescriptor  string `json:"proto-descriptor"`
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -217,9 +223,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	result := evalResult{}
 	result.metrics = metrics.New()
 	result.metrics.Timer(metrics.ServerHandler).Start()
-
 	result.decisionID, err = uuid4()
-
 	if err != nil {
 		logrus.WithField("err", err).Error("Unable to generate decision ID.")
 		return nil, func() *rpc_status.Status { return nil }, err
@@ -244,7 +248,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, err
 	}
 
-	var bs []byte
+	var bs, rawBody []byte
 	var path, body string
 	var headers, version map[string]string
 
@@ -261,6 +265,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
 		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
 		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		rawBody = req.GetAttributes().GetRequest().GetHttp().GetRawBody()
 		version = v3Info
 	case *ext_authz_v2.CheckRequest:
 		bs, err = json.Marshal(req)
@@ -287,7 +292,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
-	parsedBody, isBodyTruncated, err := getParsedBody(headers, body)
+	parsedBody, isBodyTruncated, err := getParsedBody(headers, body, rawBody, parsedPath, p.cfg.ProtoDescriptor)
 	if err != nil {
 		return nil, stop, err
 	}
@@ -695,27 +700,44 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(headers map[string]string, body string) (interface{}, bool, error) {
-	if body == "" {
-		return nil, false, nil
-	}
-
-	if val, ok := headers["content-length"]; ok {
-		cl, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return nil, false, err
-		}
-
-		if cl != -1 && cl > int64(len(body)) {
-			return nil, true, nil
-		}
-	}
-
+func getParsedBody(headers map[string]string, body string, rawBody []byte,  parsedPath []interface{}, protoDescriptor string) (interface{}, bool, error) {
 	var data interface{}
 
 	if val, ok := headers["content-type"]; ok {
 		if strings.Contains(val, "application/json") {
+
+			if body == "" {
+				return nil, false, nil
+			}
+
+			if val, ok := headers["content-length"]; ok {
+				cl, err := strconv.ParseInt(val, 10, 64)
+				if err != nil {
+					return nil, false, err
+				}
+				if cl != -1 && cl > int64(len(body)) {
+					return nil, true, nil
+				}
+			}
+
 			err := util.Unmarshal([]byte(body), &data)
+			if err != nil {
+				return nil, false, err
+			}
+		} else if strings.Contains(val, "application/grpc") {
+
+			if protoDescriptor == "" {
+				return nil, false, nil
+			}
+
+			if len(rawBody) == 0 {
+				return nil, false, fmt.Errorf("invalid raw body")
+			}
+			if len(parsedPath) <= 1 {
+				return nil, false, fmt.Errorf("invalid parsed path")
+			}
+
+			err := getGRPCBody(rawBody, parsedPath, &data, protoDescriptor)
 			if err != nil {
 				return nil, false, err
 			}
@@ -723,6 +745,79 @@ func getParsedBody(headers map[string]string, body string) (interface{}, bool, e
 	}
 
 	return data, false, nil
+}
+
+func getGRPCBody(in []byte, parsedPath []interface{}, data interface{}, protoDescriptor string) error {
+
+	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
+	//https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
+
+	if len(in) < 6 {
+		return fmt.Errorf("less than 5 bytes")
+	}
+
+	in = in[5:]
+
+	bytespd, err := ioutil.ReadFile(protoDescriptor)
+	if err != nil {
+		return err
+	}
+
+	var fileSet descriptor.FileDescriptorSet
+	if err := proto.Unmarshal(bytespd, &fileSet); err != nil {
+		return err
+	}
+
+	fd, err := desc.CreateFileDescriptorFromSet(&fileSet)
+	if err != nil {
+		return err
+	}
+
+	inputType := ""
+	packageName := fd.GetPackage()
+	pathServiceRaw := parsedPath[0].(string)
+	//To get the service.
+	//The package and service are in the parsedpath[0] (Example.Test.GRPC.ProtoServiceIExampleApplication), we need to get the service (ProtoServiceIExampleApplication) to find the methods available
+	pathService := strings.Replace(pathServiceRaw, packageName+".", "", 1)
+
+	for _, v := range fd.GetServices() {
+		if v.GetName() == pathService {
+			for _, z := range v.GetMethods() {
+				if z.GetName() == parsedPath[1] {
+					inputType = z.GetInputType().GetName()
+				}
+			}
+		}
+	}
+
+	if packageName == "" {
+		return fmt.Errorf("packageName not defined")
+	}
+
+	if inputType == "" {
+		return fmt.Errorf("InputType not defined")
+	}
+
+	messageName := fmt.Sprintf("%s.%s", packageName, inputType)
+
+	msgDesc := fd.FindMessage(messageName)
+
+	message := dynamic.NewMessage(msgDesc)
+
+	if err := proto.Unmarshal(in, message); err != nil {
+		return err
+	}
+
+	jsonBody, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	if err := util.Unmarshal([]byte(jsonBody), &data); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func stringPathToDataRef(s string) (r ast.Ref) {
