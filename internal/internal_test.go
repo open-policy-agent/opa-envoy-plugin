@@ -276,14 +276,13 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatalf("Unexpected events: %+v", customLogger.events)
+		t.Fatal("Unexpected events:", customLogger.events)
 	}
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" ||
-		event.Revision != "" || *event.Result == false {
-		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == false {
+		t.Fatal("Unexpected events:", customLogger.events)
 	}
 
 	expected := []string{
@@ -421,48 +420,6 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	}
 }
 
-func TestCheckContextTimeout(t *testing.T) {
-
-	var req ext_authz.CheckRequest
-	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
-		panic(err)
-	}
-
-	// create custom logger
-	customLogger := &testPlugin{}
-
-	server := testAuthzServer(customLogger, false)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
-	defer cancel()
-
-	time.Sleep(time.Millisecond * 1)
-	_, err := server.Check(ctx, &req)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	expectedErrMsg := "check request timed out before query execution: context deadline exceeded"
-	if err.Error() != expectedErrMsg {
-		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, err.Error())
-	}
-
-	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
-	}
-
-	event := customLogger.events[0]
-
-	if event.Error == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	if event.Error.Error() != expectedErrMsg {
-		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
-	}
-
-}
-
 func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -476,12 +433,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	module := `
-		package envoy.authz
-
-		default allow = 1
-		`
-	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	server := testAuthzServerWithIllegalDecision(customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
@@ -621,7 +573,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatalf("Unexpected events: %+v", customLogger.events)
+		t.Fatal("Unexpected events:", customLogger.events)
 	}
 
 	event := customLogger.events[0]
@@ -655,7 +607,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 2 {
-		t.Fatalf("Unexpected events: %+v", customLogger.events)
+		t.Fatal("Unexpected events:", customLogger.events)
 	}
 
 	event = customLogger.events[1]
@@ -1044,6 +996,8 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fmt.Printf("Result is %v\n", output)
+
 	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatalf("Expected request to be denied but got: %v", output)
 	}
@@ -1162,7 +1116,7 @@ func TestGetResponseStatus(t *testing.T) {
 	}
 }
 
-func TestGetResponseHeaders(t *testing.T) {
+func TestGetResponeHeaders(t *testing.T) {
 	input := make(map[string]interface{})
 
 	result, err := getResponseHeaders(input)
@@ -1438,10 +1392,11 @@ func TestGetParsedBody(t *testing.T) {
 	expectedArray := []interface{}{"hello", "opa"}
 
 	tests := map[string]struct {
-		input           *ext_authz.CheckRequest
-		want            interface{}
-		isBodyTruncated bool
-		err             error
+		input               *ext_authz.CheckRequest
+		want                interface{}
+		isBodyTruncated     bool
+		err                 error
+		protoDescriptorPath string
 	}{
 		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
 		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
@@ -1457,8 +1412,11 @@ func TestGetParsedBody(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			headers, body := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders(), tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
-			got, isBodyTruncated, err := getParsedBody(headers, body)
+			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
+			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
+			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
+			parsedPath, _, _ := getParsedPathAndQuery(path)
+			got, isBodyTruncated, err := getParsedBody(headers, body, nil, parsedPath, tc.protoDescriptorPath)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
 			}
@@ -1487,10 +1445,146 @@ func TestGetParsedBody(t *testing.T) {
 	  }`
 
 	req := createCheckRequest(requestContentTypeJSONInvalid)
-	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody()
-	_, _, err := getParsedBody(headers, body)
+	path := []interface{}{}
+	protoDescriptorPath := ""
+	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody() 
+	_, _, err := getParsedBody(headers, body, nil, path, protoDescriptorPath)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
+	}
+}
+
+func TestGetParsedBodygRPC(t *testing.T) {
+
+	requestValidExample := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/grpc"
+			  },
+			  "method": "POST",
+			  "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
+			  "protocol": "HTTP/2",
+			  "raw_body": "AAAAADYKFgoHCgVFUlJPUhILCglTZWNOdW1iZXISHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU=",
+			}
+		  },
+		  "parsed_path": [
+			"Example.Test.GRPC.ProtoServiceIExampleApplication",
+			"RegisterExample"
+		  ]
+		}
+	  }`
+	requestValidBook := `{
+	   	"attributes": {
+	   	  "request": {
+	   		"http": {
+	   		  "headers": {
+	   			"content-type": "application/grpc"
+	   		  },
+	   		  "method": "POST",
+         		  "path": "/com.book.BookService/GetBooksViaAuthor",
+                 "protocol": "HTTP/2",
+                 "raw_body": "AAAAAAYKBEpvaG4="
+	   		}
+	   	  }
+	   	}
+	    }`
+
+	requestInvalidRawBodyExample := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/grpc"
+			  },
+			  "method": "POST",
+			  "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
+			  "protocol": "HTTP/2"
+			}
+		  },
+		  "parsed_path": [
+			"Example.Test.GRPC.ProtoServiceIExampleApplication",
+			"RegisterExample"
+		  ]
+		}
+	  }`
+
+	requestInvalidParsedPathExample := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/grpc"
+			  },
+			  "method": "POST",
+			  "protocol": "HTTP/2",
+			  "raw_body": "AAAAAC0KDQoHCgVFUlJPUhICCAESHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU="
+			}
+		  }
+		}
+	  }`
+
+	expectedObject1 := map[string]interface{}{}
+	expectedObject1["Body"] = "Body value"
+	expectedObject1["Name"] = "Name Value"
+
+	expectedObject2 := map[string]interface{}{}
+	expectedObject2["SeverityNumber"] = "SecNumber"
+	expectedObject2["SeverityText"] = "ERROR"
+
+	expectedObject := map[string]interface{}{}
+	expectedObject["Data"] = expectedObject1
+	expectedObject["Metadata"] = expectedObject2
+
+	protoDescriptorExamplePath := `../test/files/example/example.pb`
+
+	expectedObjectExampleBook := map[string]interface{}{}
+	expectedObjectExampleBook["author"] = "John"
+
+	protoDescriptorBookPath := `../test/files/book/book.pb`
+
+	tests := map[string]struct {
+		input               *ext_authz.CheckRequest
+		want                interface{}
+		isBodyTruncated     bool
+		err                 error
+		protoDescriptorPath string
+	}{
+		"parsed_path_error":           {input: createCheckRequest(requestInvalidParsedPathExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid parsed path"), protoDescriptorPath: protoDescriptorExamplePath},
+		"without_raw_body":            {input: createCheckRequest(requestInvalidRawBodyExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid raw body"), protoDescriptorPath: protoDescriptorExamplePath},
+		"proto_escriptor_not_defined": {input: createCheckRequest(requestValidExample), want: nil, isBodyTruncated: false, err: nil, protoDescriptorPath: ""},
+		"valid_parsed_example":        {input: createCheckRequest(requestValidExample), want: expectedObject, isBodyTruncated: false, err: nil, protoDescriptorPath: protoDescriptorExamplePath},
+		"valid_parsed_book":           {input: createCheckRequest(requestValidBook), want: expectedObjectExampleBook, isBodyTruncated: false, err: nil, protoDescriptorPath: protoDescriptorBookPath},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
+			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
+			rawBody := tc.input.GetAttributes().GetRequest().GetHttp().GetRawBody()
+			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
+
+			parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
+			if err != nil {
+				t.Fatalf("expected error: %v, parsedQuery: %v", tc.err, parsedQuery)
+			}
+
+			got, isBodyTruncated, err := getParsedBody(headers, body, rawBody, parsedPath, tc.protoDescriptorPath)
+
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("expected result: %v, got: %v", tc.want, got)
+			}
+
+			if isBodyTruncated != tc.isBodyTruncated {
+				t.Fatalf("expected isBodyTruncated: %v, got: %v", tc.isBodyTruncated, got)
+			}
+
+			if !reflect.DeepEqual(err, tc.err) {
+				t.Fatalf("expected error: %v, got: %v", tc.err, err)
+			}
+
+		})
 	}
 }
 
@@ -1618,30 +1712,31 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 			],
 		}`
 
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+    return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }
 
 func testAuthzServerWithModule(module string, path string, customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
-	m, err := getPluginManager(module, customLogger)
-	if err != nil {
-		panic(err)
-	}
+        m, err := getPluginManager(module, customLogger)
+        if err != nil {
+                panic(err)
+        }
 
-	query := "data." + strings.Replace(path, "/", ".", -1)
-	parsedQuery, err := ast.ParseBody(query)
-	if err != nil {
-		panic(err)
-	}
+        query := "data." + strings.Replace(path, "/", ".", -1)
+        parsedQuery, err := ast.ParseBody(query)
+        if err != nil {
+                panic(err)
+        }
 
-	cfg := Config{
-		Addr:        ":0",
-		Path:        path,
-		DryRun:      dryRun,
-		parsedQuery: parsedQuery,
-	}
-	s := New(m, &cfg)
-	return s.(*envoyExtAuthzGrpcServer)
+        cfg := Config{
+                Addr:        ":0",
+                Path:        path,
+                DryRun:      dryRun,
+                parsedQuery: parsedQuery,
+        }
+        s := New(m, &cfg)
+        return s.(*envoyExtAuthzGrpcServer)
 }
+
 
 func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
@@ -1661,12 +1756,24 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 				"allowed": true,
 				"headers": {"x": "hello", "y": "world"}
 		    }
-    }`
+		}`
+
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+}
+
+func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+
+	module := `
+		package envoy.authz
+
+		default allow = 1
+		`
 
 	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }
 
 func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+
 	module := `
 		package envoy.authz
 

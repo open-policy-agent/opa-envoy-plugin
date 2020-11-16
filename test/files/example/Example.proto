@@ -1,0 +1,65 @@
+syntax = "proto3";
+package Example.Test.GRPC;
+import "google/protobuf/wrappers.proto";
+
+service ProtoServiceIExampleApplication {
+	rpc RegisterExample (InputRegisterDTOExample) returns (OutputVoidDTOExample);
+	rpc GetStatusExample (InputGetStatusDTOExample) returns (OutputGetStatusDTOExample);
+}
+
+message InputRegisterDTOExample {
+	InputMetadataExample Metadata = 1;
+	InputRegisterExample Data = 2;
+}
+
+message InputMetadataExample {
+	google.protobuf.StringValue SeverityText = 1;
+	google.protobuf.StringValue SeverityNumber = 2;
+}
+
+message InputRegisterExample {
+	google.protobuf.StringValue Body = 1;
+	google.protobuf.StringValue Name = 2;
+}
+
+message OutputVoidDTOExample {
+	OutputMetadataExample Metadata = 1;
+	OutputVoidExample Data = 2;
+}
+
+message OutputMetadataExample {
+	google.protobuf.BoolValue Success = 1;
+	repeated ErrorExample Errors = 2;
+	google.protobuf.BoolValue HasUnexpectedErrors = 3;
+	google.protobuf.StringValue RequestId = 4;
+}
+
+message OutputVoidExample {
+}
+
+
+message ErrorExample {
+	google.protobuf.StringValue Code = 1;
+	google.protobuf.StringValue Message = 2;
+}
+
+message OutputGetStatusDTOExample {
+	OutputMetadataExample Metadata = 1;
+	OutputGetStatusExample Data = 2;
+}
+
+
+message OutputGetStatusExample {
+}
+
+
+message InputGetStatusDTOExample {
+	InputMetadataExample Metadata = 1;
+	InputGetStatusExample Data = 2;
+}
+
+
+message InputGetStatusExample {
+	google.protobuf.StringValue Id = 1;
+	google.protobuf.BoolValue Disabled = 2;
+}
