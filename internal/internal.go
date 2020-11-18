@@ -17,15 +17,19 @@ import (
 	"sync"
 	"time"
 
-	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
-	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
-	ext_type "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_core_v2 "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
+	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
+	ext_authz_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
@@ -48,6 +52,9 @@ const defaultEnableReflection = false
 const PluginName = "envoy_ext_authz_grpc"
 
 var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
+
+var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
+var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 
 type evalResult struct {
 	revision   string
@@ -111,7 +118,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	}
 
 	// Register Authorization Server
-	ext_authz.RegisterAuthorizationServer(plugin.server, plugin)
+	ext_authz_v3.RegisterAuthorizationServer(plugin.server, plugin)
+	ext_authz_v2.RegisterAuthorizationServer(plugin.server, &envoyExtAuthzV2Wrapper{v3: plugin})
 
 	m.RegisterCompilerTrigger(plugin.compilerUpdated)
 
@@ -142,6 +150,10 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
 	interQueryBuiltinCache iCache.InterQueryCache
+}
+
+type envoyExtAuthzV2Wrapper struct {
+	v3 *envoyExtAuthzGrpcServer
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
@@ -189,7 +201,17 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
-func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.CheckRequest) (resp *ext_authz.CheckResponse, err error) {
+// Check is envoy.service.auth.v3.Authorization/Check
+func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz_v3.CheckRequest) (*ext_authz_v3.CheckResponse, error) {
+	resp, stop, err := p.check(ctx, req)
+	if code := stop(); resp != nil && code != nil {
+		resp.Status = code
+	}
+	return resp, err
+}
+
+func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*ext_authz_v3.CheckResponse, func() *rpc_status.Status, error) {
+	var err error
 	start := time.Now()
 
 	result := evalResult{}
@@ -200,50 +222,74 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.Chec
 
 	if err != nil {
 		logrus.WithField("err", err).Error("Unable to generate decision ID.")
-		return nil, err
+		return nil, func() *rpc_status.Status { return nil }, err
 	}
 
 	var input map[string]interface{}
 
-	defer func() {
+	stop := func() *rpc_status.Status {
 		result.metrics.Timer(metrics.ServerHandler).Stop()
 		logErr := p.log(ctx, input, &result, err)
 		if logErr != nil {
-			resp = &ext_authz.CheckResponse{
-				Status: &rpc_status.Status{
-					Code:    int32(code.Code_UNKNOWN),
-					Message: logErr.Error(),
-				},
+			return &rpc_status.Status{
+				Code:    int32(code.Code_UNKNOWN),
+				Message: logErr.Error(),
 			}
 		}
-	}()
+		return nil
+	}
 
 	if ctx.Err() != nil {
 		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
-		return nil, err
+		return nil, stop, err
 	}
 
-	bs, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
+	var bs []byte
+	var path, body string
+	var headers, version map[string]string
+
+	// NOTE: The path/body/headers blocks look silly, but they allow us to retrieve
+	//       the parts of the incoming request we care about, without having to convert
+	//       the entire v2 message into v3. It's nested, each level has a different type,
+	//       etc -- we only care for its JSON representation as fed into evaluation later.
+	switch req := req.(type) {
+	case *ext_authz_v3.CheckRequest:
+		bs, err = protojson.Marshal(req)
+		if err != nil {
+			return nil, stop, err
+		}
+		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
+		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
+		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		version = v3Info
+	case *ext_authz_v2.CheckRequest:
+		bs, err = json.Marshal(req)
+		if err != nil {
+			return nil, stop, err
+		}
+		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
+		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
+		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		version = v2Info
 	}
 
 	err = util.UnmarshalJSON(bs, &input)
 	if err != nil {
-		return nil, err
+		return nil, stop, err
 	}
+	input["version"] = version
 
-	parsedPath, parsedQuery, err := getParsedPathAndQuery(req)
+	parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
 	if err != nil {
-		return nil, err
+		return nil, stop, err
 	}
 
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
-	parsedBody, isBodyTruncated, err := getParsedBody(req)
+	parsedBody, isBodyTruncated, err := getParsedBody(headers, body)
 	if err != nil {
-		return nil, err
+		return nil, stop, err
 	}
 
 	input["parsed_body"] = parsedBody
@@ -251,15 +297,15 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.Chec
 
 	inputValue, err := ast.InterfaceToValue(input)
 	if err != nil {
-		return nil, err
+		return nil, stop, err
 	}
 
 	err = p.eval(ctx, inputValue, &result)
 	if err != nil {
-		return nil, err
+		return nil, stop, err
 	}
 
-	resp = &ext_authz.CheckResponse{}
+	resp := &ext_authz_v3.CheckResponse{}
 
 	switch decision := result.decision.(type) {
 	case bool:
@@ -273,47 +319,47 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.Chec
 	case map[string]interface{}:
 		status, err := getResponseStatus(decision)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get response status")
+			return nil, stop, errors.Wrap(err, "failed to get response status")
 		}
 
 		resp.Status = &rpc_status.Status{Code: status}
 
 		responseHeaders, err := getResponseHeaders(decision)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get response headers")
+			return nil, stop, errors.Wrap(err, "failed to get response headers")
 		}
 
 		if status == int32(code.Code_OK) {
-			resp.HttpResponse = &ext_authz.CheckResponse_OkResponse{
-				OkResponse: &ext_authz.OkHttpResponse{
+			resp.HttpResponse = &ext_authz_v3.CheckResponse_OkResponse{
+				OkResponse: &ext_authz_v3.OkHttpResponse{
 					Headers: responseHeaders,
 				},
 			}
 		} else {
 			body, err := getResponseBody(decision)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to get response body")
+				return nil, stop, errors.Wrap(err, "failed to get response body")
 			}
 
 			httpStatus, err := getResponseHTTPStatus(decision)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to get response http status")
+				return nil, stop, errors.Wrap(err, "failed to get response http status")
 			}
 
-			deniedResponse := &ext_authz.DeniedHttpResponse{
+			deniedResponse := &ext_authz_v3.DeniedHttpResponse{
 				Headers: responseHeaders,
 				Body:    body,
 				Status:  httpStatus,
 			}
 
-			resp.HttpResponse = &ext_authz.CheckResponse_DeniedResponse{
+			resp.HttpResponse = &ext_authz_v3.CheckResponse_DeniedResponse{
 				DeniedResponse: deniedResponse,
 			}
 		}
 
 	default:
 		err = fmt.Errorf("illegal value for policy evaluation result: %T", decision)
-		return nil, err
+		return nil, stop, err
 	}
 
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
@@ -333,13 +379,13 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz.Chec
 	if p.cfg.DryRun {
 		if resp.Status.Code != int32(code.Code_OK) {
 			resp.Status = &rpc_status.Status{Code: int32(code.Code_OK)}
-			resp.HttpResponse = &ext_authz.CheckResponse_OkResponse{
-				OkResponse: &ext_authz.OkHttpResponse{},
+			resp.HttpResponse = &ext_authz_v3.CheckResponse_OkResponse{
+				OkResponse: &ext_authz_v3.OkHttpResponse{},
 			}
 		}
 	}
 
-	return resp, nil
+	return resp, stop, nil
 }
 
 func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, result *evalResult, opts ...func(*rego.Rego)) error {
@@ -489,28 +535,28 @@ func getResponseStatus(result map[string]interface{}) (int32, error) {
 	return status, nil
 }
 
-func getResponseHeaders(result map[string]interface{}) ([]*ext_core.HeaderValueOption, error) {
+func getResponseHeaders(result map[string]interface{}) ([]*ext_core_v3.HeaderValueOption, error) {
 	var ok bool
 	var val interface{}
 
-	responseHeaders := []*ext_core.HeaderValueOption{}
+	responseHeaders := []*ext_core_v3.HeaderValueOption{}
 
 	if val, ok = result["headers"]; !ok {
 		return responseHeaders, nil
 	}
 
-	takeResponseHeaders := func(headers map[string]interface{}) ([]*ext_core.HeaderValueOption, error) {
-		responseHeaders := []*ext_core.HeaderValueOption{}
+	takeResponseHeaders := func(headers map[string]interface{}) ([]*ext_core_v3.HeaderValueOption, error) {
+		responseHeaders := []*ext_core_v3.HeaderValueOption{}
 		for key, value := range headers {
 			var headerVal string
 			if headerVal, ok = value.(string); !ok {
 				return nil, fmt.Errorf("type assertion error")
 			}
-			headerValue := &ext_core.HeaderValue{
+			headerValue := &ext_core_v3.HeaderValue{
 				Key:   key,
 				Value: headerVal,
 			}
-			headerValueOption := &ext_core.HeaderValueOption{
+			headerValueOption := &ext_core_v3.HeaderValueOption{
 				Header: headerValue,
 			}
 			responseHeaders = append(responseHeaders, headerValueOption)
@@ -563,13 +609,13 @@ func getResponseBody(result map[string]interface{}) (string, error) {
 	return body, nil
 }
 
-func getResponseHTTPStatus(result map[string]interface{}) (*ext_type.HttpStatus, error) {
+func getResponseHTTPStatus(result map[string]interface{}) (*ext_type_v3.HttpStatus, error) {
 	var ok bool
 	var val interface{}
 	var statusCode json.Number
 
-	status := &ext_type.HttpStatus{
-		Code: ext_type.StatusCode(ext_type.StatusCode_Forbidden),
+	status := &ext_type_v3.HttpStatus{
+		Code: ext_type_v3.StatusCode(ext_type_v3.StatusCode_Forbidden),
 	}
 
 	if val, ok = result["http_status"]; !ok {
@@ -585,11 +631,11 @@ func getResponseHTTPStatus(result map[string]interface{}) (*ext_type.HttpStatus,
 		return nil, fmt.Errorf("error converting JSON number to int: %v", err)
 	}
 
-	if _, ok := ext_type.StatusCode_name[int32(httpStatusCode)]; !ok {
+	if _, ok := ext_type_v3.StatusCode_name[int32(httpStatusCode)]; !ok {
 		return nil, fmt.Errorf("Invalid HTTP status code %v", httpStatusCode)
 	}
 
-	status.Code = ext_type.StatusCode(int32(httpStatusCode))
+	status.Code = ext_type_v3.StatusCode(int32(httpStatusCode))
 
 	return status, nil
 }
@@ -620,9 +666,7 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 	return revision, nil
 }
 
-func getParsedPathAndQuery(req *ext_authz.CheckRequest) ([]interface{}, map[string]interface{}, error) {
-	path := req.GetAttributes().GetRequest().GetHttp().GetPath()
-
+func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {
 	unescapedPath, err := url.PathUnescape(path)
 	if err != nil {
 		return nil, nil, err
@@ -651,10 +695,7 @@ func getParsedPathAndQuery(req *ext_authz.CheckRequest) ([]interface{}, map[stri
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(req *ext_authz.CheckRequest) (interface{}, bool, error) {
-	body := req.GetAttributes().GetRequest().GetHttp().GetBody()
-	headers := req.GetAttributes().GetRequest().GetHttp().GetHeaders()
-
+func getParsedBody(headers map[string]string, body string) (interface{}, bool, error) {
 	if body == "" {
 		return nil, false, nil
 	}
@@ -717,4 +758,64 @@ type internalError struct {
 
 func (e *internalError) Error() string {
 	return e.Message
+}
+
+// Check is envoy.service.auth.v2.Authorization/Check
+func (p *envoyExtAuthzV2Wrapper) Check(ctx context.Context, req *ext_authz_v2.CheckRequest) (*ext_authz_v2.CheckResponse, error) {
+	var stop func() *rpc_status.Status
+	respV2 := &ext_authz_v2.CheckResponse{}
+	respV3, stop, err := p.v3.check(ctx, req)
+	defer func() {
+		if code := stop(); code != nil {
+			respV2.Status = code
+		}
+	}()
+
+	if err != nil {
+		return nil, err
+	}
+	respV2 = v2Response(respV3)
+	return respV2, nil
+}
+
+func v2Response(respV3 *ext_authz_v3.CheckResponse) *ext_authz_v2.CheckResponse {
+	respV2 := ext_authz_v2.CheckResponse{
+		Status: respV3.Status,
+	}
+	switch http3 := respV3.HttpResponse.(type) {
+	case *ext_authz_v3.CheckResponse_OkResponse:
+		hdrs := http3.OkResponse.GetHeaders()
+		respV2.HttpResponse = &ext_authz_v2.CheckResponse_OkResponse{
+			OkResponse: &ext_authz_v2.OkHttpResponse{
+				Headers: v2Headers(hdrs),
+			}}
+	case *ext_authz_v3.CheckResponse_DeniedResponse:
+		hdrs := http3.DeniedResponse.GetHeaders()
+		respV2.HttpResponse = &ext_authz_v2.CheckResponse_DeniedResponse{
+			DeniedResponse: &ext_authz_v2.DeniedHttpResponse{
+				Headers: v2Headers(hdrs),
+				Status:  v2Status(http3.DeniedResponse.Status),
+				Body:    http3.DeniedResponse.Body,
+			}}
+	}
+	return &respV2
+}
+
+func v2Headers(hdrs []*ext_core_v3.HeaderValueOption) []*ext_core_v2.HeaderValueOption {
+	hdrsV2 := make([]*ext_core_v2.HeaderValueOption, len(hdrs))
+	for i, hv := range hdrs {
+		hdrsV2[i] = &ext_core_v2.HeaderValueOption{
+			Header: &ext_core_v2.HeaderValue{
+				Key:   hv.GetHeader().Key,
+				Value: hv.GetHeader().Value,
+			},
+		}
+	}
+	return hdrsV2
+}
+
+func v2Status(s *ext_type_v3.HttpStatus) *ext_type_v2.HttpStatus {
+	return &ext_type_v2.HttpStatus{
+		Code: ext_type_v2.StatusCode(s.Code),
+	}
 }

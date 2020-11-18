@@ -17,8 +17,9 @@ import (
 	"testing"
 	"time"
 
-	ext_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
-	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
+	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
+	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -727,12 +728,98 @@ func TestCheckWithLoggerError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if output.Status.Code != int32(code.Code_UNKNOWN) {
-		t.Fatalf("Expected logger error code UNKNOWN but got %v", output.Status.Code)
+		t.Errorf("Expected logger error code UNKNOWN but got %v", output.Status.Code)
 	}
 
 	expectedMsg := "Bad Logger Error"
 	if output.Status.Message != expectedMsg {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, output.Status.Message)
+	}
+}
+
+// Some decision log related tests are replicated for envoy.service.auth.v2.Authorization/Check
+// here to ensure the stop()-function logic is correct.
+func TestCheckWithLoggerErrorV2(t *testing.T) {
+	var req ext_authz_v2.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := envoyExtAuthzV2Wrapper{testAuthzServer(&testPluginError{}, false)}
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_UNKNOWN) {
+		t.Errorf("Expected logger error code UNKNOWN but got %v", output.Status.Code)
+	}
+
+	expectedMsg := "Bad Logger Error"
+	if output.Status.Message != expectedMsg {
+		t.Fatalf("Expected error message %v, but got %v", expectedMsg, output.Status.Message)
+	}
+}
+
+func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
+	var req ext_authz_v2.CheckRequest
+	if err := util.Unmarshal([]byte(exampleInvalidRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := envoyExtAuthzV2Wrapper{testAuthzServer(customLogger, false)}
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if output != nil {
+		t.Fatalf("Expected no output but got %v", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+}
+
+func TestCheckDenyWithLoggerV2(t *testing.T) {
+	var req ext_authz_v2.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	customLogger := &testPlugin{}
+	server := envoyExtAuthzV2Wrapper{testAuthzServer(customLogger, false)}
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
+		t.Fatal("Expected request to be denied but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatal("Unexpected events:", customLogger.events)
 	}
 }
 
@@ -1370,7 +1457,8 @@ func TestGetParsedBody(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, isBodyTruncated, err := getParsedBody(tc.input)
+			headers, body := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders(), tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
+			got, isBodyTruncated, err := getParsedBody(headers, body)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
 			}
@@ -1398,7 +1486,9 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
-	_, _, err := getParsedBody(createCheckRequest(requestContentTypeJSONInvalid))
+	req := createCheckRequest(requestContentTypeJSONInvalid)
+	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody()
+	_, _, err := getParsedBody(headers, body)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
@@ -1642,7 +1732,8 @@ func TestParsedPathAndQuery(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		actualPath, actualQuery, _ := getParsedPathAndQuery(tt.request)
+		path := tt.request.GetAttributes().GetRequest().GetHttp().GetPath()
+		actualPath, actualQuery, _ := getParsedPathAndQuery(path)
 		if !reflect.DeepEqual(actualPath, tt.expectedPath) {
 			t.Errorf("parsed_path (%s): expected %s, actual %s", tt.request, tt.expectedPath, actualPath)
 		}
@@ -1686,6 +1777,61 @@ func TestLogWithCancelError(t *testing.T) {
 	expectedErrMsg := "eval_cancel_error: context deadline reached during query execution"
 	if event.Error.Error() != expectedErrMsg {
 		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
+	}
+}
+
+func TestVersionInfoInputV3(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+	customLogger := &testPlugin{}
+
+	module := `
+		package envoy.authz
+
+		allow {
+			input.version.ext_authz == "v3"
+			input.version.encoding == "protojson"
+		}
+		`
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
+func TestVersionInfoInputV2(t *testing.T) {
+	var req ext_authz_v2.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+	customLogger := &testPlugin{}
+
+	module := `
+		package envoy.authz
+
+		allow {
+			input.version.ext_authz == "v2"
+			input.version.encoding == "encoding/json"
+		}
+		`
+	serverV3 := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	server := &envoyExtAuthzV2Wrapper{serverV3}
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
 	}
 }
 

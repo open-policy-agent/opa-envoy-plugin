@@ -81,7 +81,10 @@ jobs:
           curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
 
           # Download and install Istio
-          curl -L https://git.io/getLatestIstio | ISTIO_VERSION=${ISTIO_VERSION} sh - && mv istio-${ISTIO_VERSION} /tmp && cd /tmp/istio-${ISTIO_VERSION} && for i in install/kubernetes/helm/istio-init/files/crd*yaml; do kubectl apply -f $i; done && kubectl apply -f install/kubernetes/istio-demo.yaml && cd -
+          curl -L https://git.io/getLatestIstio | ISTIO_VERSION=${ISTIO_VERSION} sh - && \
+            mv istio-${ISTIO_VERSION} /tmp && \
+            cd /tmp/istio-${ISTIO_VERSION} && \
+            bin/istioctl install -y --set profile=demo
           kubectl -n istio-system wait --for=condition=available --timeout=600s --all deployment
 
           # Install bats

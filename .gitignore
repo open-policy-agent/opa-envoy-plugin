@@ -13,3 +13,8 @@ site.tar.gz
 
 # runtime artifacts
 policies
+
+# cert files
+opa-envoy.crt
+opa-envoy.key
+root.crt
