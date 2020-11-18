@@ -8,9 +8,10 @@ import (
 	"context"
 	"testing"
 
-	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
-	"github.com/open-policy-agent/opa/util"
+	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	"google.golang.org/genproto/googleapis/rpc/code"
+
+	"github.com/open-policy-agent/opa/util"
 )
 
 func BenchmarkCheck(b *testing.B) {

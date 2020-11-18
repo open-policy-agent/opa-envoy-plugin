@@ -20,7 +20,7 @@ availability) in order to perform the authorization check.
 
 ## Quick Start
 
-This section assumes you are testing with Istio v1.5.0 or later.
+This section assumes you are testing with Istio v1.7.0 or later.
 
 This section assumes you have Istio deployed on top of Kubernetes. See Istio's [Quick Start](https://istio.io/docs/setup/kubernetes/install/kubernetes/) page to get started.
 
@@ -158,12 +158,19 @@ The following OPA policy is used in the [Quick Start](#quick-start) section abov
 package istio.authz
 
 import input.attributes.request.http as http_request
+import input.parsed_path
 
 default allow = false
 
 allow {
     roles_for_user[r]
     required_roles[r]
+}
+
+# allow health checks of the opa sidecar
+allow {
+    parsed_path[0] == "health"
+    http_request.method == "GET"
 }
 
 roles_for_user[r] {
