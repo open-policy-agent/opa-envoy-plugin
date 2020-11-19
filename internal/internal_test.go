@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/open-policy-agent/opa/topdown"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -27,6 +26,7 @@ import (
 	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/util"
 )
 
@@ -1113,6 +1113,31 @@ func TestGetResponseHeaders(t *testing.T) {
 	_, err = getResponseHeaders(input)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
+	}
+
+	input["headers"] = []interface{}{
+		map[string]interface{}{
+			"foo": "bar",
+		},
+		map[string]interface{}{
+			"foo": "baz",
+		},
+	}
+
+	result, err = getResponseHeaders(input)
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("Expected two header but got %v", len(result))
+	}
+
+	seen := map[string]int{}
+	for _, hdr := range result {
+		seen[hdr.Header.Value]++
+	}
+	if seen["bar"] != 1 || seen["baz"] != 1 {
+		t.Errorf("expected 'bar' and 'baz', got %v", seen)
 	}
 }
 
