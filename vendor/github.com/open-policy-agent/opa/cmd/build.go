@@ -107,8 +107,8 @@ The 'build' command supports targets (specified by -t):
             files. If optimization is enabled at least one entrypoint (-e) must be supplied.
 
     wasm    The wasm target emits a bundle containing a WebAssembly module compiled from
-            the input files. The bundle may contain the original policy or data files.
-            The wasm target requires exactly one entrypoint (-e) be supplied.
+            the input files for each specified entrypoint. The bundle may contain the
+            original policy or data files.
 
 The -e flag tells the 'build' command which documents will be queried by the software
 asking for policy decisions, so that it can focus optimization efforts and ensure
@@ -241,7 +241,11 @@ func dobuild(params buildParams, args []string) error {
 	buf := bytes.NewBuffer(nil)
 
 	// generate the bundle verification and signing config
-	bvc := buildVerificationConfig(params.pubKey, params.pubKeyID, params.algorithm, params.scope, params.excludeVerifyFiles)
+	bvc, err := buildVerificationConfig(params.pubKey, params.pubKeyID, params.algorithm, params.scope, params.excludeVerifyFiles)
+	if err != nil {
+		return err
+	}
+
 	bsc := buildSigningConfig(params.key, params.algorithm, params.claimsFile)
 
 	if bvc != nil || bsc != nil {
@@ -253,8 +257,8 @@ func dobuild(params buildParams, args []string) error {
 	// if capabilities are not provided as a cmd flag,
 	// then ast.CapabilitiesForThisVersion must be called
 	// within dobuild to ensure custom builtins are properly captured
-	if checkParams.capabilities.C != nil {
-		capabilities = checkParams.capabilities.C
+	if params.capabilities.C != nil {
+		capabilities = params.capabilities.C
 	} else {
 		capabilities = ast.CapabilitiesForThisVersion()
 	}
@@ -275,7 +279,7 @@ func dobuild(params buildParams, args []string) error {
 		compiler = compiler.WithBundleVerificationKeyID(params.pubKeyID)
 	}
 
-	err := compiler.Build(context.Background())
+	err = compiler.Build(context.Background())
 
 	if params.debug {
 		printdebug(os.Stderr, compiler.Debug())
@@ -309,13 +313,16 @@ func buildCommandLoaderFilter(bundleMode bool, ignore []string) func(string, os.
 	}
 }
 
-func buildVerificationConfig(pubKey, pubKeyID, alg, scope string, excludeFiles []string) *bundle.VerificationConfig {
+func buildVerificationConfig(pubKey, pubKeyID, alg, scope string, excludeFiles []string) (*bundle.VerificationConfig, error) {
 	if pubKey == "" {
-		return nil
+		return nil, nil
 	}
 
-	keyConfig := bundle.NewKeyConfig(pubKey, alg, scope)
-	return bundle.NewVerificationConfig(map[string]*bundle.KeyConfig{pubKeyID: keyConfig}, pubKeyID, scope, excludeFiles)
+	keyConfig, err := bundle.NewKeyConfig(pubKey, alg, scope)
+	if err != nil {
+		return nil, err
+	}
+	return bundle.NewVerificationConfig(map[string]*bundle.KeyConfig{pubKeyID: keyConfig}, pubKeyID, scope, excludeFiles), nil
 }
 
 func buildSigningConfig(key, alg, claimsFile string) *bundle.SigningConfig {

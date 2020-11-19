@@ -14,6 +14,13 @@ import (
 	"github.com/open-policy-agent/opa/internal/ir"
 )
 
+// QuerySet represents the input to the planner.
+type QuerySet struct {
+	Name          string
+	Queries       []ast.Body
+	RewrittenVars map[ast.Var]ast.Var
+}
+
 type planiter func() error
 type binaryiter func(ir.Local, ir.Local) error
 
@@ -24,19 +31,19 @@ type wasmBuiltin struct {
 
 // Planner implements a query planner for Rego queries.
 type Planner struct {
-	policy    *ir.Policy              // result of planning
-	queries   []ast.Body              // input query to plan
-	modules   []*ast.Module           // input modules to support queries
-	rewritten map[ast.Var]ast.Var     // rewritten query vars
-	strings   map[string]int          // global string constant indices
-	externs   map[string]struct{}     // built-in functions that are required in execution environment
-	decls     map[string]*ast.Builtin // built-in functions that may be provided in execution environment
-	rules     *ruletrie               // rules that may be planned
-	funcs     *funcstack              // functions that have been planned
-	curr      *ir.Block               // in-progress query block
-	vars      *varstack               // in-scope variables
-	ltarget   ir.Local                // target variable of last planned statement
-	lnext     ir.Local                // next variable to use
+	policy  *ir.Policy              // result of planning
+	queries []QuerySet              // input queries to plan
+	modules []*ast.Module           // input modules to support queries
+	strings map[string]int          // global string constant indices
+	externs map[string]struct{}     // built-in functions that are required in execution environment
+	decls   map[string]*ast.Builtin // built-in functions that may be provided in execution environment
+	rules   *ruletrie               // rules that may be planned
+	funcs   *funcstack              // functions that have been planned
+	plan    *ir.Plan                // in-progress query plan
+	curr    *ir.Block               // in-progress query block
+	vars    *varstack               // in-scope variables
+	ltarget ir.Local                // target variable of last planned statement
+	lnext   ir.Local                // next variable to use
 }
 
 // New returns a new Planner object.
@@ -44,7 +51,7 @@ func New() *Planner {
 	return &Planner{
 		policy: &ir.Policy{
 			Static: &ir.Static{},
-			Plan:   &ir.Plan{},
+			Plans:  &ir.Plans{},
 			Funcs:  &ir.Funcs{},
 		},
 		strings: map[string]int{},
@@ -66,8 +73,10 @@ func (p *Planner) WithBuiltinDecls(decls map[string]*ast.Builtin) *Planner {
 	return p
 }
 
-// WithQueries sets the query set to generate a plan for.
-func (p *Planner) WithQueries(queries []ast.Body) *Planner {
+// WithQueries sets the query sets to generate a plan for. The rewritten collection provides
+// a mapping of rewritten query vars for each query set. The planner uses rewritten variables
+// but the result set key will be the original variable name.
+func (p *Planner) WithQueries(queries []QuerySet) *Planner {
 	p.queries = queries
 	return p
 }
@@ -75,14 +84,6 @@ func (p *Planner) WithQueries(queries []ast.Body) *Planner {
 // WithModules sets the module set that contains query dependencies.
 func (p *Planner) WithModules(modules []*ast.Module) *Planner {
 	p.modules = modules
-	return p
-}
-
-// WithRewrittenVars sets a mapping of rewritten query vars on the planner. The
-// plan will use the rewritten variable name but the result set key will be the
-// original variable name.
-func (p *Planner) WithRewrittenVars(vs map[ast.Var]ast.Var) *Planner {
-	p.rewritten = vs
 	return p
 }
 
@@ -217,8 +218,10 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 			blocks = &stmt.Blocks
 		}
 
+		var prev *ast.Rule
+
 		// Unordered rules are treated as a special case of ordered rules.
-		for rule := rules[i]; rule != nil; rule = rule.Else {
+		for rule := rules[i]; rule != nil; prev, rule = rule, rule.Else {
 
 			// Setup planner for block.
 			p.lnext = lnext
@@ -230,6 +233,12 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 			curr := &ir.Block{}
 			*blocks = append(*blocks, curr)
 			p.curr = curr
+
+			if prev != nil {
+				// Ordered rules are handled by short circuiting execution. The
+				// plan will jump out to the extra block that was planned above.
+				p.appendStmt(&ir.IsUndefinedStmt{Source: fn.Return})
+			}
 
 			// Complete and partial rules are treated as special cases of
 			// functions. If there are args, the first step is a no-op.
@@ -276,13 +285,6 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 
 				if err != nil {
 					return err
-				}
-
-				// Ordered rules are handled by short circuiting execution. The
-				// plan will jump out to the extra block that was planned above.
-				if rule.Else != nil {
-					p.appendStmt(&ir.IsDefinedStmt{Source: fn.Return})
-					p.appendStmt(&ir.BreakStmt{Index: 1})
 				}
 
 				return nil
@@ -352,80 +354,86 @@ func (p *Planner) planFuncParams(params []ir.Local, args ast.Args, idx int, iter
 
 func (p *Planner) planQueries() error {
 
-	// Initialize the plan with a block that prepares the query result.
-	p.curr = &ir.Block{}
+	for _, qs := range p.queries {
 
-	// Build a set of variables appearing in the query and allocate strings for
-	// each one. The strings will be used in the result set objects.
-	qvs := ast.NewVarSet()
-
-	for _, q := range p.queries {
-		vs := q.Vars(ast.VarVisitorParams{SkipRefCallHead: true, SkipClosures: true}).Diff(ast.ReservedVars)
-		qvs.Update(vs)
-	}
-
-	lvarnames := make(map[ast.Var]ir.Local, len(qvs))
-
-	for _, qv := range qvs.Sorted() {
-		qv = p.rewrittenVar(qv)
-		if !qv.IsGenerated() && !qv.IsWildcard() {
-			stmt := &ir.MakeStringStmt{
-				Index:  p.getStringConst(string(qv)),
-				Target: p.newLocal(),
-			}
-			p.appendStmt(stmt)
-			lvarnames[qv] = stmt.Target
-		}
-	}
-
-	if len(p.curr.Stmts) > 0 {
-		p.appendBlock(p.curr)
-	}
-
-	lnext := p.lnext
-
-	for _, q := range p.queries {
-		p.lnext = lnext
-		p.vars.Push(map[ast.Var]ir.Local{})
+		// Initialize the plan with a block that prepares the query result.
+		p.plan = &ir.Plan{Name: qs.Name}
+		p.policy.Plans.Plans = append(p.policy.Plans.Plans, p.plan)
 		p.curr = &ir.Block{}
-		defined := false
-		qvs := q.Vars(ast.VarVisitorParams{SkipRefCallHead: true, SkipClosures: true}).Diff(ast.ReservedVars).Sorted()
 
-		if err := p.planQuery(q, 0, func() error {
+		// Build a set of variables appearing in the query and allocate strings for
+		// each one. The strings will be used in the result set objects.
+		qvs := ast.NewVarSet()
 
-			// Add an object containing variable bindings into the result set.
-			lr := p.newLocal()
-
-			p.appendStmt(&ir.MakeObjectStmt{
-				Target: lr,
-			})
-
-			for _, qv := range qvs {
-				rw := p.rewrittenVar(qv)
-				if !rw.IsGenerated() && !rw.IsWildcard() {
-					p.appendStmt(&ir.ObjectInsertStmt{
-						Object: lr,
-						Key:    lvarnames[rw],
-						Value:  p.vars.GetOrEmpty(qv),
-					})
-				}
-			}
-
-			p.appendStmt(&ir.ResultSetAdd{
-				Value: lr,
-			})
-
-			defined = true
-			return nil
-		}); err != nil {
-			return err
+		for _, q := range qs.Queries {
+			vs := q.Vars(ast.VarVisitorParams{SkipRefCallHead: true, SkipClosures: true}).Diff(ast.ReservedVars)
+			qvs.Update(vs)
 		}
 
-		p.vars.Pop()
+		lvarnames := make(map[ast.Var]ir.Local, len(qvs))
 
-		if defined {
+		for _, qv := range qvs.Sorted() {
+			qv = rewrittenVar(qs.RewrittenVars, qv)
+			if !qv.IsGenerated() && !qv.IsWildcard() {
+				stmt := &ir.MakeStringStmt{
+					Index:  p.getStringConst(string(qv)),
+					Target: p.newLocal(),
+				}
+				p.appendStmt(stmt)
+				lvarnames[qv] = stmt.Target
+			}
+		}
+
+		if len(p.curr.Stmts) > 0 {
 			p.appendBlock(p.curr)
 		}
+
+		lnext := p.lnext
+
+		for _, q := range qs.Queries {
+			p.lnext = lnext
+			p.vars.Push(map[ast.Var]ir.Local{})
+			p.curr = &ir.Block{}
+			defined := false
+			qvs := q.Vars(ast.VarVisitorParams{SkipRefCallHead: true, SkipClosures: true}).Diff(ast.ReservedVars).Sorted()
+
+			if err := p.planQuery(q, 0, func() error {
+
+				// Add an object containing variable bindings into the result set.
+				lr := p.newLocal()
+
+				p.appendStmt(&ir.MakeObjectStmt{
+					Target: lr,
+				})
+
+				for _, qv := range qvs {
+					rw := rewrittenVar(qs.RewrittenVars, qv)
+					if !rw.IsGenerated() && !rw.IsWildcard() {
+						p.appendStmt(&ir.ObjectInsertStmt{
+							Object: lr,
+							Key:    lvarnames[rw],
+							Value:  p.vars.GetOrEmpty(qv),
+						})
+					}
+				}
+
+				p.appendStmt(&ir.ResultSetAdd{
+					Value: lr,
+				})
+
+				defined = true
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			p.vars.Pop()
+
+			if defined {
+				p.appendBlock(p.curr)
+			}
+		}
+
 	}
 
 	return nil
@@ -699,6 +707,7 @@ func (p *Planner) planExprCall(e *ast.Expr, iter planiter) error {
 		})
 	default:
 
+		var relation bool
 		var name string
 		var arity int
 		var args []ir.Local
@@ -717,6 +726,7 @@ func (p *Planner) planExprCall(e *ast.Expr, iter planiter) error {
 				p.vars.GetOrEmpty(ast.DefaultRootDocument.Value.(ast.Var)),
 			}
 		} else if decl, ok := p.decls[operator]; ok {
+			relation = decl.Relation
 			arity = len(decl.Decl.Args())
 			name = operator
 			p.externs[operator] = struct{}{}
@@ -726,47 +736,108 @@ func (p *Planner) planExprCall(e *ast.Expr, iter planiter) error {
 
 		operands := e.Operands()
 
-		if len(operands) == arity {
-			// rule: f(x) = x { ... }
-			// call: f(x) # result not captured
-			return p.planCallArgs(operands, 0, args, func(args []ir.Local) error {
-				p.ltarget = p.newLocal()
-				p.appendStmt(&ir.CallStmt{
-					Func:   name,
-					Args:   args,
-					Result: p.ltarget,
-				})
-
-				falsy := p.newLocal()
-
-				p.appendStmt(&ir.MakeBooleanStmt{
-					Value:  false,
-					Target: falsy,
-				})
-
-				p.appendStmt(&ir.NotEqualStmt{
-					A: p.ltarget,
-					B: falsy,
-				})
-
-				return iter()
-			})
-		} else if len(operands) == arity+1 {
-			// rule: f(x) = x { ... }
-			// call: f(x, 1)  # caller captures result
-			return p.planCallArgs(operands[:len(operands)-1], 0, args, func(args []ir.Local) error {
-				result := p.newLocal()
-				p.appendStmt(&ir.CallStmt{
-					Func:   name,
-					Args:   args,
-					Result: result,
-				})
-				return p.planUnifyLocal(result, operands[len(operands)-1], iter)
-			})
+		if len(operands) < arity || len(operands) > arity+1 {
+			return fmt.Errorf("illegal call: wrong number of operands: got %v, want %v)", len(operands), arity)
 		}
 
-		return fmt.Errorf("illegal call: wrong number of operands: got %v, want %v)", len(operands), arity)
+		if relation {
+			return p.planExprCallRelation(name, arity, operands, args, iter)
+		}
+
+		return p.planExprCallFunc(name, arity, operands, args, iter)
 	}
+}
+
+func (p *Planner) planExprCallRelation(name string, arity int, operands []*ast.Term, args []ir.Local, iter planiter) error {
+
+	if len(operands) == arity {
+		return p.planCallArgs(operands, 0, args, func(args []ir.Local) error {
+			p.ltarget = p.newLocal()
+			p.appendStmt(&ir.CallStmt{
+				Func:   name,
+				Args:   args,
+				Result: p.ltarget,
+			})
+
+			lsize := p.newLocal()
+
+			p.appendStmt(&ir.LenStmt{
+				Source: p.ltarget,
+				Target: lsize,
+			})
+
+			lzero := p.newLocal()
+
+			p.appendStmt(&ir.MakeNumberIntStmt{
+				Value:  0,
+				Target: lzero,
+			})
+
+			p.appendStmt(&ir.NotEqualStmt{
+				A: lsize,
+				B: lzero,
+			})
+
+			return iter()
+		})
+	}
+
+	return p.planCallArgs(operands[:len(operands)-1], 0, args, func(args []ir.Local) error {
+
+		p.ltarget = p.newLocal()
+
+		p.appendStmt(&ir.CallStmt{
+			Func:   name,
+			Args:   args,
+			Result: p.ltarget,
+		})
+
+		return p.planScanValues(operands[len(operands)-1], func(ir.Local) error {
+			return iter()
+		})
+	})
+}
+
+func (p *Planner) planExprCallFunc(name string, arity int, operands []*ast.Term, args []ir.Local, iter planiter) error {
+
+	if len(operands) == arity {
+		// definition: f(x) = x { ... }
+		// call: f(x) # result not captured
+		return p.planCallArgs(operands, 0, args, func(args []ir.Local) error {
+			p.ltarget = p.newLocal()
+			p.appendStmt(&ir.CallStmt{
+				Func:   name,
+				Args:   args,
+				Result: p.ltarget,
+			})
+
+			falsy := p.newLocal()
+
+			p.appendStmt(&ir.MakeBooleanStmt{
+				Value:  false,
+				Target: falsy,
+			})
+
+			p.appendStmt(&ir.NotEqualStmt{
+				A: p.ltarget,
+				B: falsy,
+			})
+
+			return iter()
+		})
+	}
+
+	// definition: f(x) = x { ... }
+	// call: f(x, 1)  # caller captures result
+	return p.planCallArgs(operands[:len(operands)-1], 0, args, func(args []ir.Local) error {
+		result := p.newLocal()
+		p.appendStmt(&ir.CallStmt{
+			Func:   name,
+			Args:   args,
+			Result: result,
+		})
+		return p.planUnifyLocal(result, operands[len(operands)-1], iter)
+	})
 }
 
 func (p *Planner) planCallArgs(terms []*ast.Term, idx int, args []ir.Local, iter func([]ir.Local) error) error {
@@ -1693,6 +1764,31 @@ func (p *Planner) planScan(key *ast.Term, iter scaniter) error {
 
 }
 
+func (p *Planner) planScanValues(val *ast.Term, iter scaniter) error {
+
+	scan := &ir.ScanStmt{
+		Source: p.ltarget,
+		Key:    p.newLocal(),
+		Value:  p.newLocal(),
+		Block:  &ir.Block{},
+	}
+
+	prev := p.curr
+	p.curr = scan.Block
+
+	if err := p.planUnifyLocal(scan.Value, val, func() error {
+		p.ltarget = scan.Value
+		return iter(scan.Value)
+	}); err != nil {
+		return err
+	}
+
+	p.curr = prev
+	p.appendStmt(scan)
+
+	return nil
+}
+
 // planSaveLocals returns a slice of locals holding temporary variables that
 // have been assigned from the supplied vars.
 func (p *Planner) planSaveLocals(vars ...ir.Local) []ir.Local {
@@ -1760,12 +1856,12 @@ func (p *Planner) appendStmt(s ir.Stmt) {
 	p.curr.Stmts = append(p.curr.Stmts, s)
 }
 
-func (p *Planner) appendFunc(f *ir.Func) {
-	p.policy.Funcs.Funcs = append(p.policy.Funcs.Funcs, f)
+func (p *Planner) appendBlock(b *ir.Block) {
+	p.plan.Blocks = append(p.plan.Blocks, b)
 }
 
-func (p *Planner) appendBlock(b *ir.Block) {
-	p.policy.Plan.Blocks = append(p.policy.Plan.Blocks, b)
+func (p *Planner) appendFunc(f *ir.Func) {
+	p.policy.Funcs.Funcs = append(p.policy.Funcs.Funcs, f)
 }
 
 func (p *Planner) newLocal() ir.Local {
@@ -1774,8 +1870,8 @@ func (p *Planner) newLocal() ir.Local {
 	return x
 }
 
-func (p *Planner) rewrittenVar(k ast.Var) ast.Var {
-	rw, ok := p.rewritten[k]
+func rewrittenVar(vars map[ast.Var]ast.Var, k ast.Var) ast.Var {
+	rw, ok := vars[k]
 	if !ok {
 		return k
 	}
