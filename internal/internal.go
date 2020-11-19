@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/open-policy-agent/opa/topdown"
 	"io"
 	"net"
 	"net/url"
@@ -35,6 +34,7 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/util"
 )
@@ -492,7 +492,6 @@ func getResponseStatus(result map[string]interface{}) (int32, error) {
 func getResponseHeaders(result map[string]interface{}) ([]*ext_core.HeaderValueOption, error) {
 	var ok bool
 	var val interface{}
-	var headers map[string]interface{}
 
 	responseHeaders := []*ext_core.HeaderValueOption{}
 
@@ -500,27 +499,51 @@ func getResponseHeaders(result map[string]interface{}) ([]*ext_core.HeaderValueO
 		return responseHeaders, nil
 	}
 
-	if headers, ok = val.(map[string]interface{}); !ok {
+	takeResponseHeaders := func(headers map[string]interface{}) ([]*ext_core.HeaderValueOption, error) {
+		responseHeaders := []*ext_core.HeaderValueOption{}
+		for key, value := range headers {
+			var headerVal string
+			if headerVal, ok = value.(string); !ok {
+				return nil, fmt.Errorf("type assertion error")
+			}
+			headerValue := &ext_core.HeaderValue{
+				Key:   key,
+				Value: headerVal,
+			}
+			headerValueOption := &ext_core.HeaderValueOption{
+				Header: headerValue,
+			}
+			responseHeaders = append(responseHeaders, headerValueOption)
+		}
+		return responseHeaders, nil
+	}
+
+	switch val := val.(type) {
+	case []interface{}:
+		for _, vval := range val {
+			headers, ok := vval.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("type assertion error")
+			}
+
+			responseHeadersToAppend, err := takeResponseHeaders(headers)
+			if err != nil {
+				return nil, err
+			}
+			responseHeaders = append(responseHeaders, responseHeadersToAppend...)
+		}
+
+	case map[string]interface{}:
+		responseHeadersToUse, err := takeResponseHeaders(val)
+		if err != nil {
+			return nil, err
+		}
+		responseHeaders = responseHeadersToUse
+
+	default:
 		return nil, fmt.Errorf("type assertion error")
 	}
 
-	for key, value := range headers {
-		var headerVal string
-		if headerVal, ok = value.(string); !ok {
-			return nil, fmt.Errorf("type assertion error")
-		}
-
-		headerValue := &ext_core.HeaderValue{
-			Key:   key,
-			Value: headerVal,
-		}
-
-		headerValueOption := &ext_core.HeaderValueOption{
-			Header: headerValue,
-		}
-
-		responseHeaders = append(responseHeaders, headerValueOption)
-	}
 	return responseHeaders, nil
 }
 
