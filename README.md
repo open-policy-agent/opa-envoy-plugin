@@ -436,37 +436,17 @@ http_filters:
 This will result in something like the following dictionary being added to `input.attributes` (some common fields have
 been excluded for brevity):
 ```ruby
-"metadata_context": {
-  "filter_metadata": {
-    "envoy.filters.http.jwt_authn": {
-      "fields": {
+  "metadata_context": {
+    "filter_metadata": {
+      "envoy.filters.http.jwt_authn": {
         "verified_jwt": {
-          "Kind": {
-            "StructValue": {
-              "fields": {
-                "email": {
-                  "Kind": {
-                    "StringValue": "alice@example.com"
-                  }
-                },
-                "exp": {
-                  "Kind": {
-                    "NumberValue": 1569026124
-                  }
-                },
-                "name": {
-                  "Kind": {
-                    "StringValue": "Alice"
-                  }
-                }
-              }
-            }
-          }
+          "email": "alice@example.com",
+          "exp": 1569026124,
+          "name": "Alice"
         }
       }
     }
   }
-}
 ```
 
 ### Example OPA Policy
@@ -474,13 +454,7 @@ been excluded for brevity):
 This JWT data can be accessed in OPA policy like this:
 
 ```ruby
-jwt_payload = _value {
-    verified_jwt := input.attributes.metadata_context.filter_metadata["envoy.filters.http.jwt_authn"]["fields"]["verified_jwt"]
-    _value := {
-        "name": verified_jwt["Kind"]["StructValue"]["fields"]["name"]["Kind"]["StringValue"],
-        "email": verified_jwt["Kind"]["StructValue"]["fields"]["email"]["Kind"]["StringValue"]
-    }
-}
+jwt_payload = input.attributes.metadata_context.filter_metadata["envoy.filters.http.jwt_authn"].verified_jwt
 
 allow {
   jwt_payload.email == "alice@example.com"
