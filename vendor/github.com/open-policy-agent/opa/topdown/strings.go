@@ -5,8 +5,8 @@
 package topdown
 
 import (
-	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -107,11 +107,12 @@ func builtinSubstring(a, b, c ast.Value) (ast.Value, error) {
 	if err != nil {
 		return nil, err
 	}
+	runes := []rune(base)
 
 	startIndex, err := builtins.IntOperand(b, 2)
 	if err != nil {
 		return nil, err
-	} else if startIndex >= len(base) {
+	} else if startIndex >= len(runes) {
 		return ast.String(""), nil
 	} else if startIndex < 0 {
 		return nil, fmt.Errorf("negative offset")
@@ -124,13 +125,13 @@ func builtinSubstring(a, b, c ast.Value) (ast.Value, error) {
 
 	var s ast.String
 	if length < 0 {
-		s = ast.String(base[startIndex:])
+		s = ast.String(runes[startIndex:])
 	} else {
 		upto := startIndex + length
-		if len(base) < upto {
-			upto = len(base)
+		if len(runes) < upto {
+			upto = len(runes)
 		}
-		s = ast.String(base[startIndex:upto])
+		s = ast.String(runes[startIndex:upto])
 	}
 
 	return s, nil
@@ -233,14 +234,12 @@ func builtinReplace(a, b, c ast.Value) (ast.Value, error) {
 }
 
 func builtinReplaceN(a, b ast.Value) (ast.Value, error) {
-	asJSON, err := ast.JSON(a)
+	patterns, err := builtins.ObjectOperand(a, 1)
 	if err != nil {
 		return nil, err
 	}
-	oldnewObj, ok := asJSON.(map[string]interface{})
-	if !ok {
-		return nil, builtins.NewOperandTypeErr(1, a, "object")
-	}
+	keys := patterns.Keys()
+	sort.Slice(keys, func(i, j int) bool { return ast.Compare(keys[i].Value, keys[j].Value) < 0 })
 
 	s, err := builtins.StringOperand(b, 2)
 	if err != nil {
@@ -248,12 +247,20 @@ func builtinReplaceN(a, b ast.Value) (ast.Value, error) {
 	}
 
 	var oldnewArr []string
-	for k, v := range oldnewObj {
-		strVal, ok := v.(string)
+	for _, k := range keys {
+		keyVal, ok := k.Value.(ast.String)
 		if !ok {
-			return nil, errors.New("non-string value found in pattern object")
+			return nil, builtins.NewOperandErr(1, "non-string key found in pattern object")
 		}
-		oldnewArr = append(oldnewArr, k, strVal)
+		val := patterns.Get(k) // cannot be nil
+		strVal, ok := val.Value.(ast.String)
+		if !ok {
+			return nil, builtins.NewOperandErr(1, "non-string value found in pattern object")
+		}
+		oldnewArr = append(oldnewArr, string(keyVal), string(strVal))
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	r := strings.NewReplacer(oldnewArr...)
