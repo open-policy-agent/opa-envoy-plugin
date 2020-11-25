@@ -63,36 +63,26 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Run End-to-End Test
+      - name: Build docker image
+        run: make image tag-latest
+
+      - name: Setup kind/istio
         run: |
-          KIND_VERSION=0.4.0
-          ISTIO_VERSION=1.5.0
-
-          # Download and install kind
-          curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
-
-          # Create kind cluster
-          if [ -z $(kind get clusters) ]; then
-            kind create cluster
-          fi
-          export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-
-          # Download and install kubectl
-          curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
-
-          # Download and install Istio
-          curl -L https://git.io/getLatestIstio | ISTIO_VERSION=${ISTIO_VERSION} sh - && \
-            mv istio-${ISTIO_VERSION} /tmp && \
-            cd /tmp/istio-${ISTIO_VERSION} && \
-            bin/istioctl install -y --set profile=demo
-          kubectl -n istio-system wait --for=condition=available --timeout=600s --all deployment
+          # install kind, kubectl, istio
+          make test-cluster
 
           # Install bats
           sudo apt-get update -y
           sudo apt-get install -y bats
 
-          # Run the test
-          make update-istio-quickstart-version && make test-e2e
+          # Prepare quick_start.yaml
+          make update-istio-quickstart-version
 
-          # Delete the cluster
-          kind delete cluster
+          # Make docker image available to k8s
+          kind load docker-image openpolicyagent/opa:latest-istio
+
+      - name: Run e2e tests
+        run: make test-e2e
+
+      - name: Cleanup
+        run: kind delete cluster
