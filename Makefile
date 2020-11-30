@@ -9,6 +9,7 @@ VERSION_ISTIO := $(VERSION_OPA)-istio$(shell ./build/get-plugin-rev.sh)
 PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 
 GO := go
+GO_TAGS := -tags=opa_wasm
 GOVERSION := $(shell cat ./.go-version)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
@@ -41,9 +42,10 @@ LDFLAGS := "-X github.com/open-policy-agent/opa/version.Version=$(VERSION) \
 GO15VENDOREXPERIMENT := 1
 export GO15VENDOREXPERIMENT
 
-.PHONY: all build build-darwin build-linux build-windows clean check check-fmt check-vet check-lint \
-    deploy-ci docker-login generate image image-quick push push-latest tag-latest \
-    test test-cluster test-e2e update-opa update-istio-quickstart-version version
+.PHONY: all build build-darwin build-linux build-windows clean check \
+    check-fmt check-vet check-lint deploy-ci docker-login generate image image-quick \
+    push push-latest tag-latest test test-cluster test-e2e update-opa \
+    update-istio-quickstart-version version
 
 ######################################################
 #
@@ -60,7 +62,8 @@ generate:
 	$(GO) generate ./...
 
 build: generate
-	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
+	CGO_LDFLAGS="-Wl,-rpath,/usr/lib/opa" $(GO) build $(GO_TAGS) -o $(BIN) \
+	  -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin
 
 build-darwin:
 	@$(MAKE) build GOOS=darwin
@@ -76,8 +79,11 @@ image:
 	@$(MAKE) image-quick
 
 image-quick:
-	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
-	docker build -t $(IMAGE):$(VERSION) -f .Dockerfile_$(GOARCH) .
+	docker build \
+		-t $(IMAGE):$(VERSION) \
+		--build-arg BASE=openpolicyagent/opa:$(VERSION_OPA)-debug \
+		--build-arg BIN_DIR=$(RELEASE_DIR) \
+		.
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):$(VERSION_ISTIO)
 
 push:
@@ -96,7 +102,7 @@ docker-login:
 	@echo "Docker Login..."
 	@echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USER} --password-stdin
 
-deploy-ci: docker-login image push tag-latest push-latest
+deploy-ci: release docker-login image-quick push tag-latest push-latest
 
 update-opa:
 	@./build/update-opa-version.sh $(TAG)
@@ -144,7 +150,15 @@ release:
 		$(RELEASE_BUILD_IMAGE) \
 		/_src/build/build-release.sh --version=$(VERSION) --output-dir=/$(RELEASE_DIR) --source-url=/_src
 
+.PHONY: release-local
+release-local:
+	docker run $(DOCKER_FLAGS) \
+		-v $(PWD)/$(RELEASE_DIR):/$(RELEASE_DIR) \
+		-v $(PWD):/_src \
+		$(RELEASE_BUILD_IMAGE) \
+		/_src/build/build-release.sh --output-dir=/$(RELEASE_DIR) --source-url=/_src
 
+# The remaining targets are invoked by build/build-release.sh (`make release` above)
 .PHONY: release-build-linux
 release-build-linux: ensure-release-dir build-linux
 	mv opa_envoy_linux_$(GOARCH) $(RELEASE_DIR)/

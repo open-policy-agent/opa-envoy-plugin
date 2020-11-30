@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Build docker image
-        run: make image tag-latest
+        run: make release-local image-quick tag-latest
 
       - name: Setup kind/istio
         run: |
