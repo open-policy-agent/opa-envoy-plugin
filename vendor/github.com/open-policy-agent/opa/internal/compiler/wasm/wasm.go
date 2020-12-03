@@ -55,64 +55,87 @@ const (
 	opaValueMerge        = "opa_value_merge"
 	opaValueShallowCopy  = "opa_value_shallow_copy"
 	opaValueType         = "opa_value_type"
+	opaMemoizeInit       = "opa_memoize_init"
+	opaMemoizePush       = "opa_memoize_push"
+	opaMemoizePop        = "opa_memoize_pop"
+	opaMemoizeInsert     = "opa_memoize_insert"
+	opaMemoizeGet        = "opa_memoize_get"
 )
 
 var builtinsFunctions = map[string]string{
-	ast.Plus.Name:            "opa_arith_plus",
-	ast.Minus.Name:           "opa_arith_minus",
-	ast.Multiply.Name:        "opa_arith_multiply",
-	ast.Divide.Name:          "opa_arith_divide",
-	ast.Abs.Name:             "opa_arith_abs",
-	ast.Round.Name:           "opa_arith_round",
-	ast.Rem.Name:             "opa_arith_rem",
-	ast.ArrayConcat.Name:     "opa_array_concat",
-	ast.ArraySlice.Name:      "opa_array_slice",
-	ast.SetDiff.Name:         "opa_set_diff",
-	ast.And.Name:             "opa_set_intersection",
-	ast.Or.Name:              "opa_set_union",
-	ast.Intersection.Name:    "opa_sets_intersection",
-	ast.Union.Name:           "opa_sets_union",
-	ast.IsNumber.Name:        "opa_types_is_number",
-	ast.IsString.Name:        "opa_types_is_string",
-	ast.IsBoolean.Name:       "opa_types_is_boolean",
-	ast.IsArray.Name:         "opa_types_is_array",
-	ast.IsSet.Name:           "opa_types_is_set",
-	ast.IsObject.Name:        "opa_types_is_object",
-	ast.IsNull.Name:          "opa_types_is_null",
-	ast.TypeNameBuiltin.Name: "opa_types_name",
-	ast.BitsOr.Name:          "opa_bits_or",
-	ast.BitsAnd.Name:         "opa_bits_and",
-	ast.BitsNegate.Name:      "opa_bits_negate",
-	ast.BitsXOr.Name:         "opa_bits_xor",
-	ast.BitsShiftLeft.Name:   "opa_bits_shiftleft",
-	ast.BitsShiftRight.Name:  "opa_bits_shiftright",
-	ast.Count.Name:           "opa_agg_count",
-	ast.Sum.Name:             "opa_agg_sum",
-	ast.Product.Name:         "opa_agg_product",
-	ast.Max.Name:             "opa_agg_max",
-	ast.Min.Name:             "opa_agg_min",
-	ast.Sort.Name:            "opa_agg_sort",
-	ast.All.Name:             "opa_agg_all",
-	ast.Any.Name:             "opa_agg_any",
-	ast.Concat.Name:          "opa_strings_concat",
-	ast.FormatInt.Name:       "opa_strings_format_int",
-	ast.IndexOf.Name:         "opa_strings_indexof",
-	ast.Substring.Name:       "opa_strings_substring",
-	ast.Lower.Name:           "opa_strings_lower",
-	ast.Upper.Name:           "opa_strings_upper",
-	ast.Contains.Name:        "opa_strings_contains",
-	ast.StartsWith.Name:      "opa_strings_startswith",
-	ast.EndsWith.Name:        "opa_strings_endswith",
-	ast.Split.Name:           "opa_strings_split",
-	ast.Replace.Name:         "opa_strings_replace",
-	ast.ReplaceN.Name:        "opa_strings_replace_n",
-	ast.Trim.Name:            "opa_strings_trim",
-	ast.TrimLeft.Name:        "opa_strings_trim_left",
-	ast.TrimPrefix.Name:      "opa_strings_trim_prefix",
-	ast.TrimRight.Name:       "opa_strings_trim_right",
-	ast.TrimSuffix.Name:      "opa_strings_trim_suffix",
-	ast.TrimSpace.Name:       "opa_strings_trim_space",
-	ast.NumbersRange.Name:    "opa_numbers_range",
+	ast.Plus.Name:                       "opa_arith_plus",
+	ast.Minus.Name:                      "opa_arith_minus",
+	ast.Multiply.Name:                   "opa_arith_multiply",
+	ast.Divide.Name:                     "opa_arith_divide",
+	ast.Abs.Name:                        "opa_arith_abs",
+	ast.Round.Name:                      "opa_arith_round",
+	ast.Rem.Name:                        "opa_arith_rem",
+	ast.ArrayConcat.Name:                "opa_array_concat",
+	ast.ArraySlice.Name:                 "opa_array_slice",
+	ast.SetDiff.Name:                    "opa_set_diff",
+	ast.And.Name:                        "opa_set_intersection",
+	ast.Or.Name:                         "opa_set_union",
+	ast.Intersection.Name:               "opa_sets_intersection",
+	ast.Union.Name:                      "opa_sets_union",
+	ast.IsNumber.Name:                   "opa_types_is_number",
+	ast.IsString.Name:                   "opa_types_is_string",
+	ast.IsBoolean.Name:                  "opa_types_is_boolean",
+	ast.IsArray.Name:                    "opa_types_is_array",
+	ast.IsSet.Name:                      "opa_types_is_set",
+	ast.IsObject.Name:                   "opa_types_is_object",
+	ast.IsNull.Name:                     "opa_types_is_null",
+	ast.TypeNameBuiltin.Name:            "opa_types_name",
+	ast.BitsOr.Name:                     "opa_bits_or",
+	ast.BitsAnd.Name:                    "opa_bits_and",
+	ast.BitsNegate.Name:                 "opa_bits_negate",
+	ast.BitsXOr.Name:                    "opa_bits_xor",
+	ast.BitsShiftLeft.Name:              "opa_bits_shiftleft",
+	ast.BitsShiftRight.Name:             "opa_bits_shiftright",
+	ast.Count.Name:                      "opa_agg_count",
+	ast.Sum.Name:                        "opa_agg_sum",
+	ast.Product.Name:                    "opa_agg_product",
+	ast.Max.Name:                        "opa_agg_max",
+	ast.Min.Name:                        "opa_agg_min",
+	ast.Sort.Name:                       "opa_agg_sort",
+	ast.All.Name:                        "opa_agg_all",
+	ast.Any.Name:                        "opa_agg_any",
+	ast.Base64IsValid.Name:              "opa_base64_is_valid",
+	ast.Base64Decode.Name:               "opa_base64_decode",
+	ast.Base64Encode.Name:               "opa_base64_encode",
+	ast.Base64UrlEncode.Name:            "opa_base64_url_encode",
+	ast.Base64UrlDecode.Name:            "opa_base64_url_decode",
+	ast.NetCIDRContains.Name:            "opa_cidr_contains",
+	ast.NetCIDROverlap.Name:             "opa_cidr_contains",
+	ast.NetCIDRIntersects.Name:          "opa_cidr_intersects",
+	ast.GlobMatch.Name:                  "opa_glob_match",
+	ast.JSONMarshal.Name:                "opa_json_marshal",
+	ast.JSONUnmarshal.Name:              "opa_json_unmarshal",
+	ast.ObjectFilter.Name:               "opa_object_filter",
+	ast.Concat.Name:                     "opa_strings_concat",
+	ast.FormatInt.Name:                  "opa_strings_format_int",
+	ast.IndexOf.Name:                    "opa_strings_indexof",
+	ast.Substring.Name:                  "opa_strings_substring",
+	ast.Lower.Name:                      "opa_strings_lower",
+	ast.Upper.Name:                      "opa_strings_upper",
+	ast.Contains.Name:                   "opa_strings_contains",
+	ast.StartsWith.Name:                 "opa_strings_startswith",
+	ast.EndsWith.Name:                   "opa_strings_endswith",
+	ast.Split.Name:                      "opa_strings_split",
+	ast.Replace.Name:                    "opa_strings_replace",
+	ast.ReplaceN.Name:                   "opa_strings_replace_n",
+	ast.Trim.Name:                       "opa_strings_trim",
+	ast.TrimLeft.Name:                   "opa_strings_trim_left",
+	ast.TrimPrefix.Name:                 "opa_strings_trim_prefix",
+	ast.TrimRight.Name:                  "opa_strings_trim_right",
+	ast.TrimSuffix.Name:                 "opa_strings_trim_suffix",
+	ast.TrimSpace.Name:                  "opa_strings_trim_space",
+	ast.NumbersRange.Name:               "opa_numbers_range",
+	ast.ToNumber.Name:                   "opa_to_number",
+	ast.WalkBuiltin.Name:                "opa_value_transitive_closure",
+	ast.RegexIsValid.Name:               "opa_regex_is_valid",
+	ast.RegexMatch.Name:                 "opa_regex_match",
+	ast.RegexMatchDeprecated.Name:       "opa_regex_match",
+	ast.RegexFindAllStringSubmatch.Name: "opa_regex_find_all_string_submatch",
 }
 
 var builtinDispatchers = [...]string{
@@ -132,12 +155,15 @@ type Compiler struct {
 	module *module.Module    // output WASM module
 	code   *module.CodeEntry // output WASM code
 
-	builtinStringAddrs    map[int]uint32    // addresses of built-in string constants
-	externalFuncNameAddrs map[string]int32  // addresses of required built-in function names for listing
-	externalFuncs         map[string]int32  // required built-in function ids
-	stringOffset          int32             // null-terminated string data base offset
-	stringAddrs           []uint32          // null-terminated string constant addresses
-	funcs                 map[string]uint32 // maps imported and exported function names to function indices
+	planfuncs             map[string]struct{} // names of functions inside the plan
+	builtinStringAddrs    map[int]uint32      // addresses of built-in string constants
+	externalFuncNameAddrs map[string]int32    // addresses of required built-in function names for listing
+	externalFuncs         map[string]int32    // required built-in function ids
+	entrypointNameAddrs   map[string]int32    // addresses of available entrypoint names for listing
+	entrypoints           map[string]int32    // available entrypoint ids
+	stringOffset          int32               // null-terminated string data base offset
+	stringAddrs           []uint32            // null-terminated string constant addresses
+	funcs                 map[string]uint32   // maps imported and exported function names to function indices
 
 	nextLocal uint32
 	locals    map[ir.Local]uint32
@@ -150,6 +176,7 @@ const (
 	errObjectInsertConflict
 	errObjectMergeConflict
 	errWithConflict
+	errIllegalEntrypoint
 )
 
 var errorMessages = [...]struct {
@@ -160,6 +187,7 @@ var errorMessages = [...]struct {
 	{errObjectInsertConflict, "object insert conflict"},
 	{errObjectMergeConflict, "object merge conflict"},
 	{errWithConflict, "with target conflict"},
+	{errIllegalEntrypoint, "internal: illegal entrypoint id"},
 }
 
 // New returns a new compiler object.
@@ -169,8 +197,9 @@ func New() *Compiler {
 		c.initModule,
 		c.compileStrings,
 		c.compileExternalFuncDecls,
+		c.compileEntrypointDecls,
 		c.compileFuncs,
-		c.compilePlan,
+		c.compilePlans,
 	}
 	return c
 }
@@ -227,6 +256,8 @@ func (c *Compiler) initModule() error {
 		}
 	}
 
+	c.planfuncs = map[string]struct{}{}
+
 	for _, fn := range c.policy.Funcs.Funcs {
 
 		params := make([]types.ValueType, len(fn.Params))
@@ -240,6 +271,7 @@ func (c *Compiler) initModule() error {
 		}
 
 		c.emitFunctionDecl(fn.Name, tpe, false)
+		c.planfuncs[fn.Name] = struct{}{}
 	}
 
 	c.emitFunctionDecl("eval", module.FunctionType{
@@ -248,6 +280,11 @@ func (c *Compiler) initModule() error {
 	}, true)
 
 	c.emitFunctionDecl("builtins", module.FunctionType{
+		Params:  nil,
+		Results: []types.ValueType{types.I32},
+	}, true)
+
+	c.emitFunctionDecl("entrypoints", module.FunctionType{
 		Params:  nil,
 		Results: []types.ValueType{types.I32},
 	}, true)
@@ -284,6 +321,15 @@ func (c *Compiler) compileStrings() error {
 			buf.WriteByte(0)
 			c.externalFuncNameAddrs[decl.Name] = addr
 		}
+	}
+
+	c.entrypointNameAddrs = make(map[string]int32)
+
+	for _, plan := range c.policy.Plans.Plans {
+		addr := int32(buf.Len()) + int32(c.stringOffset)
+		buf.WriteString(plan.Name)
+		buf.WriteByte(0)
+		c.entrypointNameAddrs[plan.Name] = addr
 	}
 
 	c.builtinStringAddrs = make(map[int]uint32, len(errorMessages))
@@ -350,6 +396,43 @@ func (c *Compiler) compileExternalFuncDecls() error {
 	return c.emitFunction("builtins", c.code)
 }
 
+// compileEntrypointDecls generates a function that lists the entrypoints available
+// in the policy. The host environment can pick which entrypoint to invoke by setting
+// the entrypoint identifier (represented as an integer) on the evaluation context.
+func (c *Compiler) compileEntrypointDecls() error {
+
+	c.code = &module.CodeEntry{}
+	c.nextLocal = 0
+	c.locals = map[ir.Local]uint32{}
+
+	lobj := c.genLocal()
+
+	c.appendInstr(instruction.Call{Index: c.function(opaObject)})
+	c.appendInstr(instruction.SetLocal{Index: lobj})
+	c.entrypoints = make(map[string]int32)
+
+	for index, plan := range c.policy.Plans.Plans {
+		c.appendInstr(instruction.GetLocal{Index: lobj})
+		c.appendInstr(instruction.I32Const{Value: c.entrypointNameAddrs[plan.Name]})
+		c.appendInstr(instruction.Call{Index: c.function(opaStringTerminated)})
+		c.appendInstr(instruction.I64Const{Value: int64(index)})
+		c.appendInstr(instruction.Call{Index: c.function(opaNumberInt)})
+		c.appendInstr(instruction.Call{Index: c.function(opaObjectInsert)})
+		c.entrypoints[plan.Name] = int32(index)
+	}
+
+	c.appendInstr(instruction.GetLocal{Index: lobj})
+
+	c.code.Func.Locals = []module.LocalDeclaration{
+		{
+			Count: c.nextLocal,
+			Type:  types.I32,
+		},
+	}
+
+	return c.emitFunction("entrypoints", c.code)
+}
+
 // compileFuncs compiles the policy functions and emits them into the module.
 func (c *Compiler) compileFuncs() error {
 
@@ -362,15 +445,18 @@ func (c *Compiler) compileFuncs() error {
 	return nil
 }
 
-// compilePlan compiles the policy plan and emits the resulting function into
+// compilePlans compiles the policy plans and emits the resulting function into
 // the module.
-func (c *Compiler) compilePlan() error {
+func (c *Compiler) compilePlans() error {
 
 	c.code = &module.CodeEntry{}
 	c.nextLocal = 0
 	c.locals = map[ir.Local]uint32{}
 	c.lctx = c.genLocal()
 	c.lrs = c.genLocal()
+
+	// Initialize memoization.
+	c.appendInstr(instruction.Call{Index: c.function(opaMemoizeInit)})
 
 	// Initialize the input and data locals.
 	c.appendInstr(instruction.GetLocal{Index: c.lctx})
@@ -388,16 +474,53 @@ func (c *Compiler) compilePlan() error {
 	c.appendInstr(instruction.GetLocal{Index: c.lrs})
 	c.appendInstr(instruction.I32Store{Offset: 8, Align: 2})
 
-	for i := range c.policy.Plan.Blocks {
+	// Initialize the entrypoint id local.
+	leid := c.genLocal()
+	c.appendInstr(instruction.GetLocal{Index: c.lctx})
+	c.appendInstr(instruction.I32Load{Offset: 12, Align: 2})
+	c.appendInstr(instruction.SetLocal{Index: leid})
 
-		instrs, err := c.compileBlock(c.policy.Plan.Blocks[i])
-		if err != nil {
-			return errors.Wrapf(err, "block %d", i)
+	// Add each entrypoint to this block.
+	main := instruction.Block{}
+
+	for i, plan := range c.policy.Plans.Plans {
+
+		entrypoint := instruction.Block{
+			Instrs: []instruction.Instruction{
+				instruction.GetLocal{Index: leid},
+				instruction.I32Const{Value: int32(i)},
+				instruction.I32Ne{},
+				instruction.BrIf{Index: 0},
+			},
 		}
 
-		c.appendInstr(instruction.Block{Instrs: instrs})
+		for j, block := range plan.Blocks {
+
+			instrs, err := c.compileBlock(block)
+			if err != nil {
+				return errors.Wrapf(err, "plan %d block %d", i, j)
+			}
+
+			entrypoint.Instrs = append(entrypoint.Instrs, instruction.Block{
+				Instrs: instrs,
+			})
+		}
+
+		entrypoint.Instrs = append(entrypoint.Instrs, instruction.Br{Index: 1})
+		main.Instrs = append(main.Instrs, entrypoint)
 	}
 
+	// If none of the entrypoint blocks execute, call opa_abort() as this likely
+	// indicates inconsistency between the generated entrypoint identifiers in the
+	// eval() and entrypoint() functions (or the SDK invoked eval() with an invalid
+	// entrypoint ID which should not be possible.)
+	main.Instrs = append(main.Instrs,
+		instruction.I32Const{Value: c.builtinStringAddr(errIllegalEntrypoint)},
+		instruction.Call{Index: c.function(opaAbort)},
+		instruction.Unreachable{},
+	)
+
+	c.appendInstr(main)
 	c.appendInstr(instruction.I32Const{Value: int32(0)})
 
 	c.code.Func.Locals = []module.LocalDeclaration{
@@ -791,6 +914,7 @@ func (c *Compiler) compileWithStmt(with *ir.WithStmt, result *[]instruction.Inst
 
 	var instrs = *result
 	save := c.genLocal()
+	instrs = append(instrs, instruction.Call{Index: c.function(opaMemoizePush)})
 	instrs = append(instrs, instruction.GetLocal{Index: c.local(with.Local)})
 	instrs = append(instrs, instruction.SetLocal{Index: save})
 
@@ -815,6 +939,7 @@ func (c *Compiler) compileWithStmt(with *ir.WithStmt, result *[]instruction.Inst
 	instrs = append(instrs, instruction.Block{Instrs: nested})
 	instrs = append(instrs, instruction.GetLocal{Index: save})
 	instrs = append(instrs, instruction.SetLocal{Index: c.local(with.Local)})
+	instrs = append(instrs, instruction.Call{Index: c.function(opaMemoizePop)})
 	instrs = append(instrs, instruction.GetLocal{Index: undefined})
 	instrs = append(instrs, instruction.BrIf{Index: 0})
 
@@ -957,18 +1082,47 @@ func (c *Compiler) compileCallStmt(stmt *ir.CallStmt, result *[]instruction.Inst
 }
 
 func (c *Compiler) compileInternalCall(stmt *ir.CallStmt, index uint32, result *[]instruction.Instruction) error {
-	instrs := *result
 
-	for _, arg := range stmt.Args {
-		instrs = append(instrs, instruction.GetLocal{Index: c.local(arg)})
+	var memoized bool
+
+	if _, ok := c.planfuncs[stmt.Func]; ok && len(stmt.Args) == 2 {
+		memoized = true
 	}
 
-	instrs = append(instrs, instruction.Call{Index: index})
-	instrs = append(instrs, instruction.SetLocal{Index: c.local(stmt.Result)})
-	instrs = append(instrs, instruction.GetLocal{Index: c.local(stmt.Result)})
-	instrs = append(instrs, instruction.I32Eqz{})
-	instrs = append(instrs, instruction.BrIf{Index: 0})
-	*result = instrs
+	block := instruction.Block{}
+
+	// Check if call can be memoized.
+	if memoized {
+		block.Instrs = append(block.Instrs,
+			instruction.I32Const{Value: int32(index)},
+			instruction.Call{Index: c.function(opaMemoizeGet)},
+			instruction.SetLocal{Index: c.local(stmt.Result)},
+			instruction.GetLocal{Index: c.local(stmt.Result)},
+			instruction.BrIf{Index: 0})
+	}
+
+	// Prepare function args and call.
+	for _, arg := range stmt.Args {
+		block.Instrs = append(block.Instrs, instruction.GetLocal{Index: c.local(arg)})
+	}
+
+	block.Instrs = append(block.Instrs,
+		instruction.Call{Index: index},
+		instruction.SetLocal{Index: c.local(stmt.Result)},
+		instruction.GetLocal{Index: c.local(stmt.Result)},
+		instruction.I32Eqz{},
+		instruction.BrIf{Index: 1})
+
+	// Memoize the result.
+	if memoized {
+		block.Instrs = append(block.Instrs,
+			instruction.I32Const{Value: int32(index)},
+			instruction.GetLocal{Index: c.local(stmt.Result)},
+			instruction.Call{Index: c.function(opaMemoizeInsert)})
+	}
+
+	*result = append(*result, block)
+
 	return nil
 }
 

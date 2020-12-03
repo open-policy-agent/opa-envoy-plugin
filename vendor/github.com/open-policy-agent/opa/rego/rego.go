@@ -16,12 +16,14 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
+	bundleUtils "github.com/open-policy-agent/opa/internal/bundle"
 	"github.com/open-policy-agent/opa/internal/compiler/wasm"
 	"github.com/open-policy-agent/opa/internal/ir"
 	"github.com/open-policy-agent/opa/internal/planner"
 	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/metrics"
+	"github.com/open-policy-agent/opa/resolver"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
@@ -98,6 +100,7 @@ type EvalContext struct {
 	parsedUnknowns         []*ast.Term
 	indexing               bool
 	interQueryBuiltinCache cache.InterQueryCache
+	resolvers              []refResolver
 }
 
 // EvalOption defines a function to set an option on an EvalConfig
@@ -216,6 +219,13 @@ func EvalInterQueryBuiltinCache(c cache.InterQueryCache) EvalOption {
 	}
 }
 
+// EvalResolver sets a Resolver for a specified ref path for this evaluation.
+func EvalResolver(ref ast.Ref, r resolver.Resolver) EvalOption {
+	return func(e *EvalContext) {
+		e.resolvers = append(e.resolvers, refResolver{ref, r})
+	}
+}
+
 func (pq preparedQuery) Modules() map[string]*ast.Module {
 	mods := make(map[string]*ast.Module)
 
@@ -251,6 +261,7 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 		parsedUnknowns:   pq.r.parsedUnknowns,
 		compiledQuery:    compiledQuery{},
 		indexing:         true,
+		resolvers:        pq.r.resolvers,
 	}
 
 	for _, o := range options {
@@ -505,6 +516,8 @@ type Rego struct {
 	bundles                map[string]*bundle.Bundle
 	skipBundleVerification bool
 	interQueryBuiltinCache cache.InterQueryCache
+	strictBuiltinErrors    bool
+	resolvers              []refResolver
 }
 
 // Function represents a built-in function that is callable in Rego.
@@ -995,6 +1008,20 @@ func InterQueryBuiltinCache(c cache.InterQueryCache) func(r *Rego) {
 	}
 }
 
+// StrictBuiltinErrors tells the evaluator to treat all built-in function errors as fatal errors.
+func StrictBuiltinErrors(yes bool) func(r *Rego) {
+	return func(r *Rego) {
+		r.strictBuiltinErrors = yes
+	}
+}
+
+// Resolver sets a Resolver for a specified ref path.
+func Resolver(ref ast.Ref, r resolver.Resolver) func(r *Rego) {
+	return func(rego *Rego) {
+		rego.resolvers = append(rego.resolvers, refResolver{ref, r})
+	}
+}
+
 // New returns a new Rego object.
 func New(options ...func(r *Rego)) *Rego {
 
@@ -1072,6 +1099,10 @@ func (r *Rego) Eval(ctx context.Context) (ResultSet, error) {
 		evalArgs = append(evalArgs, EvalQueryTracer(qt))
 	}
 
+	for i := range r.resolvers {
+		evalArgs = append(evalArgs, EvalResolver(r.resolvers[i].ref, r.resolvers[i].r))
+	}
+
 	rs, err := pq.Eval(ctx, evalArgs...)
 	txnErr := txnClose(ctx, err) // Always call closer
 	if err == nil {
@@ -1138,6 +1169,10 @@ func (r *Rego) Partial(ctx context.Context) (*PartialQueries, error) {
 
 	for _, t := range r.queryTracers {
 		evalArgs = append(evalArgs, EvalQueryTracer(t))
+	}
+
+	for i := range r.resolvers {
+		evalArgs = append(evalArgs, EvalResolver(r.resolvers[i].ref, r.resolvers[i].r))
 	}
 
 	pqs, err := pq.Partial(ctx, evalArgs...)
@@ -1248,10 +1283,17 @@ func (r *Rego) Compile(ctx context.Context, opts ...CompileOption) (*CompileResu
 		decls[k] = v
 	}
 
+	const queryName = "eval" // NOTE(tsandall): the query name is arbitrary
+
 	policy, err := planner.New().
-		WithQueries(queries).
+		WithQueries([]planner.QuerySet{
+			{
+				Name:          queryName,
+				Queries:       queries,
+				RewrittenVars: r.compiledQueries[compileQueryType].compiler.RewrittenVars(),
+			},
+		}).
 		WithModules(modules).
-		WithRewrittenVars(r.compiledQueries[compileQueryType].compiler.RewrittenVars()).
 		WithBuiltinDecls(decls).
 		Plan()
 	if err != nil {
@@ -1611,6 +1653,19 @@ func (r *Rego) compileModules(ctx context.Context, txn storage.Transaction, m me
 			return err
 		}
 	}
+
+	// Ensure all configured resolvers from the store are loaded. Skip if any were explicitly provided.
+	if len(r.resolvers) == 0 {
+		resolvers, err := bundleUtils.LoadWasmResolversFromStore(ctx, r.store, txn, r.bundles)
+		if err != nil {
+			return err
+		}
+		for _, rslvr := range resolvers {
+			for _, ep := range rslvr.Entrypoints() {
+				r.resolvers = append(r.resolvers, refResolver{ep, rslvr})
+			}
+		}
+	}
 	return nil
 }
 
@@ -1693,7 +1748,8 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithInstrumentation(ectx.instrumentation).
 		WithRuntime(r.runtime).
 		WithIndexing(ectx.indexing).
-		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache)
+		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache).
+		WithStrictBuiltinErrors(r.strictBuiltinErrors)
 
 	if !ectx.time.IsZero() {
 		q = q.WithTime(ectx.time)
@@ -1705,6 +1761,10 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 
 	if ectx.parsedInput != nil {
 		q = q.WithInput(ast.NewTerm(ectx.parsedInput))
+	}
+
+	for i := range ectx.resolvers {
+		q = q.WithResolver(ectx.resolvers[i].ref, ectx.resolvers[i].r)
 	}
 
 	// Cancel query if context is cancelled or deadline is reached.
@@ -1787,6 +1847,7 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 		compiledQuery:    r.compiledQueries[partialResultQueryType],
 		instrumentation:  r.instrumentation,
 		indexing:         true,
+		resolvers:        r.resolvers,
 	}
 
 	disableInlining := r.disableInlining
@@ -1886,7 +1947,8 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithPartialNamespace(ectx.partialNamespace).
 		WithSkipPartialNamespace(r.skipPartialNamespace).
 		WithShallowInlining(r.shallowInlining).
-		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache)
+		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache).
+		WithStrictBuiltinErrors(r.strictBuiltinErrors)
 
 	if !ectx.time.IsZero() {
 		q = q.WithTime(ectx.time)
@@ -1898,6 +1960,10 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 
 	if ectx.parsedInput != nil {
 		q = q.WithInput(ast.NewTerm(ectx.parsedInput))
+	}
+
+	for i := range ectx.resolvers {
+		q = q.WithResolver(ectx.resolvers[i].ref, ectx.resolvers[i].r)
 	}
 
 	// Cancel query if context is cancelled or deadline is reached.
@@ -2116,6 +2182,11 @@ func (m rawModule) Parse() (*ast.Module, error) {
 type extraStage struct {
 	after string
 	stage ast.QueryCompilerStageDefinition
+}
+
+type refResolver struct {
+	ref ast.Ref
+	r   resolver.Resolver
 }
 
 func iteration(x interface{}) bool {

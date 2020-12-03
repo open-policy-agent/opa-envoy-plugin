@@ -232,6 +232,18 @@ func JSON(v Value) (interface{}, error) {
 	return ValueToInterface(v, illegalResolver{})
 }
 
+// MustJSON returns the JSON representation of v. The value must not contain any
+// refs or terms that require evaluation (e.g., vars, comprehensions, etc.) If
+// the conversion fails, this function will panic. This function is mostly for
+// test purposes.
+func MustJSON(v Value) interface{} {
+	r, err := JSON(v)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
 // MustInterfaceToValue converts a native Go value x to a Value. If the
 // conversion fails, this function will panic. This function is mostly for test
 // purposes.
@@ -1248,9 +1260,10 @@ func newset(n int) *set {
 		keys = make([]*Term, 0, n)
 	}
 	return &set{
-		elems: make(map[int]*Term, n),
-		keys:  keys,
-		hash:  0,
+		elems:  make(map[int]*Term, n),
+		keys:   keys,
+		hash:   0,
+		ground: true,
 	}
 }
 
@@ -1263,9 +1276,10 @@ func SetTerm(t ...*Term) *Term {
 }
 
 type set struct {
-	elems map[int]*Term
-	keys  []*Term
-	hash  int
+	elems  map[int]*Term
+	keys   []*Term
+	hash   int
+	ground bool
 }
 
 // Copy returns a deep copy of s.
@@ -1275,14 +1289,13 @@ func (s *set) Copy() Set {
 		cpy.Add(x.Copy())
 	})
 	cpy.hash = s.hash
+	cpy.ground = s.ground
 	return cpy
 }
 
 // IsGround returns true if all terms in s are ground.
 func (s *set) IsGround() bool {
-	return !s.Until(func(x *Term) bool {
-		return !x.IsGround()
-	})
+	return s.ground
 }
 
 // Hash returns a hash code for s.
@@ -1482,6 +1495,10 @@ func (s *set) Slice() []*Term {
 
 func (s *set) insert(x *Term) {
 	hash := x.Hash()
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := x.Value.(type) {
@@ -1534,10 +1551,15 @@ func (s *set) insert(x *Term) {
 	s.elems[hash] = x
 	s.keys = append(s.keys, x)
 	s.hash = 0
+	s.ground = s.ground && x.IsGround()
 }
 
 func (s *set) get(x *Term) *Term {
 	hash := x.Hash()
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := x.Value.(type) {
@@ -1937,6 +1959,10 @@ func (obj object) String() string {
 func (obj *object) get(k *Term) *objectElem {
 	hash := k.Hash()
 
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := k.Value.(type) {
@@ -1988,6 +2014,10 @@ func (obj *object) get(k *Term) *objectElem {
 func (obj *object) insert(k, v *Term) {
 	hash := k.Hash()
 	head := obj.elems[hash]
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := k.Value.(type) {

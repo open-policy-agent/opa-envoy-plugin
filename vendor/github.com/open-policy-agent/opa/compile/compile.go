@@ -6,17 +6,22 @@
 package compile
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"regexp"
 	"sort"
+	"strings"
+
+	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 
 	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
+	"github.com/open-policy-agent/opa/internal/compiler/wasm"
+	"github.com/open-policy-agent/opa/internal/planner"
 	"github.com/open-policy-agent/opa/internal/ref"
 	initload "github.com/open-policy-agent/opa/internal/runtime/init"
 	"github.com/open-policy-agent/opa/loader"
@@ -54,7 +59,7 @@ type Compiler struct {
 	entrypoints       orderedStringSet           // policy entrypoints required for optimization and certain targets
 	optimizationLevel int                        // how aggressive should optimization be
 	target            string                     // target type (wasm, rego, etc.)
-	output            io.Writer                  // output stream to write bundle to
+	output            *io.Writer                 // output stream to write bundle to
 	entrypointrefs    []*ast.Term                // validated entrypoints computed from default decision or manually supplied entrypoints
 	compiler          *ast.Compiler              // rego ast compiler used for semantic checks and rewriting
 	debug             *debugEvents               // debug information produced during build
@@ -89,7 +94,6 @@ func New() *Compiler {
 		asBundle:          false,
 		optimizationLevel: 0,
 		target:            TargetRego,
-		output:            ioutil.Discard,
 		debug:             &debugEvents{},
 	}
 }
@@ -135,7 +139,7 @@ func (c *Compiler) WithTarget(t string) *Compiler {
 
 // WithOutput sets the output stream to write the bundle to.
 func (c *Compiler) WithOutput(w io.Writer) *Compiler {
-	c.output = w
+	c.output = &w
 	return c
 }
 
@@ -148,6 +152,14 @@ func (c *Compiler) WithPaths(p ...string) *Compiler {
 // WithFilter sets the loader filter to use when reading non-bundle input files.
 func (c *Compiler) WithFilter(filter loader.Filter) *Compiler {
 	c.filter = filter
+	return c
+}
+
+// WithBundle sets the input bundle to compile. This should be used as an
+// alternative to reading from paths. This function overrides any file
+// loading options.
+func (c *Compiler) WithBundle(b *bundle.Bundle) *Compiler {
+	c.bundle = b
 	return c
 }
 
@@ -211,7 +223,11 @@ func (c *Compiler) Build(ctx context.Context) error {
 		}
 	}
 
-	return bundle.NewWriter(c.output).Write(*c.bundle)
+	if c.output == nil {
+		return nil
+	}
+
+	return bundle.NewWriter(*c.output).Write(*c.bundle)
 }
 
 func (c *Compiler) init() error {
@@ -231,10 +247,6 @@ func (c *Compiler) init() error {
 			return fmt.Errorf("entrypoint %v not valid: use <package>/<rule>", e)
 		}
 
-		if len(r) <= 2 {
-			return fmt.Errorf("entrypoint %v too short: use <package>/<rule>", e)
-		}
-
 		c.entrypointrefs = append(c.entrypointrefs, ast.NewTerm(r))
 	}
 
@@ -242,14 +254,25 @@ func (c *Compiler) init() error {
 		return errors.New("bundle optimizations require at least one entrypoint")
 	}
 
-	if c.target == TargetWasm && len(c.entrypointrefs) != 1 {
-		return errors.New("wasm compilation requires exactly one entrypoint")
+	if c.target == TargetWasm && len(c.entrypointrefs) == 0 {
+		return errors.New("wasm compilation requires at least one entrypoint")
 	}
 
 	return nil
 }
 
+// Bundle returns the compiled bundle. This function can be called to retrieve the
+// output of the compiler (as an alternative to having the bundle written to a stream.)
+func (c *Compiler) Bundle() *bundle.Bundle {
+	return c.bundle
+}
+
 func (c *Compiler) initBundle() error {
+
+	// If the bundle is already set, skip file loading.
+	if c.bundle != nil {
+		return nil
+	}
 
 	// TODO(tsandall): the metrics object should passed through here so we that
 	// we can track read and parse times.
@@ -347,20 +370,171 @@ func (c *Compiler) compileWasm(ctx context.Context) error {
 		}
 	}
 
-	store := inmem.NewFromObject(c.bundle.Data)
-	resultSym := ast.NewTerm(wasmResultVar)
+	// Find transitive dependents of entrypoints and add them to the set to compile.
+	//
+	// NOTE(tsandall): We compile entrypoints because the evaluator does not support
+	// evaluation of wasm-compiled rules when 'with' statements are in-scope. Compiling
+	// out the dependents avoids the need to support that case for now.
+	deps := map[*ast.Rule]struct{}{}
+	for i := range c.entrypointrefs {
+		transitiveDocumentDependents(c.compiler, c.entrypointrefs[i], deps)
+	}
 
-	cr, err := rego.New(
-		rego.ParsedQuery(ast.NewBody(ast.Equality.Expr(resultSym, c.entrypointrefs[0]))),
-		rego.Compiler(c.compiler),
-		rego.Store(store),
-	).Compile(ctx)
+	extras := ast.NewSet()
+	for rule := range deps {
+		extras.Add(ast.NewTerm(rule.Path()))
+	}
+
+	sorted := extras.Sorted()
+
+	for i := 0; i < sorted.Len(); i++ {
+		p, err := sorted.Elem(i).Value.(ast.Ref).Ptr()
+		if err != nil {
+			return err
+		}
+
+		if !c.entrypoints.Contains(p) {
+			c.entrypoints = append(c.entrypoints, p)
+			c.entrypointrefs = append(c.entrypointrefs, sorted.Elem(i))
+		}
+	}
+
+	// Create query sets for each of the entrypoints.
+	resultSym := ast.NewTerm(wasmResultVar)
+	queries := make([]planner.QuerySet, len(c.entrypointrefs))
+
+	for i := range c.entrypointrefs {
+
+		qc := c.compiler.QueryCompiler()
+		query := ast.NewBody(ast.Equality.Expr(resultSym, c.entrypointrefs[i]))
+		compiled, err := qc.Compile(query)
+
+		if err != nil {
+			return err
+		}
+
+		queries[i] = planner.QuerySet{
+			Name:          c.entrypoints[i],
+			Queries:       []ast.Body{compiled},
+			RewrittenVars: qc.RewrittenVars(),
+		}
+	}
+
+	// Prepare modules and builtins for the planner.
+	modules := []*ast.Module{}
+	for _, module := range c.compiler.Modules {
+		modules = append(modules, module)
+	}
+
+	builtins := make(map[string]*ast.Builtin, len(c.capabilities.Builtins))
+	for _, bi := range c.capabilities.Builtins {
+		builtins[bi.Name] = bi
+	}
+
+	// Plan the query sets.
+	policy, err := planner.New().
+		WithQueries(queries).
+		WithModules(modules).
+		WithBuiltinDecls(builtins).
+		Plan()
 
 	if err != nil {
 		return err
 	}
 
-	c.bundle.Wasm = cr.Bytes
+	// Compile the policy into a wasm binary.
+	m, err := wasm.New().WithPolicy(policy).Compile()
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+
+	if err := encoding.WriteModule(&buf, m); err != nil {
+		return err
+	}
+
+	c.bundle.Wasm = buf.Bytes()
+
+	modulePath := bundle.WasmFile
+
+	c.bundle.WasmModules = []bundle.WasmModuleFile{{
+		URL:  modulePath,
+		Path: modulePath,
+		Raw:  buf.Bytes(),
+	}}
+
+	// Each entrypoint needs an entry in the manifest
+	for i := range c.entrypointrefs {
+		entrypointPath := c.entrypoints[i]
+
+		c.bundle.Manifest.WasmResolvers = append(c.bundle.Manifest.WasmResolvers, bundle.WasmResolver{
+			Module:     "/" + strings.TrimLeft(modulePath, "/"),
+			Entrypoint: entrypointPath,
+		})
+	}
+
+	// Remove the entrypoints from remaining source rego files
+	return pruneBundleEntrypoints(c.bundle, c.entrypointrefs)
+}
+
+// pruneBundleEntrypoints will modify modules in the provided bundle to remove
+// rules matching the entrypoints along with injecting import statements to
+// preserve their ability to compile.
+func pruneBundleEntrypoints(b *bundle.Bundle, entrypointrefs []*ast.Term) error {
+
+	// For each package path keep a list of new imports to add.
+	requiredImports := map[string][]*ast.Import{}
+
+	for _, entrypoint := range entrypointrefs {
+		for i := 0; i < len(b.Modules); i++ {
+			mf := &b.Modules[i]
+
+			// Drop any rules that match the entrypoint path.
+			var rules []*ast.Rule
+			for _, rule := range mf.Parsed.Rules {
+				rulePath := rule.Path()
+				if !rulePath.Equal(entrypoint.Value) {
+					rules = append(rules, rule)
+				} else {
+					pkgPath := rule.Module.Package.Path.String()
+					newImport := &ast.Import{Path: ast.NewTerm(rulePath)}
+					shouldAdd := true
+					currentImports := requiredImports[pkgPath]
+					for _, imp := range currentImports {
+						if imp.Equal(newImport) {
+							shouldAdd = false
+							break
+						}
+					}
+					if shouldAdd {
+						requiredImports[pkgPath] = append(currentImports, newImport)
+					}
+				}
+			}
+
+			// If any rules were dropped update the module accordingly
+			if len(rules) != len(mf.Parsed.Rules) {
+				mf.Parsed.Rules = rules
+				// Remove the original raw source, we're editing the AST
+				// directly so it wont be in sync anymore.
+				mf.Raw = nil
+			}
+		}
+	}
+
+	// Any packages which had rules removed need an import injected for the
+	// removed rule to keep the policies valid.
+	for i := 0; i < len(b.Modules); i++ {
+		mf := &b.Modules[i]
+		pkgPath := mf.Parsed.Package.Path.String()
+		if imports, ok := requiredImports[pkgPath]; ok {
+			mf.Raw = nil
+			for _, newImport := range imports {
+				mf.Parsed.Imports = append(mf.Parsed.Imports, newImport)
+			}
+		}
+	}
 
 	return nil
 }
@@ -510,9 +684,7 @@ func (o *optimizer) findRequiredDocuments(ref *ast.Term) []string {
 	keep := map[string]*ast.Location{}
 	deps := map[*ast.Rule]struct{}{}
 
-	for _, r := range o.compiler.GetRules(ref.Value.(ast.Ref)) {
-		transitiveDependents(o.compiler, r, deps)
-	}
+	transitiveDocumentDependents(o.compiler, ref, deps)
 
 	for rule := range deps {
 		ast.WalkExprs(rule, func(expr *ast.Expr) bool {
@@ -696,6 +868,10 @@ func compile(c *ast.Capabilities, b *bundle.Bundle) (*ast.Compiler, error) {
 	modules := map[string]*ast.Module{}
 
 	for _, mf := range b.Modules {
+		if _, ok := modules[mf.URL]; ok {
+			return nil, fmt.Errorf("duplicate module URL: %s", mf.URL)
+		}
+
 		modules[mf.URL] = mf.Parsed
 	}
 
@@ -707,6 +883,12 @@ func compile(c *ast.Capabilities, b *bundle.Bundle) (*ast.Compiler, error) {
 	}
 
 	return compiler, nil
+}
+
+func transitiveDocumentDependents(compiler *ast.Compiler, ref *ast.Term, deps map[*ast.Rule]struct{}) {
+	for _, rule := range compiler.GetRules(ref.Value.(ast.Ref)) {
+		transitiveDependents(compiler, rule, deps)
+	}
 }
 
 func transitiveDependents(compiler *ast.Compiler, rule *ast.Rule, deps map[*ast.Rule]struct{}) {
@@ -732,6 +914,15 @@ func (ss orderedStringSet) Append(s ...string) orderedStringSet {
 		}
 	}
 	return ss
+}
+
+func (ss orderedStringSet) Contains(s string) bool {
+	for _, other := range ss {
+		if s == other {
+			return true
+		}
+	}
+	return false
 }
 
 func stringsToRefs(x []string) []ast.Ref {
