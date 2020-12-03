@@ -401,10 +401,45 @@ func (p *Plugin) Start(ctx context.Context) error {
 // Stop stops the plugin.
 func (p *Plugin) Stop(ctx context.Context) {
 	p.logInfo("Stopping decision logger.")
+
+	if _, ok := ctx.Deadline(); ok && p.config.Service != "" {
+		p.flushDecisions(ctx)
+	}
+
 	done := make(chan struct{})
 	p.stop <- done
 	_ = <-done
 	p.manager.UpdatePluginStatus(Name, &plugins.Status{State: plugins.StateNotReady})
+}
+
+func (p *Plugin) flushDecisions(ctx context.Context) {
+	p.logInfo("Flushing decision logs.")
+
+	done := make(chan bool)
+
+	go func(ctx context.Context, done chan bool) {
+		for ctx.Err() == nil {
+			ok, err := p.oneShot(ctx)
+			if err != nil {
+				p.logError("Error flushing decisions: %s", err)
+			} else if ok {
+				done <- true
+				break
+			}
+			// Wait some before retrying, but skip incrementing interval since we are shutting down
+			time.Sleep(1 * time.Second)
+		}
+	}(ctx, done)
+
+	select {
+	case <-done:
+		p.logInfo("All decisions in buffer uploaded.")
+	case <-ctx.Done():
+		switch ctx.Err() {
+		case context.DeadlineExceeded, context.Canceled:
+			p.logError("Plugin stopped with decisions possibly still in buffer.")
+		}
+	}
 }
 
 // Log appends a decision log event to the buffer for uploading.
@@ -621,7 +656,7 @@ func (p *Plugin) bufferChunk(buffer *logBuffer, bs []byte) {
 
 func (p *Plugin) maskEvent(ctx context.Context, txn storage.Transaction, event *EventV1) error {
 
-	err := func() error {
+	mask, err := func() (rego.PreparedEvalQuery, error) {
 
 		p.maskMutex.Lock()
 		defer p.maskMutex.Unlock()
@@ -640,13 +675,13 @@ func (p *Plugin) maskEvent(ctx context.Context, txn storage.Transaction, event *
 
 			pq, err := r.PrepareForEval(context.Background())
 			if err != nil {
-				return err
+				return rego.PreparedEvalQuery{}, err
 			}
 
 			p.mask = &pq
 		}
 
-		return nil
+		return *p.mask, nil
 	}()
 
 	if err != nil {
@@ -658,7 +693,7 @@ func (p *Plugin) maskEvent(ctx context.Context, txn storage.Transaction, event *
 		return err
 	}
 
-	rs, err := p.mask.Eval(
+	rs, err := mask.Eval(
 		ctx,
 		rego.EvalParsedInput(input),
 		rego.EvalTransaction(txn),
@@ -670,17 +705,17 @@ func (p *Plugin) maskEvent(ctx context.Context, txn storage.Transaction, event *
 		return nil
 	}
 
-	mRules, err := resultValueToMaskRules(rs[0].Expressions[0].Value)
+	mRuleSet, err := newMaskRuleSet(
+		rs[0].Expressions[0].Value,
+		func(mRule *maskRule, err error) {
+			p.logError("mask rule skipped: %s: %s", mRule.String(), err.Error())
+		},
+	)
 	if err != nil {
 		return err
 	}
 
-	for _, mRule := range mRules {
-		err := mRule.Mask(event)
-		if err != nil {
-			p.logError("mask rule skipped: %s: %s", mRule.String(), err.Error())
-		}
-	}
+	mRuleSet.Mask(event)
 
 	return nil
 }
@@ -739,7 +774,7 @@ func (p *Plugin) logEvent(event EventV1) error {
 	if err != nil {
 		return err
 	}
-	logrus.WithFields(fields).WithFields(logrus.Fields{
+	plugins.GetConsoleLogger().WithFields(fields).WithFields(logrus.Fields{
 		"type": "openpolicyagent.org/decision_logs",
 	}).Info("Decision Log")
 	return nil

@@ -22,9 +22,9 @@ import (
 
 	"github.com/open-policy-agent/opa/bundle"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/fsnotify.v1"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/config"
@@ -79,10 +79,6 @@ type Params struct {
 	// DiagnosticAddrs are the listening addresses that the OPA server will bind to
 	// for read-only diagnostic API's (/health, /metrics, etc)
 	DiagnosticAddrs *[]string
-
-	// InsecureAddr is the listening address that the OPA server will bind to
-	// in addition to Addr if TLS is enabled.
-	InsecureAddr string
 
 	// H2CEnabled flag controls whether OPA will allow H2C (HTTP/2 cleartext) on
 	// HTTP listeners.
@@ -164,6 +160,9 @@ type Params struct {
 	// GracefulShutdownPeriod is the time (in seconds) to wait for the http
 	// server to shutdown gracefully.
 	GracefulShutdownPeriod int
+
+	// ShutdownWaitPeriod is the time (in seconds) to wait before initiating shutdown.
+	ShutdownWaitPeriod int
 
 	// EnableVersionCheck flag controls whether OPA will report its version to an external service.
 	// If this flag is true, OPA will report its version to the external service
@@ -247,7 +246,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, err
 	}
 
-	manager, err := plugins.New(config, params.ID, inmem.New(), plugins.Info(info), plugins.InitBundles(loaded.Bundles), plugins.InitFiles(loaded.Files), plugins.MaxErrors(params.ErrorLimit))
+	manager, err := plugins.New(config, params.ID, inmem.New(), plugins.Info(info), plugins.InitBundles(loaded.Bundles), plugins.InitFiles(loaded.Files), plugins.MaxErrors(params.ErrorLimit), plugins.GracefulShutdownPeriod(params.GracefulShutdownPeriod))
 	if err != nil {
 		return nil, errors.Wrap(err, "config error")
 	}
@@ -303,7 +302,6 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 	logrus.WithFields(logrus.Fields{
 		"addrs":            *rt.Params.Addrs,
 		"diagnostic-addrs": *rt.Params.DiagnosticAddrs,
-		"insecure_addr":    rt.Params.InsecureAddr,
 	}).Info("Initializing server.")
 
 	if err := rt.Manager.Start(ctx); err != nil {
@@ -320,7 +318,6 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 		WithCompilerErrorLimit(rt.Params.ErrorLimit).
 		WithPprofEnabled(rt.Params.PprofEnabled).
 		WithAddresses(*rt.Params.Addrs).
-		WithInsecureAddress(rt.Params.InsecureAddr).
 		WithH2CEnabled(rt.Params.H2CEnabled).
 		WithCertificate(rt.Params.Certificate).
 		WithCertPool(rt.Params.CertPool).
@@ -620,6 +617,11 @@ func (rt *Runtime) getBanner() string {
 }
 
 func (rt *Runtime) gracefulServerShutdown(s *server.Server) error {
+	if rt.Params.ShutdownWaitPeriod > 0 {
+		logrus.Infof("Waiting %vs before initiating shutdown...", rt.Params.ShutdownWaitPeriod)
+		time.Sleep(time.Duration(rt.Params.ShutdownWaitPeriod) * time.Second)
+	}
+
 	logrus.Info("Shutting down...")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(rt.Params.GracefulShutdownPeriod)*time.Second)
 	defer cancel()
@@ -709,16 +711,21 @@ func onReloadPrinter(output io.Writer) func(time.Duration, error) {
 }
 
 func setupLogging(config LoggingConfig) {
+	var formatter logrus.Formatter
 	switch config.Format {
 	case "text":
-		logrus.SetFormatter(&prettyFormatter{})
+		formatter = &prettyFormatter{}
 	case "json-pretty":
-		logrus.SetFormatter(&logrus.JSONFormatter{PrettyPrint: true})
+		formatter = &logrus.JSONFormatter{PrettyPrint: true}
 	case "json":
 		fallthrough
 	default:
-		logrus.SetFormatter(&logrus.JSONFormatter{})
+		formatter = &logrus.JSONFormatter{}
 	}
+	logrus.SetFormatter(formatter)
+	// While the plugin console logger logs independently of the configured --log-level,
+	// it should follow the configured --log-format
+	plugins.GetConsoleLogger().SetFormatter(formatter)
 
 	lvl := logrus.InfoLevel
 
