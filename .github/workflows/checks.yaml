@@ -1,6 +1,12 @@
-name: PR Check
+name: Checks
 
-on: [pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 
 jobs:
   go-build:
@@ -36,8 +42,26 @@ jobs:
         run: make check
         timeout-minutes: 15
 
+  deploy:
+    name: Push Latest Release
+    if: github.ref == 'refs/heads/master' # only true for pushes to `master`
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Build and Push
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        # Only run if required secrets are provided
+        if: ${{ env.DOCKER_USER && env.DOCKER_PASSWORD }}
+        run: make deploy-ci
+
   e2e:
-    name: End-to-End Test
+    name: Istio End-to-End Test
     runs-on: ubuntu-18.04
     steps:
       - name: Check out code
@@ -66,3 +90,26 @@ jobs:
 
       - name: Cleanup
         run: kind delete cluster
+
+  e2e-envoy-grpc:
+    name: Envoy gRPC End-to-End Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build docker image
+        run: make image tag-latest
+
+      - name: Build testsrv docker image
+        run: make testsrv-image
+        working-directory: examples/grpc
+
+      - name: Run test
+        run: make test-setup test
+        working-directory: examples/grpc
+
+      - name: Run test log dump and cleanup
+        run: make test-teardown
+        if: ${{ always() }}
+        working-directory: examples/grpc

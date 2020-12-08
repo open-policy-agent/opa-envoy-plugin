@@ -1,0 +1,36 @@
+{
+    "person": {
+      "id": 123,
+      "name": "alice",
+      "parent": {
+        "id": 122,
+        "name": "bob"
+      }
+    },
+    "state": "AWAITING_INPUT",
+    "neededNumA": 1.23,
+    "neededNumB": 1.23,
+    "opaqueId": "asdf",
+    "wk": {
+      "now": "2020-12-02T10:48:42.118723000+01:00",
+      "period": "30s",
+      "neat": {
+        "@type": "googleapis.com/google.protobuf.StringValue",
+        "value": "Hithere"
+      },
+      "object": {
+        "foo": "bar"
+      },
+      "value": "string",
+      "list": ["zero", "one", "infinity"],
+      "bytes": "AAAA",
+      "string": "abcd",
+      "bool": true,
+      "double": "0.12",
+      "float": "0.12",
+      "small_int": 1,
+      "big_int": 2,
+      "small_id": 100,
+      "big_id": 101
+    }
+}

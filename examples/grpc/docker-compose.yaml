@@ -1,0 +1,26 @@
+version: '3'
+services:
+  envoy:
+    image: envoyproxy/envoy:v1.16-latest
+    ports:
+      - "9901:9901"
+      - "51051:51051"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+  opa-envoy:
+    image: openpolicyagent/opa:latest-envoy
+    ports:
+      - "9191:9191"
+    command:
+      - run
+      - --server
+      - --config-file=/opa.yaml
+      - /policy.rego
+    volumes:
+      - ./testsrv.pb:/testsrv.pb
+      - ./policy.rego:/policy.rego
+      - ./opa.yaml:/opa.yaml
+  testsrv:
+    image: testsrv:latest
+    ports:
+      - "9090:9090"
