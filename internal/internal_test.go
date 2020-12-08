@@ -20,7 +20,9 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
@@ -276,13 +278,14 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == false {
-		t.Fatal("Unexpected events:", customLogger.events)
+	if event.Error != nil || event.Path != "envoy/authz/allow" ||
+		event.Revision != "" || *event.Result == false {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	expected := []string{
@@ -420,6 +423,48 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	}
 }
 
+func TestCheckContextTimeout(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(customLogger, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
+	defer cancel()
+
+	time.Sleep(time.Millisecond * 1)
+	_, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	expectedErrMsg := "check request timed out before query execution: context deadline exceeded"
+	if err.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, err.Error())
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if event.Error.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
+	}
+
+}
+
 func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -433,7 +478,12 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServerWithIllegalDecision(customLogger, false)
+	module := `
+		package envoy.authz
+
+		default allow = 1
+		`
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
@@ -450,7 +500,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event := customLogger.events[0]
@@ -499,7 +549,7 @@ func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event := customLogger.events[0]
@@ -573,7 +623,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 1 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event := customLogger.events[0]
@@ -607,7 +657,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	if len(customLogger.events) != 2 {
-		t.Fatal("Unexpected events:", customLogger.events)
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
 	event = customLogger.events[1]
@@ -944,6 +994,31 @@ func TestConfigInvalid(t *testing.T) {
 	}
 }
 
+func TestConfigWithProtoDescriptor(t *testing.T) {
+	tests := map[string]struct {
+		path    string
+		wantErr bool
+	}{
+		"nonexistent":     {"this/does/not/exist", true},
+		"other file type": {"../test/files/book/Book.proto", true},
+		"valid file":      {"../test/files/combined.pb", false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			m, err := plugins.New([]byte{}, "test", inmem.New())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			in := fmt.Sprintf(`{"proto-descriptor": "%s"}`, tc.path)
+			_, err = Validate(m, []byte(in))
+			if expected, actual := tc.wantErr, err != nil; expected != actual {
+				t.Errorf("expected err: %v", expected)
+			}
+		})
+	}
+}
+
 func TestCheckAllowObjectDecision(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -995,8 +1070,6 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	fmt.Printf("Result is %v\n", output)
 
 	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
 		t.Fatalf("Expected request to be denied but got: %v", output)
@@ -1116,7 +1189,7 @@ func TestGetResponseStatus(t *testing.T) {
 	}
 }
 
-func TestGetResponeHeaders(t *testing.T) {
+func TestGetResponseHeaders(t *testing.T) {
 	input := make(map[string]interface{})
 
 	result, err := getResponseHeaders(input)
@@ -1384,19 +1457,17 @@ func TestGetParsedBody(t *testing.T) {
 	  }`
 
 	expectedNumber := json.Number("42")
-
-	expectedObject := map[string]interface{}{}
-	expectedObject["firstname"] = "foo"
-	expectedObject["lastname"] = "bar"
-
+	expectedObject := map[string]interface{}{
+		"firstname": "foo",
+		"lastname":  "bar",
+	}
 	expectedArray := []interface{}{"hello", "opa"}
 
 	tests := map[string]struct {
-		input               *ext_authz.CheckRequest
-		want                interface{}
-		isBodyTruncated     bool
-		err                 error
-		protoDescriptorPath string
+		input           *ext_authz.CheckRequest
+		want            interface{}
+		isBodyTruncated bool
+		err             error
 	}{
 		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
 		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
@@ -1412,11 +1483,12 @@ func TestGetParsedBody(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			logEntry := logrus.WithField("test", name)
 			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
 			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
 			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
 			parsedPath, _, _ := getParsedPathAndQuery(path)
-			got, isBodyTruncated, err := getParsedBody(headers, body, nil, parsedPath, tc.protoDescriptorPath)
+			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, nil, parsedPath, nil)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
 			}
@@ -1444,11 +1516,12 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
+	logEntry := logrus.WithField("test", "invalid json")
 	req := createCheckRequest(requestContentTypeJSONInvalid)
 	path := []interface{}{}
-	protoDescriptorPath := ""
-	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody() 
-	_, _, err := getParsedBody(headers, body, nil, path, protoDescriptorPath)
+	protoSet := (*protoregistry.Files)(nil)
+	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody()
+	_, _, err := getParsedBody(logEntry, headers, body, nil, path, protoSet)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
@@ -1457,120 +1530,211 @@ func TestGetParsedBody(t *testing.T) {
 func TestGetParsedBodygRPC(t *testing.T) {
 
 	requestValidExample := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/grpc"
-			  },
-			  "method": "POST",
-			  "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
-			  "protocol": "HTTP/2",
-			  "raw_body": "AAAAADYKFgoHCgVFUlJPUhILCglTZWNOdW1iZXISHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU=",
-			}
-		  },
-		  "parsed_path": [
-			"Example.Test.GRPC.ProtoServiceIExampleApplication",
-			"RegisterExample"
-		  ]
-		}
-	  }`
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAADYKFgoHCgVFUlJPUhILCglTZWNOdW1iZXISHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU="
+      }
+    },
+    "parsed_path": [
+      "Example.Test.GRPC.ProtoServiceIExampleApplication",
+      "RegisterExample"
+    ]
+  }
+}
+`
+
 	requestValidBook := `{
-	   	"attributes": {
-	   	  "request": {
-	   		"http": {
-	   		  "headers": {
-	   			"content-type": "application/grpc"
-	   		  },
-	   		  "method": "POST",
-         		  "path": "/com.book.BookService/GetBooksViaAuthor",
-                 "protocol": "HTTP/2",
-                 "raw_body": "AAAAAAYKBEpvaG4="
-	   		}
-	   	  }
-	   	}
-	    }`
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAAYKBEpvaG4="
+      }
+    }
+  }
+}
+`
 
 	requestInvalidRawBodyExample := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/grpc"
-			  },
-			  "method": "POST",
-			  "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
-			  "protocol": "HTTP/2"
-			}
-		  },
-		  "parsed_path": [
-			"Example.Test.GRPC.ProtoServiceIExampleApplication",
-			"RegisterExample"
-		  ]
-		}
-	  }`
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
+        "protocol": "HTTP/2"
+      }
+    },
+    "parsed_path": [
+      "Example.Test.GRPC.ProtoServiceIExampleApplication",
+      "RegisterExample"
+    ]
+  }
+}
+`
 
 	requestInvalidParsedPathExample := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/grpc"
-			  },
-			  "method": "POST",
-			  "protocol": "HTTP/2",
-			  "raw_body": "AAAAAC0KDQoHCgVFUlJPUhICCAESHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU="
-			}
-		  }
-		}
-	  }`
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAC0KDQoHCgVFUlJPUhICCAESHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU="
+      }
+    }
+  }
+}
+`
 
-	expectedObject1 := map[string]interface{}{}
-	expectedObject1["Body"] = "Body value"
-	expectedObject1["Name"] = "Name Value"
+	requestUnknownService := `{
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.SecondBookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAAYKBEpvaG4="
+      }
+    }
+  }
+}
+`
 
-	expectedObject2 := map[string]interface{}{}
-	expectedObject2["SeverityNumber"] = "SecNumber"
-	expectedObject2["SeverityText"] = "ERROR"
+	requestUnknownMethod := `{
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaSecondAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAAYKBEpvaG4="
+      }
+    }
+  }
+}
+`
+	requestEmpty := `{
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAAA="
+      }
+    }
+  }
+}
+`
+	requestCompressedPayload := `{
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AQAAADwfiwgAAAAAAAD/4hLkaOi4t49RoOHi+ll//////59RSJCj4dGiE4wCDau/LIYIAQIAAP//aJ9RpSYAAAA="
+      }
+    }
+  }
+}
+`
 
-	expectedObject := map[string]interface{}{}
-	expectedObject["Data"] = expectedObject1
-	expectedObject["Metadata"] = expectedObject2
+	requestTruncatedPayload := `{
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAABEImqaMww=="
+      }
+    }
+  }
+}
+`
 
-	protoDescriptorExamplePath := `../test/files/example/example.pb`
-
-	expectedObjectExampleBook := map[string]interface{}{}
-	expectedObjectExampleBook["author"] = "John"
-
-	protoDescriptorBookPath := `../test/files/book/book.pb`
+	expectedObject := map[string]interface{}{
+		"Data": map[string]interface{}{
+			"Body": "Body value",
+			"Name": "Name Value",
+		},
+		"Metadata": map[string]interface{}{
+			"SeverityNumber": "SecNumber",
+			"SeverityText":   "ERROR",
+		},
+	}
+	expectedObjectExampleBook := map[string]interface{}{"author": "John"}
+	protoDescriptorPath := "../test/files/combined.pb"
+	protoSet, err := readProtoSet(protoDescriptorPath)
+	if err != nil {
+		t.Fatalf("read protoset: %v", err)
+	}
 
 	tests := map[string]struct {
-		input               *ext_authz.CheckRequest
-		want                interface{}
-		isBodyTruncated     bool
-		err                 error
-		protoDescriptorPath string
+		input           *ext_authz.CheckRequest
+		want            interface{}
+		isBodyTruncated bool
+		err             error
 	}{
-		"parsed_path_error":           {input: createCheckRequest(requestInvalidParsedPathExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid parsed path"), protoDescriptorPath: protoDescriptorExamplePath},
-		"without_raw_body":            {input: createCheckRequest(requestInvalidRawBodyExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid raw body"), protoDescriptorPath: protoDescriptorExamplePath},
-		"proto_escriptor_not_defined": {input: createCheckRequest(requestValidExample), want: nil, isBodyTruncated: false, err: nil, protoDescriptorPath: ""},
-		"valid_parsed_example":        {input: createCheckRequest(requestValidExample), want: expectedObject, isBodyTruncated: false, err: nil, protoDescriptorPath: protoDescriptorExamplePath},
-		"valid_parsed_book":           {input: createCheckRequest(requestValidBook), want: expectedObjectExampleBook, isBodyTruncated: false, err: nil, protoDescriptorPath: protoDescriptorBookPath},
+		"parsed_path_error":    {input: createCheckRequest(requestInvalidParsedPathExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid parsed path")},
+		"without_raw_body":     {input: createCheckRequest(requestInvalidRawBodyExample), want: nil, isBodyTruncated: false, err: nil},
+		"valid_parsed_example": {input: createCheckRequest(requestValidExample), want: expectedObject, isBodyTruncated: false, err: nil},
+		"valid_parsed_book":    {input: createCheckRequest(requestValidBook), want: expectedObjectExampleBook, isBodyTruncated: false, err: nil},
+		"unknown_service":      {input: createCheckRequest(requestUnknownService), want: nil, isBodyTruncated: false, err: nil},
+		"unknown_method":       {input: createCheckRequest(requestUnknownMethod), want: nil, isBodyTruncated: false, err: nil},
+		"empty_request":        {input: createCheckRequest(requestEmpty), want: map[string]interface{}{}, isBodyTruncated: false, err: nil},
+		"compressed_payload":   {input: createCheckRequest(requestCompressedPayload), want: nil, isBodyTruncated: false, err: nil},
+		"truncated_payload":    {input: createCheckRequest(requestTruncatedPayload), want: nil, isBodyTruncated: true, err: nil},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			logEntry := logrus.WithField("test", name)
+
 			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
 			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
 			rawBody := tc.input.GetAttributes().GetRequest().GetHttp().GetRawBody()
 			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
 
-			parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
-			if err != nil {
-				t.Fatalf("expected error: %v, parsedQuery: %v", tc.err, parsedQuery)
-			}
+			parsedPath, _, _ := getParsedPathAndQuery(path)
+			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, protoSet)
 
-			got, isBodyTruncated, err := getParsedBody(headers, body, rawBody, parsedPath, tc.protoDescriptorPath)
+			if !reflect.DeepEqual(err, tc.err) {
+				t.Fatalf("expected error: %v, got: %v", tc.err, err)
+			}
 
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
@@ -1578,10 +1742,6 @@ func TestGetParsedBodygRPC(t *testing.T) {
 
 			if isBodyTruncated != tc.isBodyTruncated {
 				t.Fatalf("expected isBodyTruncated: %v, got: %v", tc.isBodyTruncated, got)
-			}
-
-			if !reflect.DeepEqual(err, tc.err) {
-				t.Fatalf("expected error: %v, got: %v", tc.err, err)
 			}
 
 		})
@@ -1712,31 +1872,31 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 			],
 		}`
 
-    return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }
 
 func testAuthzServerWithModule(module string, path string, customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
-        m, err := getPluginManager(module, customLogger)
-        if err != nil {
-                panic(err)
-        }
 
-        query := "data." + strings.Replace(path, "/", ".", -1)
-        parsedQuery, err := ast.ParseBody(query)
-        if err != nil {
-                panic(err)
-        }
+	m, err := getPluginManager(module, customLogger)
+	if err != nil {
+		panic(err)
+	}
 
-        cfg := Config{
-                Addr:        ":0",
-                Path:        path,
-                DryRun:      dryRun,
-                parsedQuery: parsedQuery,
-        }
-        s := New(m, &cfg)
-        return s.(*envoyExtAuthzGrpcServer)
+	query := "data." + strings.Replace(path, "/", ".", -1)
+	parsedQuery, err := ast.ParseBody(query)
+	if err != nil {
+		panic(err)
+	}
+
+	cfg := Config{
+		Addr:        ":0",
+		Path:        path,
+		DryRun:      dryRun,
+		parsedQuery: parsedQuery,
+	}
+	s := New(m, &cfg)
+	return s.(*envoyExtAuthzGrpcServer)
 }
-
 
 func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
 
@@ -1757,17 +1917,6 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 				"headers": {"x": "hello", "y": "world"}
 		    }
 		}`
-
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
-}
-
-func testAuthzServerWithIllegalDecision(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
-
-	module := `
-		package envoy.authz
-
-		default allow = 1
-		`
 
 	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }

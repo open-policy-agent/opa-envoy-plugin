@@ -164,7 +164,7 @@ The OPA-Envoy plugin supports the following configuration fields:
 | `plugins["envoy_ext_authz_grpc"].path`              | No       | Specifies the hierarchical policy decision path. The policy decision can either be a `boolean` or an `object`. If boolean, `true` indicates the request should be allowed and `false` indicates the request should be denied. If the policy decision is an object, it **must** contain the `allowed` key set to either `true` or `false` to indicate if the request is allowed or not respectively. It can optionally contain a `headers` field to send custom headers to the downstream client or upstream. An optional `body` field can be included in the policy decision to send a response body data to the downstream client. Also an optional `http_status` field can be included to send a HTTP response status code to the downstream client other than `403 (Forbidden)`. Default: `envoy/authz/allow`. |
 | `plugins["envoy_ext_authz_grpc"].dry-run`           | No       | Configures the Envoy External Authorization gRPC server to unconditionally return an `ext_authz.CheckResponse.Status` of `google_rpc.Status{Code: google_rpc.OK}`. Default: `false`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `plugins["envoy_ext_authz_grpc"].enable-reflection` | No       | Enables gRPC server reflection on the Envoy External Authorization gRPC server. Default: `false`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `plugins["envoy_ext_authz_grpc"].Proto_descriptor`  | No       | Set the path to a pb that enables the capability to decode the raw body to the parsed body. Default: turns this capability off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `plugins["envoy_ext_authz_grpc"].proto-descriptor`  | No       | Set the path to a pb that enables the capability to decode the raw body to the parsed body. Default: turns this capability off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 If the configuration does not specify the `path` field, `envoy/authz/allow` will be considered as the default policy
 decision path. `data.envoy.authz.allow` will be the name of the policy decision to query in the default case.
@@ -176,6 +176,14 @@ useful for initial integration of OPA or when policies undergo large refactoring
 The `enable-reflection` parameter registers the Envoy External Authorization gRPC server with reflection. After enabling
 server reflection, a command line tool such as [grpcurl](https://github.com/fullstorydev/grpcurl) can be used to invoke
 RPC methods on the gRPC server. See [gRPC Server Reflection Usage](#grpc-server-reflection-usage) section for more details.
+
+Providing a file containing a protobuf descriptor set allows the plugin to decode gRPC message payloads.
+So far, only unary methods using uncompressed protobuf-encoded payloads are supported.
+The protoset can be generated using `protoc`, e.g. `protoc --descriptor_set_out=protoset.pb --include_imports`.
+
+Note that gRPC message payload decoding is only available [using the v3 API](#envoy-xds-v2-and-v2).
+See [`examples/grpc`](examples/grpc) for an example setup using Envoy, a gRPC service, and opa-envoy-plugin examining the
+request payloads.
 
 An example of a rule that returns an object that not only indicates if a request is allowed or not but also provides
 optional response headers, body and HTTP status that can be sent to the downstream client or upstream can be seen below
@@ -205,7 +213,6 @@ plugins:
     path: envoy/authz/allow
     dry-run: false
     enable-reflection: false
-    Proto_descriptor: ../test/files/example.pb
 ```
 
 You can download the bundle and inspect it yourself:

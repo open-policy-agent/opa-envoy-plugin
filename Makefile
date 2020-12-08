@@ -130,7 +130,11 @@ check-lint:
 	./build/check-lint.sh
 
 generatepb:
-	protoc --proto_path=test/files --go_out=test/files --go_opt=paths=source_relative test/files/Example.proto --descriptor_set_out=test/files/example.pb --include_imports
+	protoc --proto_path=test/files \
+	  --descriptor_set_out=test/files/combined.pb \
+	  --include_imports \
+	  test/files/example/Example.proto \
+	  test/files/book/Book.proto
 
 .PHONY: release
 release:

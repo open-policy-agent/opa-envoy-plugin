@@ -7,6 +7,7 @@ package internal
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,10 +25,6 @@ import (
 	ext_authz_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/dynamic"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -35,6 +32,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/metrics"
@@ -108,7 +111,27 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 	cfg.parsedQuery = parsedQuery
 
+	if cfg.ProtoDescriptor != "" {
+		ps, err := readProtoSet(cfg.ProtoDescriptor)
+		if err != nil {
+			return nil, err
+		}
+		cfg.protoSet = ps
+	}
+
 	return &cfg, nil
+}
+
+func readProtoSet(path string) (*protoregistry.Files, error) {
+	protoSet, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var fileSet descriptorpb.FileDescriptorSet
+	if err := proto.Unmarshal(protoSet, &fileSet); err != nil {
+		return nil, err
+	}
+	return protodesc.NewFiles(&fileSet)
 }
 
 // New returns a Plugin that implements the Envoy ext_authz API.
@@ -147,6 +170,7 @@ type Config struct {
 	EnableReflection bool   `json:"enable-reflection"`
 	parsedQuery      ast.Body
 	ProtoDescriptor  string `json:"proto-descriptor"`
+	protoSet         *protoregistry.Files
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -228,6 +252,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		logrus.WithField("err", err).Error("Unable to generate decision ID.")
 		return nil, func() *rpc_status.Status { return nil }, err
 	}
+	logEntry := logrus.WithField("decision-id", result.decisionID)
 
 	var input map[string]interface{}
 
@@ -292,7 +317,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
-	parsedBody, isBodyTruncated, err := getParsedBody(headers, body, rawBody, parsedPath, p.cfg.ProtoDescriptor)
+	parsedBody, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, p.cfg.protoSet)
 	if err != nil {
 		return nil, stop, err
 	}
@@ -367,17 +392,15 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, err
 	}
 
-	if logrus.IsLevelEnabled(logrus.DebugLevel) {
-		logrus.WithFields(logrus.Fields{
-			"query":               p.cfg.parsedQuery.String(),
-			"dry-run":             p.cfg.DryRun,
-			"decision":            result.decision,
-			"err":                 err,
-			"txn":                 result.txnID,
-			"metrics":             result.metrics.All(),
-			"total_decision_time": time.Since(start),
-		}).Debug("Returning policy decision.")
-	}
+	logrus.WithFields(logrus.Fields{
+		"query":               p.cfg.parsedQuery.String(),
+		"dry-run":             p.cfg.DryRun,
+		"decision":            result.decision,
+		"err":                 err,
+		"txn":                 result.txnID,
+		"metrics":             result.metrics.All(),
+		"total_decision_time": time.Since(start),
+	}).Debug("Returning policy decision.")
 
 	// If dry-run mode, override the Status code to unconditionally Allow the request
 	// DecisionLogging should reflect what "would" have happened
@@ -406,14 +429,12 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, res
 
 		result.txnID = txn.ID()
 
-		if logrus.IsLevelEnabled(logrus.DebugLevel) {
-			logrus.WithFields(logrus.Fields{
-				"input":   input,
-				"query":   p.cfg.parsedQuery.String(),
-				"dry-run": p.cfg.DryRun,
-				"txn":     result.txnID,
-			}).Debug("Executing policy query.")
-		}
+		logrus.WithFields(logrus.Fields{
+			"input":   input,
+			"query":   p.cfg.parsedQuery.String(),
+			"dry-run": p.cfg.DryRun,
+			"txn":     result.txnID,
+		}).Debug("Executing policy query.")
 
 		err = p.constructPreparedQuery(txn, result.metrics, opts)
 		if err != nil {
@@ -700,7 +721,7 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(headers map[string]string, body string, rawBody []byte,  parsedPath []interface{}, protoDescriptor string) (interface{}, bool, error) {
+func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body string, rawBody []byte, parsedPath []interface{}, protoSet *protoregistry.Files) (interface{}, bool, error) {
 	var data interface{}
 
 	if val, ok := headers["content-type"]; ok {
@@ -726,20 +747,33 @@ func getParsedBody(headers map[string]string, body string, rawBody []byte,  pars
 			}
 		} else if strings.Contains(val, "application/grpc") {
 
-			if protoDescriptor == "" {
+			if protoSet == nil {
 				return nil, false, nil
 			}
 
+			// This happens when the plugin was configured to read gRPC payloads,
+			// but the Envoy instance requesting an authz decision didn't have
+			// pack_as_bytes set to true.
 			if len(rawBody) == 0 {
-				return nil, false, fmt.Errorf("invalid raw body")
+				logEntry.Debug("no rawBody field sent")
+				return nil, false, nil
 			}
-			if len(parsedPath) <= 1 {
+			// In gRPC, a call of method DoThing on service ThingService is a
+			// POST to /ThingService/DoThing. If our path length is anything but
+			// two, something is wrong.
+			if len(parsedPath) != 2 {
 				return nil, false, fmt.Errorf("invalid parsed path")
 			}
 
-			err := getGRPCBody(rawBody, parsedPath, &data, protoDescriptor)
+			known, truncated, err := getGRPCBody(logEntry, rawBody, parsedPath, &data, protoSet)
 			if err != nil {
 				return nil, false, err
+			}
+			if truncated {
+				return nil, true, nil
+			}
+			if !known {
+				return nil, false, nil
 			}
 		}
 	}
@@ -747,77 +781,79 @@ func getParsedBody(headers map[string]string, body string, rawBody []byte,  pars
 	return data, false, nil
 }
 
-func getGRPCBody(in []byte, parsedPath []interface{}, data interface{}, protoDescriptor string) error {
+func getGRPCBody(logEntry *logrus.Entry, in []byte, parsedPath []interface{}, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
 
 	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
-	//https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
+	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 
-	if len(in) < 6 {
-		return fmt.Errorf("less than 5 bytes")
+	if len(in) < 5 {
+		return false, false, fmt.Errorf("less than 5 bytes")
 	}
 
-	in = in[5:]
+	// Can be 0 or 1, 1 indicates that the payload is compressed.
+	// The method could be looked up in the request headers, and the
+	// request decompressed; but for now, let's skip it.
+	if in[0] != 0 {
+		logEntry.Debug("gRPC payload compression not supported")
+		return false, false, nil
+	}
 
-	bytespd, err := ioutil.ReadFile(protoDescriptor)
+	// Note: we're only reading one message, this is the first message's size
+	size := binary.BigEndian.Uint32(in[1:5])
+	if int(size) > len(in)-5 {
+		return false, true, nil // truncated body
+	}
+	in = in[5 : size+5]
+
+	// Note: we've already checked that len(path)>=2
+	svc, err := findService(parsedPath[0].(string), files)
 	if err != nil {
-		return err
+		logEntry.WithField("err", err).Debug("could not find service")
+		return false, false, nil
 	}
-
-	var fileSet descriptor.FileDescriptorSet
-	if err := proto.Unmarshal(bytespd, &fileSet); err != nil {
-		return err
-	}
-
-	fd, err := desc.CreateFileDescriptorFromSet(&fileSet)
+	msgDesc, err := findMessageInputDesc(parsedPath[1].(string), svc)
 	if err != nil {
-		return err
+		logEntry.WithField("err", err).Debug("could not find message")
+		return false, false, nil
 	}
 
-	inputType := ""
-	packageName := fd.GetPackage()
-	pathServiceRaw := parsedPath[0].(string)
-	//To get the service.
-	//The package and service are in the parsedpath[0] (Example.Test.GRPC.ProtoServiceIExampleApplication), we need to get the service (ProtoServiceIExampleApplication) to find the methods available
-	pathService := strings.Replace(pathServiceRaw, packageName+".", "", 1)
-
-	for _, v := range fd.GetServices() {
-		if v.GetName() == pathService {
-			for _, z := range v.GetMethods() {
-				if z.GetName() == parsedPath[1] {
-					inputType = z.GetInputType().GetName()
-				}
-			}
-		}
+	msg := dynamicpb.NewMessage(msgDesc)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return true, false, err
 	}
 
-	if packageName == "" {
-		return fmt.Errorf("packageName not defined")
-	}
-
-	if inputType == "" {
-		return fmt.Errorf("InputType not defined")
-	}
-
-	messageName := fmt.Sprintf("%s.%s", packageName, inputType)
-
-	msgDesc := fd.FindMessage(messageName)
-
-	message := dynamic.NewMessage(msgDesc)
-
-	if err := proto.Unmarshal(in, message); err != nil {
-		return err
-	}
-
-	jsonBody, err := json.Marshal(message)
+	jsonBody, err := protojson.Marshal(msg)
 	if err != nil {
-		return err
+		return true, false, err
 	}
 
 	if err := util.Unmarshal([]byte(jsonBody), &data); err != nil {
-		return err
+		return true, false, err
 	}
 
-	return nil
+	return true, false, nil
+}
+
+func findService(path string, files *protoregistry.Files) (protoreflect.ServiceDescriptor, error) {
+	desc, err := files.FindDescriptorByName(protoreflect.FullName(path))
+	if err != nil {
+		return nil, err
+	}
+	svcDesc, ok := desc.(protoreflect.ServiceDescriptor)
+	if !ok {
+		return nil, fmt.Errorf("could not find service descriptor for path %q", path)
+	}
+	return svcDesc, nil
+}
+
+func findMessageInputDesc(name string, svc protoreflect.ServiceDescriptor) (protoreflect.MessageDescriptor, error) {
+	if method := svc.Methods().ByName(protoreflect.Name(name)); method != nil {
+		if method.IsStreamingClient() {
+			return nil, fmt.Errorf("streaming client method %s not supported", method.Name())
+		}
+		return method.Input(), nil
+	}
+	return nil, fmt.Errorf("method %q not found", name)
 }
 
 func stringPathToDataRef(s string) (r ast.Ref) {
