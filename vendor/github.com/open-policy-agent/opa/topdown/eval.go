@@ -162,6 +162,10 @@ func (e *eval) traceEval(x ast.Node) {
 	e.traceEvent(EvalOp, x, "", nil)
 }
 
+func (e *eval) traceDuplicate(x ast.Node) {
+	e.traceEvent(DuplicateOp, x, "", nil)
+}
+
 func (e *eval) traceFail(x ast.Node) {
 	e.traceEvent(FailOp, x, "", nil)
 }
@@ -503,6 +507,11 @@ func (e *eval) evalNotPartial(iter evalIterator) error {
 	child.eval(func(*eval) error {
 		query := e.saveStack.Peek()
 		plugged := query.Plug(e.caller.bindings)
+		// Skip this rule body if it fails to type-check.
+		// Type-checking failure means the rule body will never succeed.
+		if !e.compiler.PassesTypeCheck(plugged) {
+			return nil
+		}
 		if cp != nil {
 			plugged = applyCopyPropagation(cp, e.instr, plugged)
 		}
@@ -800,21 +809,23 @@ func (e *eval) biunifyValues(a, b *ast.Term, b1, b2 *bindings, iter unifyIterato
 	_, varA := a.Value.(ast.Var)
 	_, varB := b.Value.(ast.Var)
 
+	var undo undo
+
 	if varA && varB {
 		if b1 == b2 && a.Equal(b) {
 			return iter()
 		}
-		undo := b1.bind(a, b, b2)
+		b1.bind(a, b, b2, &undo)
 		err := iter()
 		undo.Undo()
 		return err
 	} else if varA && !varB {
-		undo := b1.bind(a, b, b2)
+		b1.bind(a, b, b2, &undo)
 		err := iter()
 		undo.Undo()
 		return err
 	} else if varB && !varA {
-		undo := b2.bind(b, a, b1)
+		b2.bind(b, a, b1, &undo)
 		err := iter()
 		undo.Undo()
 		return err
@@ -1904,10 +1915,10 @@ func (e evalVirtualPartial) eval(iter unifyIterator) error {
 		return e.partialEvalSupport(iter)
 	}
 
-	return e.evalEachRule(iter, e.ir.Rules)
+	return e.evalEachRule(iter, e.ir.Rules, unknown)
 }
 
-func (e evalVirtualPartial) evalEachRule(iter unifyIterator, rules []*ast.Rule) error {
+func (e evalVirtualPartial) evalEachRule(iter unifyIterator, rules []*ast.Rule, unknown bool) error {
 
 	if e.e.unknown(e.ref[e.pos+1], e.bindings) {
 		for _, rule := range e.ir.Rules {
@@ -1925,8 +1936,10 @@ func (e evalVirtualPartial) evalEachRule(iter unifyIterator, rules []*ast.Rule) 
 		return nil
 	}
 
+	result := e.empty
+
 	for _, rule := range e.ir.Rules {
-		if err := e.evalOneRulePreUnify(iter, rule, key); err != nil {
+		if err := e.evalOneRulePreUnify(iter, rule, key, result, unknown); err != nil {
 			return err
 		}
 	}
@@ -1945,7 +1958,7 @@ func (e evalVirtualPartial) evalAllRules(iter unifyIterator, rules []*ast.Rule) 
 		err := child.eval(func(*eval) error {
 			child.traceExit(rule)
 			var err error
-			result, err = e.reduce(rule.Head, child.bindings, result)
+			result, _, err = e.reduce(rule.Head, child.bindings, result)
 			if err != nil {
 				return err
 			}
@@ -1962,7 +1975,7 @@ func (e evalVirtualPartial) evalAllRules(iter unifyIterator, rules []*ast.Rule) 
 	return e.e.biunify(result, e.rterm, e.bindings, e.bindings, iter)
 }
 
-func (e evalVirtualPartial) evalOneRulePreUnify(iter unifyIterator, rule *ast.Rule, cacheKey ast.Ref) error {
+func (e evalVirtualPartial) evalOneRulePreUnify(iter unifyIterator, rule *ast.Rule, cacheKey ast.Ref, result *ast.Term, unknown bool) error {
 
 	key := e.ref[e.pos+1]
 	child := e.e.child(rule.Body)
@@ -1973,7 +1986,6 @@ func (e evalVirtualPartial) evalOneRulePreUnify(iter unifyIterator, rule *ast.Ru
 	err := child.biunify(rule.Head.Key, key, child.bindings, e.bindings, func() error {
 		defined = true
 		return child.eval(func(child *eval) error {
-			child.traceExit(rule)
 
 			term := rule.Head.Value
 			if term == nil {
@@ -1985,6 +1997,23 @@ func (e evalVirtualPartial) evalOneRulePreUnify(iter unifyIterator, rule *ast.Ru
 				e.e.virtualCache.Put(cacheKey, result)
 			}
 
+			// NOTE(tsandall): if the rule set depends on any unknowns then do
+			// not perform the duplicate check because evaluation of the ruleset
+			// may not produce a definitive result. This is a bit strict--we
+			// could improve by skipping only when saves occur.
+			if !unknown {
+				var dup bool
+				var err error
+				result, dup, err = e.reduce(rule.Head, child.bindings, result)
+				if err != nil {
+					return err
+				} else if dup {
+					child.traceDuplicate(rule)
+					return nil
+				}
+			}
+
+			child.traceExit(rule)
 			term, termbindings := child.bindings.apply(term)
 			err := e.evalTerm(iter, term, termbindings)
 			if err != nil {
@@ -2093,32 +2122,34 @@ func (e evalVirtualPartial) partialEvalSupportRule(iter unifyIterator, rule *ast
 
 		current := e.e.saveStack.PopQuery()
 		plugged := current.Plug(e.e.caller.bindings)
+		// Skip this rule body if it fails to type-check.
+		// Type-checking failure means the rule body will never succeed.
+		if e.e.compiler.PassesTypeCheck(plugged) {
+			var key, value *ast.Term
 
-		var key, value *ast.Term
+			if rule.Head.Key != nil {
+				key = child.bindings.PlugNamespaced(rule.Head.Key, e.e.caller.bindings)
+			}
 
-		if rule.Head.Key != nil {
-			key = child.bindings.PlugNamespaced(rule.Head.Key, e.e.caller.bindings)
+			if rule.Head.Value != nil {
+				value = child.bindings.PlugNamespaced(rule.Head.Value, e.e.caller.bindings)
+			}
+
+			head := ast.NewHead(rule.Head.Name, key, value)
+
+			if !e.e.inliningControl.shallow {
+				cp := copypropagation.New(head.Vars()).
+					WithEnsureNonEmptyBody(true).
+					WithCompiler(e.e.compiler)
+				plugged = applyCopyPropagation(cp, e.e.instr, plugged)
+			}
+
+			e.e.saveSupport.Insert(path, &ast.Rule{
+				Head:    head,
+				Body:    plugged,
+				Default: rule.Default,
+			})
 		}
-
-		if rule.Head.Value != nil {
-			value = child.bindings.PlugNamespaced(rule.Head.Value, e.e.caller.bindings)
-		}
-
-		head := ast.NewHead(rule.Head.Name, key, value)
-
-		if !e.e.inliningControl.shallow {
-			cp := copypropagation.New(head.Vars()).
-				WithEnsureNonEmptyBody(true).
-				WithCompiler(e.e.compiler)
-			plugged = applyCopyPropagation(cp, e.e.instr, plugged)
-		}
-
-		e.e.saveSupport.Insert(path, &ast.Rule{
-			Head:    head,
-			Body:    plugged,
-			Default: rule.Default,
-		})
-
 		child.traceRedo(rule)
 		e.e.saveStack.PushQuery(current)
 		return nil
@@ -2171,23 +2202,28 @@ func (e evalVirtualPartial) evalCache(iter unifyIterator) (ast.Ref, bool, error)
 	return cacheKey, false, nil
 }
 
-func (e evalVirtualPartial) reduce(head *ast.Head, b *bindings, result *ast.Term) (*ast.Term, error) {
+func (e evalVirtualPartial) reduce(head *ast.Head, b *bindings, result *ast.Term) (*ast.Term, bool, error) {
+
+	var exists bool
+	key := b.Plug(head.Key)
 
 	switch v := result.Value.(type) {
 	case ast.Set:
-		v.Add(b.Plug(head.Key))
+		exists = v.Contains(key)
+		v.Add(key)
 	case ast.Object:
-		key := b.Plug(head.Key)
 		value := b.Plug(head.Value)
-		exist := v.Get(key)
-		if exist != nil && !exist.Equal(value) {
-			return nil, objectDocKeyConflictErr(head.Location)
+		if curr := v.Get(key); curr != nil {
+			if !curr.Equal(value) {
+				return nil, false, objectDocKeyConflictErr(head.Location)
+			}
+			exists = true
+		} else {
+			v.Insert(key, value)
 		}
-		v.Insert(key, value)
-		result.Value = v
 	}
 
-	return result, nil
+	return result, exists, nil
 }
 
 type evalVirtualComplete struct {
@@ -2371,22 +2407,24 @@ func (e evalVirtualComplete) partialEvalSupportRule(iter unifyIterator, rule *as
 
 		current := e.e.saveStack.PopQuery()
 		plugged := current.Plug(e.e.caller.bindings)
+		// Skip this rule body if it fails to type-check.
+		// Type-checking failure means the rule body will never succeed.
+		if e.e.compiler.PassesTypeCheck(plugged) {
+			head := ast.NewHead(rule.Head.Name, nil, child.bindings.PlugNamespaced(rule.Head.Value, e.e.caller.bindings))
 
-		head := ast.NewHead(rule.Head.Name, nil, child.bindings.PlugNamespaced(rule.Head.Value, e.e.caller.bindings))
+			if !e.e.inliningControl.shallow {
+				cp := copypropagation.New(head.Vars()).
+					WithEnsureNonEmptyBody(true).
+					WithCompiler(e.e.compiler)
+				plugged = applyCopyPropagation(cp, e.e.instr, plugged)
+			}
 
-		if !e.e.inliningControl.shallow {
-			cp := copypropagation.New(head.Vars()).
-				WithEnsureNonEmptyBody(true).
-				WithCompiler(e.e.compiler)
-			plugged = applyCopyPropagation(cp, e.e.instr, plugged)
+			e.e.saveSupport.Insert(path, &ast.Rule{
+				Head:    head,
+				Body:    plugged,
+				Default: rule.Default,
+			})
 		}
-
-		e.e.saveSupport.Insert(path, &ast.Rule{
-			Head:    head,
-			Body:    plugged,
-			Default: rule.Default,
-		})
-
 		child.traceRedo(rule)
 		e.e.saveStack.PushQuery(current)
 		return nil
@@ -2779,7 +2817,9 @@ func merge(a, b ast.Value) (ast.Value, bool) {
 	if ok1 && ok2 {
 		return mergeObjects(aObj, bObj)
 	}
-	return nil, false
+
+	// nothing to merge, a wins
+	return a, true
 }
 
 // mergeObjects returns a new Object containing the non-overlapping keys of

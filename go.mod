@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/envoyproxy/go-control-plane v0.9.7
-	github.com/open-policy-agent/opa v0.25.2
+	github.com/open-policy-agent/opa v0.26.0
 	github.com/peterh/liner v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

@@ -266,6 +266,9 @@ func (i *VM) Eval(ctx context.Context, entrypoint int32, input *interface{}, met
 					err = errors.New(e.message)
 				case builtinError:
 					err = e.err
+					if _, ok := err.(topdown.Halt); !ok {
+						err = nil
+					}
 				default:
 					panic(e)
 				}
@@ -378,7 +381,18 @@ func (i *VM) Abort(arg int32) {
 		panic("invalid abort argument")
 	}
 
-	panic(abortError{message: string(data[0:n])})
+	panic(abortError{message: string(data[:n])})
+}
+
+// Println is invoked if the policy WASM code calls opa_println().
+func (i *VM) Println(arg int32) {
+	data := i.memory.Data()[arg:]
+	n := bytes.IndexByte(data, 0)
+	if n == -1 {
+		panic("invalid opa_println argument")
+	}
+
+	fmt.Printf("opa_println(): %s\n", string(data[:n]))
 }
 
 type builtinError struct {
