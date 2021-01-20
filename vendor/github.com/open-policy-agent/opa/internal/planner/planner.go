@@ -11,6 +11,7 @@ import (
 	"sort"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/ast/location"
 	"github.com/open-policy-agent/opa/internal/ir"
 )
 
@@ -35,6 +36,7 @@ type Planner struct {
 	queries []QuerySet              // input queries to plan
 	modules []*ast.Module           // input modules to support queries
 	strings map[string]int          // global string constant indices
+	files   map[string]int          // global file constant indices
 	externs map[string]struct{}     // built-in functions that are required in execution environment
 	decls   map[string]*ast.Builtin // built-in functions that may be provided in execution environment
 	rules   *ruletrie               // rules that may be planned
@@ -44,6 +46,7 @@ type Planner struct {
 	vars    *varstack               // in-scope variables
 	ltarget ir.Local                // target variable of last planned statement
 	lnext   ir.Local                // next variable to use
+	loc     *location.Location      // location currently "being planned"
 }
 
 // New returns a new Planner object.
@@ -55,6 +58,7 @@ func New() *Planner {
 			Funcs:  &ir.Funcs{},
 		},
 		strings: map[string]int{},
+		files:   map[string]int{},
 		externs: map[string]struct{}{},
 		lnext:   ir.Unused,
 		vars: newVarstack(map[ast.Var]ir.Local{
@@ -148,9 +152,13 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 	pcurr := p.curr
 	pltarget := p.ltarget
 	plnext := p.lnext
+	ploc := p.loc
 
 	// Reset the variable counter for the function plan.
 	p.lnext = ir.Input
+
+	// Set the location to the rule head.
+	p.loc = rules[0].Head.Loc()
 
 	// Create function definition for rules.
 	fn := &ir.Func{
@@ -169,34 +177,35 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 
 	params := fn.Params[2:]
 
-	// Initialize return value for partial set/object rules. Complete docs do
-	// not require their return value to be initialized.
-	if rules[0].Head.DocKind() == ast.PartialObjectDoc {
-		fn.Blocks = append(fn.Blocks, &ir.Block{
-			Stmts: []ir.Stmt{
-				&ir.MakeObjectStmt{
-					Target: fn.Return,
-				},
-			},
-		})
-	} else if rules[0].Head.DocKind() == ast.PartialSetDoc {
-		fn.Blocks = append(fn.Blocks, &ir.Block{
-			Stmts: []ir.Stmt{
-				&ir.MakeSetStmt{
-					Target: fn.Return,
-				},
-			},
-		})
+	// Initialize return value for partial set/object rules. Complete document
+	// rules assign directly to `fn.Return`.
+	switch rules[0].Head.DocKind() {
+	case ast.PartialObjectDoc:
+		fn.Blocks = append(fn.Blocks, p.blockWithStmt(&ir.MakeObjectStmt{Target: fn.Return}))
+	case ast.PartialSetDoc:
+		fn.Blocks = append(fn.Blocks, p.blockWithStmt(&ir.MakeSetStmt{Target: fn.Return}))
 	}
+
+	// For complete document rules, allocate one local variable for output
+	// of the rule body + else branches.
+	// It is used to let ordered rules (else blocks) check if the previous
+	// rule body returned a value.
+	lresult := p.newLocal()
 
 	// At this point the locals for the params and return value have been
 	// allocated. This will be the first local that can be used in each block.
 	lnext := p.lnext
 
 	var defaultRule *ast.Rule
+	var ruleLoc *location.Location
 
 	// Generate function blocks for rules.
 	for i := range rules {
+
+		// Save location of first encountered rule for the ReturnLocalStmt below
+		if i == 0 {
+			ruleLoc = p.loc
+		}
 
 		// Save default rule for the end.
 		if rules[i].Default {
@@ -205,7 +214,7 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 		}
 
 		// Ordered rules are nested inside an additional block so that execution
-		// can short-circuit. For unordered rules blocks can be added directly
+		// can short-circuit. For unordered rules, blocks can be added directly
 		// to the function.
 		var blocks *[]*ir.Block
 
@@ -223,6 +232,9 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 		// Unordered rules are treated as a special case of ordered rules.
 		for rule := rules[i]; rule != nil; prev, rule = rule, rule.Else {
 
+			// Update the location for each ordered rule.
+			p.loc = rule.Head.Loc()
+
 			// Setup planner for block.
 			p.lnext = lnext
 			p.vars = newVarstack(map[ast.Var]ir.Local{
@@ -237,11 +249,14 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 			if prev != nil {
 				// Ordered rules are handled by short circuiting execution. The
 				// plan will jump out to the extra block that was planned above.
-				p.appendStmt(&ir.IsUndefinedStmt{Source: fn.Return})
+				p.appendStmt(&ir.IsUndefinedStmt{Source: lresult})
+			} else {
+				// The first rule body resets the local, so it can be reused.
+				p.appendStmt(&ir.ResetLocalStmt{Target: lresult})
 			}
 
 			// Complete and partial rules are treated as special cases of
-			// functions. If there are args, the first step is a no-op.
+			// functions. If there are no args, the first step is a no-op.
 			err := p.planFuncParams(params, rule.Head.Args, 0, func() error {
 
 				// Run planner on the rule body.
@@ -252,7 +267,7 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 					case ast.CompleteDoc:
 						return p.planTerm(rule.Head.Value, func() error {
 							p.appendStmt(&ir.AssignVarOnceStmt{
-								Target: fn.Return,
+								Target: lresult,
 								Source: p.ltarget,
 							})
 							return nil
@@ -294,20 +309,36 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 				return "", err
 			}
 		}
+
+		// rule[i] and its else-rule(s), if present, are done
+		if rules[i].Head.DocKind() == ast.CompleteDoc {
+			end := &ir.Block{}
+			p.appendStmtToBlock(&ir.IsDefinedStmt{Source: lresult}, end)
+			p.appendStmtToBlock(
+				&ir.AssignVarOnceStmt{
+					Target: fn.Return,
+					Source: lresult,
+				},
+				end)
+			*blocks = append(*blocks, end)
+		}
 	}
 
 	// Default rules execute if the return is undefined.
 	if defaultRule != nil {
 
-		fn.Blocks = append(fn.Blocks, &ir.Block{
-			Stmts: []ir.Stmt{
-				&ir.IsUndefinedStmt{Source: fn.Return},
-			},
-		})
+		// Set the location for the default rule head.
+		p.loc = defaultRule.Head.Loc()
+		// NOTE(sr) for `default p = 1`,
+		// defaultRule.Loc() is `default`,
+		// defaultRule.Head.Loc() is `p = 1`.
+
+		fn.Blocks = append(fn.Blocks, p.blockWithStmt(&ir.IsUndefinedStmt{Source: fn.Return}))
 
 		p.curr = fn.Blocks[len(fn.Blocks)-1]
 
 		err := p.planQuery(defaultRule.Body, 0, func() error {
+			p.loc = defaultRule.Head.Loc()
 			return p.planTerm(defaultRule.Head.Value, func() error {
 				p.appendStmt(&ir.AssignVarOnceStmt{
 					Target: fn.Return,
@@ -322,14 +353,10 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 		}
 	}
 
+	p.loc = ruleLoc
+
 	// All rules return a value.
-	fn.Blocks = append(fn.Blocks, &ir.Block{
-		Stmts: []ir.Stmt{
-			&ir.ReturnLocalStmt{
-				Source: fn.Return,
-			},
-		},
-	})
+	fn.Blocks = append(fn.Blocks, p.blockWithStmt(&ir.ReturnLocalStmt{Source: fn.Return}))
 
 	p.appendFunc(fn)
 	p.funcs.Add(path, fn.Name)
@@ -339,6 +366,7 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 	p.ltarget = pltarget
 	p.vars = pvars
 	p.curr = pcurr
+	p.loc = ploc
 
 	return fn.Name, nil
 }
@@ -375,6 +403,8 @@ func (p *Planner) planQueries() error {
 		for _, qv := range qvs.Sorted() {
 			qv = rewrittenVar(qs.RewrittenVars, qv)
 			if !qv.IsGenerated() && !qv.IsWildcard() {
+				// NOTE(sr): We have no location for these: they could appear in multiple
+				// queries, and we've lost track when building the ast.VarSet.
 				stmt := &ir.MakeStringStmt{
 					Index:  p.getStringConst(string(qv)),
 					Target: p.newLocal(),
@@ -391,6 +421,7 @@ func (p *Planner) planQueries() error {
 		lnext := p.lnext
 
 		for _, q := range qs.Queries {
+			p.loc = q.Loc()
 			p.lnext = lnext
 			p.vars.Push(map[ast.Var]ir.Local{})
 			p.curr = &ir.Block{}
@@ -445,13 +476,26 @@ func (p *Planner) planQuery(q ast.Body, index int, iter planiter) error {
 		return iter()
 	}
 
-	return p.planExpr(q[index], func() error {
-		return p.planQuery(q, index+1, iter)
+	old := p.loc
+	p.loc = q[index].Loc()
+
+	err := p.planExpr(q[index], func() error {
+		return p.planQuery(q, index+1, func() error {
+			curr := p.loc
+			p.loc = old
+			err := iter()
+			p.loc = curr
+			return err
+		})
 	})
+
+	p.loc = old
+	return err
 }
 
 // TODO(tsandall): improve errors to include location information.
 func (p *Planner) planExpr(e *ast.Expr, iter planiter) error {
+
 	if e.Negated {
 		return p.planNot(e, iter)
 	}
@@ -598,14 +642,12 @@ func (p *Planner) planWithRec(e *ast.Expr, targets [][]int, values []ir.Local, i
 	target := e.With[index].Target.Value.(ast.Ref)
 	head := target[0].Value.(ast.Var)
 
-	stmt := &ir.WithStmt{
+	p.appendStmt(&ir.WithStmt{
 		Local: p.vars.GetOrEmpty(head),
 		Path:  targets[index],
 		Value: values[index],
 		Block: block,
-	}
-
-	p.appendStmt(stmt)
+	})
 
 	return nil
 }
@@ -801,7 +843,7 @@ func (p *Planner) planExprCallRelation(name string, arity int, operands []*ast.T
 func (p *Planner) planExprCallFunc(name string, arity int, operands []*ast.Term, args []ir.Local, iter planiter) error {
 
 	if len(operands) == arity {
-		// definition: f(x) = x { ... }
+		// definition: f(x) = y { ... }
 		// call: f(x) # result not captured
 		return p.planCallArgs(operands, 0, args, func(args []ir.Local) error {
 			p.ltarget = p.newLocal()
@@ -827,7 +869,7 @@ func (p *Planner) planExprCallFunc(name string, arity int, operands []*ast.Term,
 		})
 	}
 
-	// definition: f(x) = x { ... }
+	// definition: f(x) = y { ... }
 	// call: f(x, 1)  # caller captures result
 	return p.planCallArgs(operands[:len(operands)-1], 0, args, func(args []ir.Local) error {
 		result := p.newLocal()
@@ -1107,10 +1149,13 @@ func (p *Planner) planTerm(t *ast.Term, iter planiter) error {
 	case ast.Set:
 		return p.planSet(v, iter)
 	case *ast.SetComprehension:
+		p.loc = t.Loc()
 		return p.planSetComprehension(v, iter)
 	case *ast.ArrayComprehension:
+		p.loc = t.Loc()
 		return p.planArrayComprehension(v, iter)
 	case *ast.ObjectComprehension:
+		p.loc = t.Loc()
 		return p.planObjectComprehension(v, iter)
 	default:
 		return fmt.Errorf("%v term not implemented", ast.TypeName(v))
@@ -1340,7 +1385,6 @@ func (p *Planner) planObjectComprehension(oc *ast.ObjectComprehension, iter plan
 	p.appendStmt(&ir.MakeObjectStmt{
 		Target: lobj,
 	})
-
 	return p.planComprehension(oc.Body, func() error {
 		return p.planTerm(oc.Key, func() error {
 			lkey := p.ltarget
@@ -1360,6 +1404,7 @@ func (p *Planner) planComprehension(body ast.Body, closureIter planiter, target 
 
 	prev := p.curr
 	p.curr = &ir.Block{}
+	ploc := p.loc
 
 	if err := p.planQuery(body, 0, func() error {
 		return closureIter()
@@ -1369,6 +1414,7 @@ func (p *Planner) planComprehension(body ast.Body, closureIter planiter, target 
 
 	block := p.curr
 	p.curr = prev
+	p.loc = ploc
 
 	p.appendStmt(&ir.BlockStmt{
 		Blocks: []*ir.Block{
@@ -1552,16 +1598,11 @@ func (p *Planner) planRefData(virtual *ruletrie, base *baseptr, ref ast.Ref, ind
 			if lexclude != nil {
 				lignore := p.newLocal()
 				p.appendStmt(&ir.NotStmt{
-					Block: &ir.Block{
-						Stmts: []ir.Stmt{
-							&ir.DotStmt{
-								Source: *lexclude,
-								Key:    lkey,
-								Target: lignore,
-							},
-						},
-					},
-				})
+					Block: p.blockWithStmt(&ir.DotStmt{
+						Source: *lexclude,
+						Key:    lkey,
+						Target: lignore,
+					})})
 			}
 
 			// Assume that virtual sub trees have been visited already so
@@ -1629,27 +1670,21 @@ func (p *Planner) planRefDataExtent(virtual *ruletrie, base *baseptr, iter plani
 			}
 
 			// Add leaf to object if defined.
-			p.appendStmt(&ir.BlockStmt{
-				Blocks: []*ir.Block{
-					&ir.Block{
-						Stmts: []ir.Stmt{
-							&ir.CallStmt{
-								Func: funcName,
-								Args: []ir.Local{
-									p.vars.GetOrEmpty(ast.InputRootDocument.Value.(ast.Var)),
-									p.vars.GetOrEmpty(ast.DefaultRootDocument.Value.(ast.Var)),
-								},
-								Result: lvalue,
-							},
-							&ir.ObjectInsertStmt{
-								Object: vtarget,
-								Key:    lkey,
-								Value:  lvalue,
-							},
-						},
-					},
+			b := &ir.Block{}
+			p.appendStmtToBlock(&ir.CallStmt{
+				Func: funcName,
+				Args: []ir.Local{
+					p.vars.GetOrEmpty(ast.InputRootDocument.Value.(ast.Var)),
+					p.vars.GetOrEmpty(ast.DefaultRootDocument.Value.(ast.Var)),
 				},
-			})
+				Result: lvalue,
+			}, b)
+			p.appendStmtToBlock(&ir.ObjectInsertStmt{
+				Object: vtarget,
+				Key:    lkey,
+				Value:  lvalue,
+			}, b)
+			p.appendStmt(&ir.BlockStmt{Blocks: []*ir.Block{b}})
 		}
 
 		// At this point vtarget refers to the full extent of the virtual
@@ -1852,8 +1887,37 @@ func (p *Planner) getStringConst(s string) int {
 	return index
 }
 
+func (p *Planner) getFileConst(s string) int {
+	index, ok := p.files[s]
+	if !ok {
+		index = len(p.policy.Static.Files)
+		p.policy.Static.Files = append(p.policy.Static.Files, &ir.StringConst{
+			Value: s,
+		})
+		p.files[s] = index
+	}
+	return index
+}
+
 func (p *Planner) appendStmt(s ir.Stmt) {
-	p.curr.Stmts = append(p.curr.Stmts, s)
+	p.appendStmtToBlock(s, p.curr)
+}
+
+func (p *Planner) appendStmtToBlock(s ir.Stmt, b *ir.Block) {
+	if p.loc != nil {
+		str := p.loc.File
+		if str == "" {
+			str = `<query>`
+		}
+		s.SetLocation(p.getFileConst(str), p.loc.Row, p.loc.Col, str, string(p.loc.Text))
+	}
+	b.Stmts = append(b.Stmts, s)
+}
+
+func (p *Planner) blockWithStmt(s ir.Stmt) *ir.Block {
+	b := &ir.Block{}
+	p.appendStmtToBlock(s, b)
+	return b
 }
 
 func (p *Planner) appendBlock(b *ir.Block) {

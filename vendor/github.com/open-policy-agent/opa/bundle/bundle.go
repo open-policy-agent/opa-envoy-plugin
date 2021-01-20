@@ -18,15 +18,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/open-policy-agent/opa/format"
-
-	"github.com/open-policy-agent/opa/internal/file/archive"
-	"github.com/open-policy-agent/opa/internal/merge"
-	"github.com/open-policy-agent/opa/metrics"
-
 	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/format"
+	"github.com/open-policy-agent/opa/internal/file/archive"
+	"github.com/open-policy-agent/opa/internal/merge"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/util"
 )
 
@@ -537,7 +535,7 @@ func (r *Reader) checkSignaturesAndDescriptors(signatures SignaturesConfig) erro
 		return nil
 	}
 
-	if signatures.isEmpty() && r.verificationConfig != nil {
+	if signatures.isEmpty() && r.verificationConfig != nil && r.verificationConfig.KeyID != "" {
 		return fmt.Errorf("bundle missing .signatures.json file")
 	}
 

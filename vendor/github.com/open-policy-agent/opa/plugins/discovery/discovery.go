@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/open-policy-agent/opa/metrics"
-
 	"github.com/sirupsen/logrus"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -20,6 +18,8 @@ import (
 	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/download"
 	cfg "github.com/open-policy-agent/opa/internal/config"
+	"github.com/open-policy-agent/opa/keys"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/bundle"
 	"github.com/open-policy-agent/opa/plugins/logs"
@@ -229,7 +229,12 @@ func (c *Discovery) processBundle(ctx context.Context, b *bundleApi.Bundle) (*pl
 	// unrecoverable (without keeping track of changes and rolling back...)
 
 	// check for updates to the discovery service
-	services, err := cfg.ParseServicesConfig(config.Services)
+	opts := cfg.ServiceOptions{
+		Raw:        config.Services,
+		AuthPlugin: c.manager.AuthPlugin,
+		Keys:       c.manager.PublicKeys(),
+	}
+	services, err := cfg.ParseServicesConfig(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +247,7 @@ func (c *Discovery) processBundle(ctx context.Context, b *bundleApi.Bundle) (*pl
 	}
 
 	// check for updates to the keys provided in the boot config
-	keys, err := bundleApi.ParseKeysConfig(config.Keys)
+	keys, err := keys.ParseKeysConfig(config.Keys)
 	if err != nil {
 		return nil, err
 	}

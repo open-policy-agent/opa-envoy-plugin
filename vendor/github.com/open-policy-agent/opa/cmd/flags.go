@@ -91,7 +91,7 @@ func addSigningAlgFlag(fs *pflag.FlagSet, alg *string, value string) {
 }
 
 func addClaimsFileFlag(fs *pflag.FlagSet, file *string) {
-	fs.StringVarP(file, "claims-file", "", "", "set path of JSON file containing optional claims (see: https://openpolicyagent.org/docs/latest/management/#bundle-signature-format)")
+	fs.StringVarP(file, "claims-file", "", "", "set path of JSON file containing optional claims (see: https://openpolicyagent.org/docs/latest/management/#signature-format)")
 }
 
 func addSigningKeyFlag(fs *pflag.FlagSet, key *string) {
@@ -120,6 +120,14 @@ func addBundleVerificationExcludeFilesFlag(fs *pflag.FlagSet, excludeNames *[]st
 
 func addCapabilitiesFlag(fs *pflag.FlagSet, f *capabilitiesFlag) {
 	fs.VarP(f, "capabilities", "", "set capabilities.json file path")
+}
+
+func addPartialFlag(fs *pflag.FlagSet, partial *bool, value bool) {
+	fs.BoolVarP(partial, "partial", "p", value, "perform partial evaluation")
+}
+
+func addUnknownsFlag(fs *pflag.FlagSet, unknowns *[]string, value []string) {
+	fs.StringArrayVarP(unknowns, "unknowns", "u", value, "set paths to treat as unknown during partial evaluation")
 }
 
 const (

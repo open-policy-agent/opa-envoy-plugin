@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-policy-agent/opa/keys"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -112,11 +114,17 @@ const (
 	// StateErr indicates that the Plugin is in an error state and should not
 	// be considered as functional.
 	StateErr State = "ERROR"
+
+	// StateWarn indicates the Plugin is operating, but in a potentially dangerous or
+	// degraded state. It may be used to indicate manual remediation is needed, or to
+	// alert admins of some other noteworthy state.
+	StateWarn State = "WARN"
 )
 
 // Status has a Plugin's current status plus an optional Message.
 type Status struct {
-	State State `json:"state"`
+	State   State  `json:"state"`
+	Message string `json:"message,omitempty"`
 }
 
 // StatusListener defines a handler to register for status updates.
@@ -135,7 +143,7 @@ type Manager struct {
 	wasmResolvers                []*wasm.Resolver
 	wasmResolversMtx             sync.RWMutex
 	services                     map[string]rest.Client
-	keys                         map[string]*bundle.KeyConfig
+	keys                         map[string]*keys.Config
 	plugins                      []namedplugin
 	registeredTriggers           []func(txn storage.Transaction)
 	mtx                          sync.Mutex
@@ -147,6 +155,7 @@ type Manager struct {
 	initialized                  bool
 	interQueryBuiltinCacheConfig *cache.Config
 	gracefulShutdownPeriod       int
+	registeredCacheTriggers      []func(*cache.Config)
 }
 
 type managerContextKey string
@@ -246,12 +255,7 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		return nil, err
 	}
 
-	services, err := cfg.ParseServicesConfig(parsedConfig.Services)
-	if err != nil {
-		return nil, err
-	}
-
-	keys, err := bundle.ParseKeysConfig(parsedConfig.Keys)
+	keys, err := keys.ParseKeysConfig(parsedConfig.Keys)
 	if err != nil {
 		return nil, err
 	}
@@ -266,12 +270,23 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		Config:                       parsedConfig,
 		ID:                           id,
 		keys:                         keys,
-		services:                     services,
 		pluginStatus:                 map[string]*Status{},
 		pluginStatusListeners:        map[string]StatusListener{},
 		maxErrors:                    -1,
 		interQueryBuiltinCacheConfig: interQueryBuiltinCacheConfig,
 	}
+
+	serviceOpts := cfg.ServiceOptions{
+		Raw:        parsedConfig.Services,
+		AuthPlugin: m.AuthPlugin,
+		Keys:       keys,
+	}
+	services, err := cfg.ParseServicesConfig(serviceOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	m.services = services
 
 	for _, f := range opts {
 		f(m)
@@ -378,6 +393,18 @@ func (m *Manager) Plugin(name string) Plugin {
 	return nil
 }
 
+// AuthPlugin returns the HTTPAuthPlugin registered with name or nil if name is not found.
+func (m *Manager) AuthPlugin(name string) rest.HTTPAuthPlugin {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	for i := range m.plugins {
+		if m.plugins[i].name == name {
+			return m.plugins[i].plugin.(rest.HTTPAuthPlugin)
+		}
+	}
+	return nil
+}
+
 // GetCompiler returns the manager's compiler.
 func (m *Manager) GetCompiler() *ast.Compiler {
 	m.compilerMux.RLock()
@@ -468,12 +495,23 @@ func (m *Manager) Stop(ctx context.Context) {
 
 // Reconfigure updates the configuration on the manager.
 func (m *Manager) Reconfigure(config *config.Config) error {
-	services, err := cfg.ParseServicesConfig(config.Services)
+	opts := cfg.ServiceOptions{
+		Raw:        config.Services,
+		AuthPlugin: m.AuthPlugin,
+	}
+
+	keys, err := keys.ParseKeysConfig(config.Keys)
+	if err != nil {
+		return err
+	}
+	opts.Keys = keys
+
+	services, err := cfg.ParseServicesConfig(opts)
 	if err != nil {
 		return err
 	}
 
-	keys, err := bundle.ParseKeysConfig(config.Keys)
+	interQueryBuiltinCacheConfig, err := cache.ParseCachingConfig(config.Caching)
 	if err != nil {
 		return err
 	}
@@ -482,6 +520,7 @@ func (m *Manager) Reconfigure(config *config.Config) error {
 	defer m.mtx.Unlock()
 	config.Labels = m.Config.Labels // don't overwrite labels
 	m.Config = config
+	m.interQueryBuiltinCacheConfig = interQueryBuiltinCacheConfig
 	for name, client := range services {
 		m.services[name] = client
 	}
@@ -489,6 +528,11 @@ func (m *Manager) Reconfigure(config *config.Config) error {
 	for name, key := range keys {
 		m.keys[name] = key
 	}
+
+	for _, trigger := range m.registeredCacheTriggers {
+		trigger(interQueryBuiltinCacheConfig)
+	}
+
 	return nil
 }
 
@@ -548,7 +592,8 @@ func (m *Manager) copyPluginStatus() map[string]*Status {
 		var cpy *Status
 		if v != nil {
 			cpy = &Status{
-				State: v.State,
+				State:   v.State,
+				Message: v.Message,
 			}
 		}
 		statusCpy[k] = cpy
@@ -658,7 +703,7 @@ func (m *Manager) updateWasmResolversData(event storage.TriggerEvent) error {
 }
 
 // PublicKeys returns a public keys that can be used for verifying signed bundles.
-func (m *Manager) PublicKeys() map[string]*bundle.KeyConfig {
+func (m *Manager) PublicKeys() map[string]*keys.Config {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	return m.keys
@@ -680,4 +725,12 @@ func (m *Manager) Services() []string {
 		s = append(s, name)
 	}
 	return s
+}
+
+// RegisterCacheTrigger accepts a func that receives new inter-query cache config generated by
+// a reconfigure of the plugin manager, so that it can be propagated to existing inter-query caches.
+func (m *Manager) RegisterCacheTrigger(trigger func(*cache.Config)) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	m.registeredCacheTriggers = append(m.registeredCacheTriggers, trigger)
 }
