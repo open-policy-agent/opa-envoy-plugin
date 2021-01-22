@@ -20,7 +20,7 @@ availability) in order to perform the authorization check.
 
 ## Quick Start
 
-This section assumes you are testing with Istio v1.7.0 or later.
+This section assumes you are testing with Istio v1.8.0 or later.
 
 This section assumes you have Istio deployed on top of Kubernetes. See Istio's [Quick Start](https://istio.io/docs/setup/kubernetes/install/kubernetes/) page to get started.
 
