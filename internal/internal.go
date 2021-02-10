@@ -40,6 +40,7 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
@@ -59,13 +60,12 @@ const defaultEnableReflection = false
 // PluginName is the name to register with the OPA plugin manager
 const PluginName = "envoy_ext_authz_grpc"
 
-var revisionPath = storage.MustParsePath("/system/bundle/manifest/revision")
-
 var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
 var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 
 type evalResult struct {
-	revision   string
+	revision   string // Deprecated: Use `revisions` instead.
+	revisions  map[string]string
 	decisionID string
 	txnID      uint64
 	decision   interface{}
@@ -422,7 +422,7 @@ func (p *envoyExtAuthzGrpcServer) eval(ctx context.Context, input ast.Value, res
 
 		var err error
 
-		result.revision, err = getRevision(ctx, p.manager.Store, txn)
+		err = getRevision(ctx, p.manager.Store, txn, result)
 		if err != nil {
 			return err
 		}
@@ -506,6 +506,13 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 	}
 
 	info.Revision = result.revision
+
+	bundles := map[string]server.BundleInfo{}
+	for name, rev := range result.revisions {
+		bundles[name] = server.BundleInfo{Revision: rev}
+	}
+	info.Bundles = bundles
+
 	info.DecisionID = result.decisionID
 	info.Metrics = result.metrics
 
@@ -677,19 +684,31 @@ func uuid4() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", bs[0:4], bs[4:6], bs[6:8], bs[8:10], bs[10:]), nil
 }
 
-func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction) (string, error) {
-	value, err := store.Read(ctx, txn, revisionPath)
-	if err != nil {
-		if storage.IsNotFound(err) {
-			return "", nil
+func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction, result *evalResult) error {
+	revisions := map[string]string{}
+
+	names, err := bundle.ReadBundleNamesFromStore(ctx, store, txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	for _, name := range names {
+		r, err := bundle.ReadBundleRevisionFromStore(ctx, store, txn, name)
+		if err != nil && !storage.IsNotFound(err) {
+			return err
 		}
-		return "", err
+		revisions[name] = r
 	}
-	revision, ok := value.(string)
-	if !ok {
-		return "", fmt.Errorf("bad revision")
+
+	// Check legacy bundle manifest in the store
+	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
 	}
-	return revision, nil
+
+	result.revisions = revisions
+	result.revision = revision
+	return nil
 }
 
 func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {
