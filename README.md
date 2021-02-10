@@ -604,7 +604,7 @@ allow {
 }
 ```
 
-## Envoy xDS v2 and v2
+## Envoy xDS v2 and v3
 
 This plugin exposes both versions. For v3 requests, the [specified JSON mapping for protobuf](https://developers.google.com/protocol-buffers/docs/proto3#json)
 is used for making the incoming `envoy.service.auth.v3.CheckRequest` available in `input`.
