@@ -6,7 +6,6 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,12 +19,10 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/genproto/googleapis/rpc/code"
-	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/storage"
@@ -302,99 +299,6 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	}
 }
 
-func TestGetRevisionLegacy(t *testing.T) {
-	store := inmem.New()
-	ctx := context.Background()
-
-	result := evalResult{}
-
-	tb := bundle.Manifest{
-		Revision: "abc123",
-		Roots:    &[]string{"/a/b", "/a/c"},
-	}
-
-	// write a "legacy" manifest
-	err := storage.Txn(ctx, store, storage.WriteParams, func(txn storage.Transaction) error {
-		if err := bundle.LegacyWriteManifestToStore(ctx, store, txn, tb); err != nil {
-			t.Fatalf("Failed to write manifest to store: %s", err)
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("Unexpected error finishing transaction: %s", err)
-	}
-
-	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
-
-	err = getRevision(ctx, store, txn, &result)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected := "abc123"
-	if result.revision != "abc123" {
-		t.Fatalf("Expected revision %v but got %v", expected, result.revision)
-	}
-
-	if len(result.revisions) != 0 {
-		t.Fatal("Unexpected multiple bundles")
-	}
-}
-
-func TestGetRevisionMulti(t *testing.T) {
-	store := inmem.New()
-	ctx := context.Background()
-
-	result := evalResult{}
-
-	bundles := map[string]bundle.Manifest{
-		"bundle1": {
-			Revision: "abc123",
-			Roots:    &[]string{"/a/b", "/a/c"},
-		},
-		"bundle2": {
-			Revision: "def123",
-			Roots:    &[]string{"/x/y", "/z"},
-		},
-	}
-
-	// write bundles
-	for name, manifest := range bundles {
-		err := storage.Txn(ctx, store, storage.WriteParams, func(txn storage.Transaction) error {
-			err := bundle.WriteManifestToStore(ctx, store, txn, name, manifest)
-			if err != nil {
-				t.Fatalf("Failed to write manifest to store: %s", err)
-			}
-			return err
-		})
-		if err != nil {
-			t.Fatalf("Unexpected error finishing transaction: %s", err)
-		}
-	}
-
-	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
-
-	err := getRevision(ctx, store, txn, &result)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(result.revisions) != 2 {
-		t.Fatalf("Expected two bundles but got %v\n", len(result.revisions))
-	}
-
-	expected := map[string]string{"bundle1": "abc123", "bundle2": "def123"}
-	if !reflect.DeepEqual(result.revisions, expected) {
-		t.Fatalf("Expected result: %v, got: %v", expected, result.revisions)
-	}
-
-	if result.revision != "" {
-		t.Fatalf("Unexpected revision %v", result.revision)
-	}
-
-}
-
 func TestCheckDeny(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -584,7 +488,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	expectedErrMsg := "illegal value for policy evaluation result: json.Number"
+	expectedErrMsg := "failed to get response status: illegal value for policy evaluation result: json.Number"
 	if err.Error() != expectedErrMsg {
 		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, err)
 	}
@@ -1145,8 +1049,8 @@ func TestCheckAllowObjectDecision(t *testing.T) {
 	}
 
 	expectedHeaders := make(map[string]string)
-	expectedHeaders["x"] = "hello"
-	expectedHeaders["y"] = "world"
+	expectedHeaders[http.CanonicalHeaderKey("x")] = "hello"
+	expectedHeaders[http.CanonicalHeaderKey("y")] = "world"
 
 	assertHeaders(t, headers, expectedHeaders)
 }
@@ -1180,8 +1084,8 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 	}
 
 	expectedHeaders := make(map[string]string)
-	expectedHeaders["foo"] = "bar"
-	expectedHeaders["baz"] = "taz"
+	expectedHeaders[http.CanonicalHeaderKey("foo")] = "bar"
+	expectedHeaders[http.CanonicalHeaderKey("baz")] = "taz"
 
 	assertHeaders(t, headers, expectedHeaders)
 
@@ -1248,598 +1152,10 @@ func TestCheckAllowWithDryRunObjectDecision(t *testing.T) {
 	}
 
 	expectedHeaders := make(map[string]string)
-	expectedHeaders["x"] = "hello"
-	expectedHeaders["y"] = "world"
+	expectedHeaders[http.CanonicalHeaderKey("x")] = "hello"
+	expectedHeaders[http.CanonicalHeaderKey("y")] = "world"
 
 	assertHeaders(t, headers, expectedHeaders)
-}
-
-func TestGetResponseStatus(t *testing.T) {
-
-	input := make(map[string]interface{})
-	var err error
-
-	_, err = getResponseStatus(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	input["allowed"] = 1
-	_, err = getResponseStatus(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	input["allowed"] = true
-	var result int32
-	result, err = getResponseStatus(input)
-
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if result != int32(code.Code_OK) {
-		t.Fatalf("Expected result %v but got %v", int32(code.Code_OK), result)
-	}
-}
-
-func TestGetResponseHeaders(t *testing.T) {
-	input := make(map[string]interface{})
-
-	result, err := getResponseHeaders(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if len(result) != 0 {
-		t.Fatal("Expected no headers")
-	}
-
-	badHeader := "test"
-	input["headers"] = badHeader
-
-	_, err = getResponseHeaders(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	testHeaders := make(map[string]interface{})
-	testHeaders["foo"] = "bar"
-	input["headers"] = testHeaders
-
-	result, err = getResponseHeaders(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Fatalf("Expected one header but got %v", len(result))
-	}
-
-	testHeaders["baz"] = 1
-
-	_, err = getResponseHeaders(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	input["headers"] = []interface{}{
-		map[string]interface{}{
-			"foo": "bar",
-		},
-		map[string]interface{}{
-			"foo": "baz",
-		},
-	}
-
-	result, err = getResponseHeaders(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("Expected two header but got %v", len(result))
-	}
-
-	seen := map[string]int{}
-	for _, hdr := range result {
-		seen[hdr.Header.Value]++
-	}
-	if seen["bar"] != 1 || seen["baz"] != 1 {
-		t.Errorf("expected 'bar' and 'baz', got %v", seen)
-	}
-}
-
-func TestGetResponseBody(t *testing.T) {
-	input := make(map[string]interface{})
-
-	result, err := getResponseBody(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if result != "" {
-		t.Fatalf("Expected empty body but got %v", result)
-	}
-
-	input["body"] = "hello"
-	result, err = getResponseBody(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if result != "hello" {
-		t.Fatalf("Expected result \"hello\" but got %v", result)
-	}
-
-	input["body"] = 123
-	result, err = getResponseBody(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil", err)
-	}
-}
-
-func TestGetResponseHttpStatus(t *testing.T) {
-	input := make(map[string]interface{})
-
-	result, err := getResponseHTTPStatus(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if result.GetCode().String() != "Forbidden" {
-		t.Fatalf("Expected http status code \"Forbidden\" but got %v", result.GetCode().String())
-	}
-
-	input["http_status"] = true
-	result, err = getResponseHTTPStatus(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	input["http_status"] = json.Number("1")
-	result, err = getResponseHTTPStatus(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	input["http_status"] = json.Number("9999")
-	result, err = getResponseHTTPStatus(input)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-
-	input["http_status"] = json.Number("400")
-	result, err = getResponseHTTPStatus(input)
-	if err != nil {
-		t.Fatalf("Expected no error but got %v", err)
-	}
-
-	if result.GetCode().String() != "BadRequest" {
-		t.Fatalf("Expected http status code \"BadRequest\" but got %v", result.GetCode().String())
-	}
-}
-
-func TestGetParsedBody(t *testing.T) {
-
-	requestNoContentType := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-length": "0"
-			  }
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeText := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "text/html"
-			  }
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeJSONString := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "foo"
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeJSONBoolean := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "true"
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeJSONNumber := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "42"
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeJSONNull := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "null"
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeJSONObject := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\"}"
-			}
-		  }
-		}
-	  }`
-
-	requestContentTypeJSONArray := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "[\"hello\", \"opa\"]"
-			}
-		  }
-		}
-	  }`
-
-	requestEmptyContent := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": ""
-			}
-		  }
-		}
-	  }`
-
-	requestBodyTruncated := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json",
-				"content-length": "1000"
-			  },
-			  "body": "true"
-			}
-		  }
-		}
-	  }`
-
-	expectedNumber := json.Number("42")
-	expectedObject := map[string]interface{}{
-		"firstname": "foo",
-		"lastname":  "bar",
-	}
-	expectedArray := []interface{}{"hello", "opa"}
-
-	tests := map[string]struct {
-		input           *ext_authz.CheckRequest
-		want            interface{}
-		isBodyTruncated bool
-		err             error
-	}{
-		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_json_string":  {input: createCheckRequest(requestContentTypeJSONString), want: "foo", isBodyTruncated: false, err: nil},
-		"content_type_json_boolean": {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, isBodyTruncated: false, err: nil},
-		"content_type_json_number":  {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, isBodyTruncated: false, err: nil},
-		"content_type_json_null":    {input: createCheckRequest(requestContentTypeJSONNull), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_json_object":  {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, isBodyTruncated: false, err: nil},
-		"content_type_json_array":   {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, isBodyTruncated: false, err: nil},
-		"empty_content":             {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
-		"body_truncated":            {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			logEntry := logrus.WithField("test", name)
-			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
-			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
-			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
-			parsedPath, _, _ := getParsedPathAndQuery(path)
-			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, nil, parsedPath, nil)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("expected result: %v, got: %v", tc.want, got)
-			}
-
-			if isBodyTruncated != tc.isBodyTruncated {
-				t.Fatalf("expected isBodyTruncated: %v, got: %v", tc.isBodyTruncated, got)
-			}
-
-			if err != tc.err {
-				t.Fatalf("expected error: %v, got: %v", tc.err, err)
-			}
-		})
-	}
-
-	requestContentTypeJSONInvalid := `{
-		"attributes": {
-		  "request": {
-			"http": {
-			  "headers": {
-				"content-type": "application/json"
-			  },
-			  "body": "[\"foo\" : 42}"
-			}
-		  }
-		}
-	  }`
-
-	logEntry := logrus.WithField("test", "invalid json")
-	req := createCheckRequest(requestContentTypeJSONInvalid)
-	path := []interface{}{}
-	protoSet := (*protoregistry.Files)(nil)
-	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody()
-	_, _, err := getParsedBody(logEntry, headers, body, nil, path, protoSet)
-	if err == nil {
-		t.Fatal("Expected error but got nil")
-	}
-}
-
-func TestGetParsedBodygRPC(t *testing.T) {
-
-	requestValidExample := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAADYKFgoHCgVFUlJPUhILCglTZWNOdW1iZXISHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU="
-      }
-    },
-    "parsed_path": [
-      "Example.Test.GRPC.ProtoServiceIExampleApplication",
-      "RegisterExample"
-    ]
-  }
-}
-`
-
-	requestValidBook := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/com.book.BookService/GetBooksViaAuthor",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAAAYKBEpvaG4="
-      }
-    }
-  }
-}
-`
-
-	requestInvalidRawBodyExample := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/Example.Test.GRPC.ProtoServiceIExampleApplication/RegisterExample",
-        "protocol": "HTTP/2"
-      }
-    },
-    "parsed_path": [
-      "Example.Test.GRPC.ProtoServiceIExampleApplication",
-      "RegisterExample"
-    ]
-  }
-}
-`
-
-	requestInvalidParsedPathExample := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAAC0KDQoHCgVFUlJPUhICCAESHAoMCgpCb2R5IHZhbHVlEgwKCk5hbWUgVmFsdWU="
-      }
-    }
-  }
-}
-`
-
-	requestUnknownService := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/com.book.SecondBookService/GetBooksViaAuthor",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAAAYKBEpvaG4="
-      }
-    }
-  }
-}
-`
-
-	requestUnknownMethod := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/com.book.BookService/GetBooksViaSecondAuthor",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAAAYKBEpvaG4="
-      }
-    }
-  }
-}
-`
-	requestEmpty := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/com.book.BookService/GetBooksViaAuthor",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAAAA="
-      }
-    }
-  }
-}
-`
-	requestCompressedPayload := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/com.book.BookService/GetBooksViaAuthor",
-        "protocol": "HTTP/2",
-        "raw_body": "AQAAADwfiwgAAAAAAAD/4hLkaOi4t49RoOHi+ll//////59RSJCj4dGiE4wCDau/LIYIAQIAAP//aJ9RpSYAAAA="
-      }
-    }
-  }
-}
-`
-
-	requestTruncatedPayload := `{
-  "attributes": {
-    "request": {
-      "http": {
-        "headers": {
-          "content-type": "application/grpc"
-        },
-        "method": "POST",
-        "path": "/com.book.BookService/GetBooksViaAuthor",
-        "protocol": "HTTP/2",
-        "raw_body": "AAAAABEImqaMww=="
-      }
-    }
-  }
-}
-`
-
-	expectedObject := map[string]interface{}{
-		"Data": map[string]interface{}{
-			"Body": "Body value",
-			"Name": "Name Value",
-		},
-		"Metadata": map[string]interface{}{
-			"SeverityNumber": "SecNumber",
-			"SeverityText":   "ERROR",
-		},
-	}
-	expectedObjectExampleBook := map[string]interface{}{"author": "John"}
-	protoDescriptorPath := "../test/files/combined.pb"
-	protoSet, err := readProtoSet(protoDescriptorPath)
-	if err != nil {
-		t.Fatalf("read protoset: %v", err)
-	}
-
-	tests := map[string]struct {
-		input           *ext_authz.CheckRequest
-		want            interface{}
-		isBodyTruncated bool
-		err             error
-	}{
-		"parsed_path_error":    {input: createCheckRequest(requestInvalidParsedPathExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid parsed path")},
-		"without_raw_body":     {input: createCheckRequest(requestInvalidRawBodyExample), want: nil, isBodyTruncated: false, err: nil},
-		"valid_parsed_example": {input: createCheckRequest(requestValidExample), want: expectedObject, isBodyTruncated: false, err: nil},
-		"valid_parsed_book":    {input: createCheckRequest(requestValidBook), want: expectedObjectExampleBook, isBodyTruncated: false, err: nil},
-		"unknown_service":      {input: createCheckRequest(requestUnknownService), want: nil, isBodyTruncated: false, err: nil},
-		"unknown_method":       {input: createCheckRequest(requestUnknownMethod), want: nil, isBodyTruncated: false, err: nil},
-		"empty_request":        {input: createCheckRequest(requestEmpty), want: map[string]interface{}{}, isBodyTruncated: false, err: nil},
-		"compressed_payload":   {input: createCheckRequest(requestCompressedPayload), want: nil, isBodyTruncated: false, err: nil},
-		"truncated_payload":    {input: createCheckRequest(requestTruncatedPayload), want: nil, isBodyTruncated: true, err: nil},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			logEntry := logrus.WithField("test", name)
-
-			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
-			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
-			rawBody := tc.input.GetAttributes().GetRequest().GetHttp().GetRawBody()
-			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
-
-			parsedPath, _, _ := getParsedPathAndQuery(path)
-			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, protoSet)
-
-			if !reflect.DeepEqual(err, tc.err) {
-				t.Fatalf("expected error: %v, got: %v", tc.err, err)
-			}
-
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("expected result: %v, got: %v", tc.want, got)
-			}
-
-			if isBodyTruncated != tc.isBodyTruncated {
-				t.Fatalf("expected isBodyTruncated: %v, got: %v", tc.isBodyTruncated, got)
-			}
-
-		})
-	}
 }
 
 func TestPluginStatusLifeCycle(t *testing.T) {
@@ -2029,78 +1345,9 @@ func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) 
 	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
 }
 
-func createExtReqWithPath(path string) *ext_authz.CheckRequest {
-	requestString := fmt.Sprintf(`{
-	  "attributes": {
-		"request": {
-		  "http": {
-			"path": "%s"
-		  }
-		}
-	  }
-	}`, path)
-
-	var req ext_authz.CheckRequest
-	if err := util.Unmarshal([]byte(requestString), &req); err != nil {
-		panic(err)
-	}
-
-	return &req
-}
-
-func TestParsedPathAndQuery(t *testing.T) {
-	var tests = []struct {
-		request       *ext_authz.CheckRequest
-		expectedPath  []interface{}
-		expectedQuery map[string]interface{}
-	}{
-		{
-			createExtReqWithPath("/my/test/path"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{},
-		},
-		{
-			createExtReqWithPath("/my/test/path?a=1"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1"}},
-		},
-		{
-			createExtReqWithPath("/my/test/path?a=1&a=2"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "2"}},
-		},
-		{
-			createExtReqWithPath("/my/test/path?a=1&b=2"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1"}, "b": []interface{}{"2"}},
-		},
-		{
-			createExtReqWithPath("/my/test/path?a=1&a=new%0aline"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "new\nline"}},
-		},
-		{
-			createExtReqWithPath("%2Fmy%2Ftest%2Fpath?a=1&a=new%0aline"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "new\nline"}},
-		},
-	}
-
-	for _, tt := range tests {
-		path := tt.request.GetAttributes().GetRequest().GetHttp().GetPath()
-		actualPath, actualQuery, _ := getParsedPathAndQuery(path)
-		if !reflect.DeepEqual(actualPath, tt.expectedPath) {
-			t.Errorf("parsed_path (%s): expected %s, actual %s", tt.request, tt.expectedPath, actualPath)
-		}
-		if !reflect.DeepEqual(actualQuery, tt.expectedQuery) {
-			t.Errorf("parsed_query (%s): expected %s, actual %s", tt.request, tt.expectedQuery, actualQuery)
-		}
-	}
-}
-
 func TestLogWithASTError(t *testing.T) {
 	server := testAuthzServer(&testPlugin{}, false)
-	err := server.log(context.Background(), nil, &evalResult{}, &ast.Error{Code: "foo"})
+	err := server.log(context.Background(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
 	if err != nil {
 		panic(err)
 	}
@@ -2111,7 +1358,7 @@ func TestLogWithCancelError(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(customLogger, false)
-	err := server.log(context.Background(), nil, &evalResult{}, &topdown.Error{
+	err := server.log(context.Background(), nil, &envoyauth.EvalResult{}, &topdown.Error{
 		Code:    topdown.CancelErr,
 		Message: "caller cancelled query execution",
 	})
@@ -2190,14 +1437,6 @@ func TestVersionInfoInputV2(t *testing.T) {
 	}
 }
 
-func createCheckRequest(policy string) *ext_authz.CheckRequest {
-	var req ext_authz.CheckRequest
-	if err := util.Unmarshal([]byte(policy), &req); err != nil {
-		panic(err)
-	}
-	return &req
-}
-
 func getPluginManager(module string, customLogger plugins.Plugin) (*plugins.Manager, error) {
 	ctx := context.Background()
 	store := inmem.New()
@@ -2230,7 +1469,7 @@ func assertHeaders(t *testing.T, actualHeaders []*ext_core.HeaderValueOption, ex
 	t.Helper()
 
 	for _, header := range actualHeaders {
-		key := header.GetHeader().GetKey()
+		key := http.CanonicalHeaderKey(header.GetHeader().GetKey())
 		value := header.GetHeader().GetValue()
 
 		var expVal string
