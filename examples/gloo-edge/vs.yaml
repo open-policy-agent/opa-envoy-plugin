@@ -1,0 +1,28 @@
+apiVersion: gloo.solo.io/v1
+kind: Upstream
+metadata:
+  name: httpbin
+spec:
+  static:
+    hosts:
+      - addr: httpbin.org
+        port: 80
+---
+apiVersion: gateway.solo.io/v1
+kind: VirtualService
+metadata:
+  name: httpbin
+spec:
+  virtualHost:
+    domains:
+      - '*'
+    routes:
+      - matchers:
+         - prefix: /
+        routeAction:
+          single:
+            upstream:
+              name: httpbin
+              namespace: gloo-system
+        options:
+          autoHostRewrite: true

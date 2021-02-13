@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+spec:
+  selector:
+    app: opa
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 9191
+      targetPort: 9191
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  labels:
+    app: opa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:0.26.0-envoy
+          volumeMounts:
+            - readOnly: true
+              mountPath: /policy
+              name: opa-policy
+          args:
+            - "run"
+            - "--server"
+            - "--addr=0.0.0.0:8181"
+            - "--set=plugins.envoy_ext_authz_grpc.addr=0.0.0.0:9191"
+            - "--set=plugins.envoy_ext_authz_grpc.query=data.envoy.authz.allow"
+            - "--set=plugins.envoy_ext_authz_grpc.enable-reflection=true"
+            - "--set=decision_logs.console=true"
+            - "--ignore=.*"
+            - "/policy/policy.rego"
+      volumes:
+        - name: opa-policy
+          configMap:
+            name: opa-policy
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policy
+data:
+  policy.rego: |
+    package envoy.authz
+
+    import input.attributes.request.http as http_request
+
+    default allow = false
+
+    allow {
+        action_allowed
+    }
+
+    action_allowed {
+      http_request.method == "GET"
+    }
+

@@ -1,0 +1,7 @@
+global:
+  extensions:
+    extAuth:
+      extauthzServerRef:
+        name: gloo-system-opa-9191
+        namespace: gloo-system
+
