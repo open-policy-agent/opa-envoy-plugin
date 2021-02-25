@@ -1,72 +1,116 @@
-# Using OPA with Gloo Edge
+## Overview
 
-* [Gloo Edge](https://docs.solo.io/gloo-edge/latest/)
-* [OPA](https://www.openpolicyagent.org/docs/latest/envoy-authorization/)
+[Gloo Edge](https://docs.solo.io/gloo-edge/latest/) is an Envoy based API Gateway that provides a Kubernetes CRD
+to manage Envoy configuration for performing traffic management and routing.
 
-`Gloo Edge` is `Envoy` based API Gateway that provides K8S CRD to manage `Envoy` config for performing traffic management and routing.
+`Gloo Edge` allows creation of a [Custom External Auth Service](https://docs.solo.io/gloo-edge/master/guides/security/auth/custom_auth/)
+that implements the Envoy spec for an [External Authorization Server](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/security/ext_authz_filter.html).
 
-`Gloo Edge` allows to leverage `Envoy` [External Authorization](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/security/ext_authz_filter.html)
-introducing concept of [Custom Auth server](https://docs.solo.io/gloo-edge/master/guides/security/auth/custom_auth/).
+The purpose of this tutorial is to show how OPA could be used with Gloo Edge to apply security policies for upstream services.
 
-The purpose of this tutorial is to show how OPA could be used with `Gloo Edge` to apply security policies for upstream services.
+## Prerequisites
 
-This document assumes you have avialable K8S cluster available and have understand of `Gloo Edge` routing basics,
-i.e. `Upstream`, `VirtualService` resources.
+This tutorial requires Kubernetes 1.14 or later. To run the tutorial locally, we recommend using [minikube](https://minikube.sigs.k8s.io/docs/start/) in
+version v1.0+ with Kubernetes 1.14+.
 
-For local development one could use [Minikube](https://minikube.sigs.k8s.io/docs/) or [K3D](https://k3d.io/).
-
-This guide was tested on local [k3d](https://k3d.io/) and [kOps](https://github.com/kubernetes/kops) based cluster in AWS.
-
-Required software
-
-* [Helm](https://helm.sh/docs/intro/install/)
-* [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
-* [curl](https://curl.se/download.html)
+The tutorial also requires [Helm](https://helm.sh/docs/intro/install/) to install Gloo Edge on a Kubernetes cluster.
 
 ## TL;DR
 
-Execute `./setup.sh`, the script will setup everything
-and run sample tests to prove that setup worked.
+Execute `./setup.sh`, the script will set up everything and run sample tests to prove that the setup worked.
 
-## Setup and configure Gloo Edge
+## Steps
+
+### Start Minikube
 
 ```bash
-$ helm repo add gloo https://storage.googleapis.com/solo-public-helm
-$ helm upgrade -i -n gloo-system --create-namespace gloo gloo/gloo
-$ kubectl config set-context $(kubectl config current-context) --namespace=gloo-system
+minikube start
+```
+
+### Setup and configure Gloo Edge
+
+```bash
+helm repo add gloo https://storage.googleapis.com/solo-public-helm
+helm upgrade --install --namespace gloo-system --create-namespace gloo gloo/gloo
+kubectl config set-context $(kubectl config current-context) --namespace=gloo-system
 ```
 
 Ensure all pods are running using `kubectl get pod` command.
 
-For simplification port-forwarding will be used. Open another console and execute.
+### Create Virtual Service and Upstream
+
+[Virtual Services](https://docs.solo.io/gloo-edge/latest/introduction/architecture/concepts/#virtual-services) define a
+set of route rules, security configuration, rate limiting, transformations, and other core routing capabilities
+supported by Gloo Edge.
+
+[Upstreams](https://docs.solo.io/gloo-edge/latest/introduction/architecture/concepts/#upstreams) define destinations for routes.
+
+Save the configuration as **vs.yaml**.
+
+```yaml
+apiVersion: gloo.solo.io/v1
+kind: Upstream
+metadata:
+  name: httpbin
+spec:
+  static:
+    hosts:
+      - addr: httpbin.org
+        port: 80
+---
+apiVersion: gateway.solo.io/v1
+kind: VirtualService
+metadata:
+  name: httpbin
+spec:
+  virtualHost:
+    domains:
+      - '*'
+    routes:
+      - matchers:
+         - prefix: /
+        routeAction:
+          single:
+            upstream:
+              name: httpbin
+              namespace: gloo-system
+        options:
+          autoHostRewrite: true
+```
 
 ```bash
-$ kubectl port-forward deployment/gateway-proxy 8080:8080
+kubectl apply -f vs.yaml
 ```
 
-Let's test that Gloo works properly.
-We're going to create sample [VirtualService](https://docs.solo.io/gloo-edge/latest/introduction/architecture/concepts/#virtual-services)
-that forwards requests to http://httpbin.org.
+### Test Gloo
 
-In initial console run
+For simplification port-forwarding will be used. Open another terminal and execute.
 
 ```bash
-$ curl -XGET -Is localhost:8080/get | head -n 1
+kubectl port-forward deployment/gateway-proxy 8080:8080
+```
+
+The `VirtualService` created in the previous step forwards requests to [http://httpbin.org](http://httpbin.org).
+
+Let's test that Gloo works properly by running the below commands in the first terminal.
+
+```bash
+curl -XGET -Is localhost:8080/get | head -n 1
 HTTP/1.1 200 OK
 
-$ http -XPOST -Is localhost:8080/post | head -n1
+curl http -XPOST -Is localhost:8080/post | head -n1
 HTTP/1.1 200 OK
 ```
 
-## Setup OPA-Envoy
+### Define a OPA policy
 
-K8S `Service` is required to create a DNS record and create Gloo `Upstream` object.
-Since name of the service port is `grpc` - `Gloo` will understand that traffic should be routed using HTTP2 protocol.
+The following OPA policy only allows `GET` requests.
 
-Together with OPA container we will deploy simple REGO policy, that only aceepts GET requests and denies all other HTTP methods.
+**policy.rego**
 
-```
+```rego
 package envoy.authz
+
 import input.attributes.request.http as http_request
 
 default allow = false
@@ -80,15 +124,92 @@ action_allowed {
 }
 ```
 
-Execute command below to deploy OPA and ensure all pods are running using `kubectl get pod` command.
+Store the policy in Kubernetes as a Secret.
 
 ```bash
-$ kubectl apply -f opa.yaml
+kubectl create secret generic opa-policy --from-file policy.rego
 ```
 
-## Enable OPA as Custom Auth server in Gloo Edge
+### Setup OPA-Envoy
 
-First of all we should enable `ext_authz` in embedded `Envoy` by applying such values to Gloo Edge Helm chart.
+Create a deployment as shown below and save it in **deployment.yaml**:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  labels:
+    app: opa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:0.26.0-envoy
+          volumeMounts:
+            - readOnly: true
+              mountPath: /policy
+              name: opa-policy
+          args:
+            - "run"
+            - "--server"
+            - "--addr=0.0.0.0:8181"
+            - "--set=plugins.envoy_ext_authz_grpc.addr=0.0.0.0:9191"
+            - "--set=plugins.envoy_ext_authz_grpc.query=data.envoy.authz.allow"
+            - "--set=decision_logs.console=true"
+            - "--ignore=.*"
+            - "/policy/policy.rego"
+      volumes:
+        - name: opa-policy
+          secret:
+            secretName: opa-policy
+```
+
+```bash
+kubectl apply -f deployment.yaml
+```
+
+Ensure all pods are running using `kubectl get pod` command.
+
+Next, define a Kubernetes `Service` for OPA-Envoy. This is required to create a DNS record and thereby create
+a Gloo `Upstream` object.
+
+**service.yaml**
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+spec:
+  selector:
+    app: opa
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 9191
+      targetPort: 9191
+```
+
+> Note: Since the name of the service port is `grpc`, `Gloo` will understand that traffic should be routed using HTTP2 protocol.
+
+```bash
+kubectl apply -f service.yaml
+```
+
+### Configure Gloo Edge to use OPA
+
+To use OPA as a custom auth server, we need to add the `extauth` attribute as describe below:
+
+**gloo.yaml**
 
 ```yaml
 global:
@@ -99,15 +220,15 @@ global:
         namespace: gloo-system
 ```
 
-To apply it, run this command
+To apply it, run the following command:
 
 ```bash
-$ helm upgrade -i -n gloo-system --create-namespace -f gloo.yaml gloo gloo/gloo
+helm upgrade --install --namespace gloo-system --create-namespace -f gloo.yaml gloo gloo/gloo
 ```
 
-Then, we should configure `Gloo Edge` routes to perform authorization via configured `ext_auth` before regular processing
+Then, configure Gloo Edge routes to perform authorization via configured `extauth` before regular processing.
 
-Let's create file `vs-patch.yaml` with content
+**vs-patch.yaml**
 
 ```yaml
 spec:
@@ -117,28 +238,25 @@ spec:
         customAuth: {}
 ```
 
-and apply the patch to our `VirtualService` by calling
+Then apply the patch to our `VirtualService` as shown below:
 
 ```bash
-$ kubectl patch vs httpbin --type=merge -p "$(cat vs-patch.yaml)"
+kubectl patch vs httpbin --type=merge --patch "$(cat vs-patch.yaml)"
 ```
 
-## Check External Authorization via Gloo Edge
+### Exercise the OPA policy
 
-After patch application, let's verify that `ext_authz` works properly,
-executing the same HTTP requests that we used before to check if routing worked.
-
-We expect that GET requests are passing through and all other methods are denied.
+After the patch is applied, let's verify that OPA allows only allows `GET` requests.
 
 ```bash
-$ curl -XGET -Is localhost:8080/get | head -n 1
+curl -XGET -Is localhost:8080/get | head -n 1
 HTTP/1.1 200 OK
 
-$ http -XPOST -Is localhost:8080/post | head -n1
+curl http -XPOST -Is localhost:8080/post | head -n1
 HTTP/1.1 403 Forbidden
 ```
 
-Also, OPA decision logs could be checked to debug Gloo request and OPA results.
+Check OPA's decision logs to view the inputs received by OPA from Gloo Edge and the results generated by OPA.
 
 ```bash
 $ kubectl logs deployment/opa
