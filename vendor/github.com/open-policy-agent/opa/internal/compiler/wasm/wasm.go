@@ -8,16 +8,26 @@ package wasm
 import (
 	"bytes"
 	"fmt"
+	"io"
 
 	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/compiler/wasm/opa"
+	"github.com/open-policy-agent/opa/internal/debug"
 	"github.com/open-policy-agent/opa/internal/ir"
 	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 	"github.com/open-policy-agent/opa/internal/wasm/instruction"
 	"github.com/open-policy-agent/opa/internal/wasm/module"
 	"github.com/open-policy-agent/opa/internal/wasm/types"
+)
+
+// Record Wasm ABI version in exported global variable
+const (
+	opaWasmABIVersionVal      = 1
+	opaWasmABIVersionVar      = "opa_wasm_abi_version"
+	opaWasmABIMinorVersionVal = 1
+	opaWasmABIMinorVersionVar = "opa_wasm_abi_minor_version"
 )
 
 const (
@@ -61,6 +71,9 @@ const (
 	opaMemoizePop        = "opa_memoize_pop"
 	opaMemoizeInsert     = "opa_memoize_insert"
 	opaMemoizeGet        = "opa_memoize_get"
+	opaMappingInit       = "opa_mapping_init"
+	opaMappingLookup     = "opa_mapping_lookup"
+	opaMPDInit           = "opa_mpd_init"
 )
 
 var builtinsFunctions = map[string]string{
@@ -164,21 +177,29 @@ type Compiler struct {
 	module *module.Module    // output WASM module
 	code   *module.CodeEntry // output WASM code
 
-	planfuncs             map[string]struct{} // names of functions inside the plan
-	builtinStringAddrs    map[int]uint32      // addresses of built-in string constants
-	externalFuncNameAddrs map[string]int32    // addresses of required built-in function names for listing
-	externalFuncs         map[string]int32    // required built-in function ids
-	entrypointNameAddrs   map[string]int32    // addresses of available entrypoint names for listing
-	entrypoints           map[string]int32    // available entrypoint ids
-	stringOffset          int32               // null-terminated string data base offset
-	stringAddrs           []uint32            // null-terminated string constant addresses
-	fileAddrs             []uint32            // null-terminated string constant addresses, used for file names
-	funcs                 map[string]uint32   // maps imported and exported function names to function indices
+	funcsCode []funcCode // compile functions' code
+
+	builtinStringAddrs    map[int]uint32    // addresses of built-in string constants
+	externalFuncNameAddrs map[string]int32  // addresses of required built-in function names for listing
+	externalFuncs         map[string]int32  // required built-in function ids
+	entrypointNameAddrs   map[string]int32  // addresses of available entrypoint names for listing
+	entrypoints           map[string]int32  // available entrypoint ids
+	stringOffset          int32             // null-terminated string data base offset
+	stringAddrs           []uint32          // null-terminated string constant addresses
+	fileAddrs             []uint32          // null-terminated string constant addresses, used for file names
+	funcs                 map[string]uint32 // maps imported and exported function names to function indices
 
 	nextLocal uint32
 	locals    map[ir.Local]uint32
 	lctx      uint32 // local pointing to eval context
 	lrs       uint32 // local pointing to result set
+
+	debug debug.Debug
+}
+
+type funcCode struct {
+	name string
+	code *module.CodeEntry
 }
 
 const (
@@ -198,7 +219,9 @@ var errorMessages = [...]struct {
 
 // New returns a new compiler object.
 func New() *Compiler {
-	c := &Compiler{}
+	c := &Compiler{
+		debug: debug.Discard(),
+	}
 	c.stages = []func() error{
 		c.initModule,
 		c.compileStrings,
@@ -206,13 +229,36 @@ func New() *Compiler {
 		c.compileEntrypointDecls,
 		c.compileFuncs,
 		c.compilePlans,
+
+		// final emissions
+		c.emitFuncs,
+
+		// global optimizations
+		c.optimizeBinaryen,
 	}
 	return c
+}
+
+// ABIVersion returns the Wasm ABI version this compiler
+// emits.
+func (*Compiler) ABIVersion() ast.WasmABIVersion {
+	return ast.WasmABIVersion{
+		Version: opaWasmABIVersionVal,
+		Minor:   opaWasmABIMinorVersionVal,
+	}
 }
 
 // WithPolicy sets the policy to compile.
 func (c *Compiler) WithPolicy(p *ir.Policy) *Compiler {
 	c.policy = p
+	return c
+}
+
+// WithDebug sets the sink for debug logs emitted by the compiler.
+func (c *Compiler) WithDebug(sink io.Writer) *Compiler {
+	if sink != nil {
+		c.debug = debug.New(sink)
+	}
 	return c
 }
 
@@ -245,12 +291,50 @@ func (c *Compiler) initModule() error {
 		return err
 	}
 
+	// add globals for ABI [minor] version, export them
+	abiVersionGlobals := []module.Global{
+		{
+			Type:    types.I32,
+			Mutable: false,
+			Init: module.Expr{
+				Instrs: []instruction.Instruction{
+					instruction.I32Const{Value: opaWasmABIVersionVal},
+				},
+			},
+		},
+		{
+			Type:    types.I32,
+			Mutable: false,
+			Init: module.Expr{
+				Instrs: []instruction.Instruction{
+					instruction.I32Const{Value: opaWasmABIMinorVersionVal},
+				},
+			},
+		},
+	}
+	abiVersionExports := []module.Export{
+		{
+			Name: opaWasmABIVersionVar,
+			Descriptor: module.ExportDescriptor{
+				Type:  module.GlobalExportType,
+				Index: uint32(len(c.module.Global.Globals)),
+			},
+		},
+		{
+			Name: opaWasmABIMinorVersionVar,
+			Descriptor: module.ExportDescriptor{
+				Type:  module.GlobalExportType,
+				Index: uint32(len(c.module.Global.Globals)) + 1,
+			},
+		},
+	}
+	c.module.Global.Globals = append(c.module.Global.Globals, abiVersionGlobals...)
+	c.module.Export.Exports = append(c.module.Export.Exports, abiVersionExports...)
+
 	c.funcs = make(map[string]uint32)
 	for _, fn := range c.module.Names.Functions {
 		c.funcs[fn.Name] = fn.Index
 	}
-
-	c.planfuncs = map[string]struct{}{}
 
 	for _, fn := range c.policy.Funcs.Funcs {
 
@@ -265,7 +349,6 @@ func (c *Compiler) initModule() error {
 		}
 
 		c.emitFunctionDecl(fn.Name, tpe, false)
-		c.planfuncs[fn.Name] = struct{}{}
 	}
 
 	c.emitFunctionDecl("eval", module.FunctionType{
@@ -282,6 +365,14 @@ func (c *Compiler) initModule() error {
 		Params:  nil,
 		Results: []types.ValueType{types.I32},
 	}, true)
+
+	c.module.Export.Exports = append(c.module.Export.Exports, module.Export{
+		Name: "memory",
+		Descriptor: module.ExportDescriptor{
+			Type:  module.MemoryExportType,
+			Index: 0,
+		},
+	})
 
 	return nil
 }
@@ -399,7 +490,7 @@ func (c *Compiler) compileExternalFuncDecls() error {
 		},
 	}
 
-	return c.emitFunction("builtins", c.code)
+	return c.storeFunc("builtins", c.code)
 }
 
 // compileEntrypointDecls generates a function that lists the entrypoints available
@@ -436,18 +527,20 @@ func (c *Compiler) compileEntrypointDecls() error {
 		},
 	}
 
-	return c.emitFunction("entrypoints", c.code)
+	return c.storeFunc("entrypoints", c.code)
 }
 
 // compileFuncs compiles the policy functions and emits them into the module.
 func (c *Compiler) compileFuncs() error {
-
 	for _, fn := range c.policy.Funcs.Funcs {
 		if err := c.compileFunc(fn); err != nil {
-			return errors.Wrapf(err, "func %v", fn.Name)
+			return fmt.Errorf("func %v: %w", fn.Name, err)
 		}
 	}
 
+	if err := c.emitMapping(); err != nil {
+		return fmt.Errorf("writing mapping: %w", err)
+	}
 	return nil
 }
 
@@ -504,7 +597,7 @@ func (c *Compiler) compilePlans() error {
 
 			instrs, err := c.compileBlock(block)
 			if err != nil {
-				return errors.Wrapf(err, "plan %d block %d", i, j)
+				return fmt.Errorf("plan %d block %d: %w", i, j, err)
 			}
 
 			entrypoint.Instrs = append(entrypoint.Instrs, instruction.Block{
@@ -523,7 +616,6 @@ func (c *Compiler) compilePlans() error {
 	main.Instrs = append(main.Instrs,
 		instruction.I32Const{Value: c.builtinStringAddr(errIllegalEntrypoint)},
 		instruction.Call{Index: c.function(opaAbort)},
-		instruction.Unreachable{},
 	)
 
 	c.appendInstr(main)
@@ -536,10 +628,16 @@ func (c *Compiler) compilePlans() error {
 		},
 	}
 
-	return c.emitFunction("eval", c.code)
+	return c.storeFunc("eval", c.code)
 }
 
 func (c *Compiler) compileFunc(fn *ir.Func) error {
+	idx, ok := c.funcs[fn.Name]
+	if !ok {
+		return fmt.Errorf("unknown function: %v", fn.Name)
+	}
+
+	memoize := len(fn.Params) == 2
 
 	if len(fn.Params) == 0 {
 		return fmt.Errorf("illegal function: zero args")
@@ -556,15 +654,37 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 
 	c.code = &module.CodeEntry{}
 
+	// memoization: get
+	if memoize {
+		c.appendInstr(instruction.Block{Instrs: []instruction.Instruction{
+			instruction.I32Const{Value: int32(idx)},
+			instruction.Call{Index: c.function(opaMemoizeGet)},
+			instruction.TeeLocal{Index: c.local(fn.Return)},
+			instruction.I32Eqz{},
+			instruction.BrIf{Index: 0},
+			instruction.GetLocal{Index: c.local(fn.Return)},
+			instruction.Return{},
+		}})
+	}
+
 	for i := range fn.Blocks {
 		instrs, err := c.compileBlock(fn.Blocks[i])
 		if err != nil {
 			return errors.Wrapf(err, "block %d", i)
 		}
-		if i < len(fn.Blocks)-1 {
+		if i < len(fn.Blocks)-1 { // not the last block: wrap in `block` instr
 			c.appendInstr(instruction.Block{Instrs: instrs})
-		} else {
-			c.appendInstrs(instrs)
+		} else { // last block, no wrapping
+			// memoization: insert, spliced into the instructions right
+			// before the return:
+			for _, instr := range instrs {
+				if _, ok := instr.(instruction.Return); ok && memoize {
+					c.appendInstr(instruction.I32Const{Value: int32(idx)})
+					c.appendInstr(instruction.GetLocal{Index: c.local(fn.Return)})
+					c.appendInstr(instruction.Call{Index: c.function(opaMemoizeInsert)})
+				}
+				c.appendInstr(instr)
+			}
 		}
 	}
 
@@ -581,7 +701,88 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 		params = append(params, types.I32)
 	}
 
-	return c.emitFunction(fn.Name, c.code)
+	return c.storeFunc(fn.Name, c.code)
+}
+
+func mapFunc(mapping ast.Object, fn *ir.Func, index int) (ast.Object, bool) {
+	curr := ast.NewObject()
+	curr.Insert(ast.StringTerm(fn.Path[len(fn.Path)-1]), ast.IntNumberTerm(index))
+	for i := len(fn.Path) - 2; i >= 0; i-- {
+		o := ast.NewObject()
+		o.Insert(ast.StringTerm(fn.Path[i]), ast.NewTerm(curr))
+		curr = o
+	}
+	return mapping.Merge(curr)
+}
+
+func (c *Compiler) emitMapping() error {
+	var indices []uint32
+	var ok bool
+	mapping := ast.NewObject()
+
+	// element segment offset for our mapped function entries
+	elemOffset, err := getLowestFreeElementSegmentOffset(c.module)
+	if err != nil {
+		return err
+	}
+
+	for i, fn := range c.policy.Funcs.Funcs {
+		indices = append(indices, c.funcs[fn.Name])
+		mapping, ok = mapFunc(mapping, fn, i+int(elemOffset))
+		if !ok {
+			return fmt.Errorf("mapping function %v failed", fn.Name)
+		}
+	}
+
+	// emit data segment for JSON blob encoding mapping
+	jsonMap := []byte(mapping.String())
+	dataOffset, err := getLowestFreeDataSegmentOffset(c.module)
+	if err != nil {
+		return err
+	}
+	c.module.Data.Segments = append(c.module.Data.Segments, module.DataSegment{
+		Index: 0,
+		Offset: module.Expr{
+			Instrs: []instruction.Instruction{
+				instruction.I32Const{
+					Value: dataOffset,
+				},
+			},
+		},
+		Init: jsonMap,
+	})
+
+	// write element segments for table entries
+	c.module.Element.Segments = append(c.module.Element.Segments, module.ElementSegment{
+		Index: 0,
+		Offset: module.Expr{
+			Instrs: []instruction.Instruction{
+				instruction.I32Const{
+					Value: elemOffset,
+				},
+			},
+		},
+		Indices: indices,
+	})
+
+	// adjust table limits
+	min := c.module.Table.Tables[0].Lim.Min + uint32(len(indices))
+	max := *c.module.Table.Tables[0].Lim.Max + uint32(len(indices))
+	c.module.Table.Tables[0].Lim.Min = min
+	c.module.Table.Tables[0].Lim.Max = &max
+
+	// create function that calls `void opa_mapping_initialize(const char *s, const int l)`
+	// with s being the offset of the data segment just written, and l its length
+	fName := "_initialize"
+	c.code = &module.CodeEntry{}
+	c.appendInstr(instruction.Call{Index: c.function(opaMPDInit)})
+	c.appendInstr(instruction.I32Const{Value: dataOffset})
+	c.appendInstr(instruction.I32Const{Value: int32(len(jsonMap))})
+	c.appendInstr(instruction.Call{Index: c.function(opaMappingInit)})
+	c.emitFunctionDecl(fName, module.FunctionType{}, false)
+	idx := c.function(fName)
+	c.module.Start.FuncIndex = &idx
+	return c.storeFunc(fName, c.code)
 }
 
 func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, error) {
@@ -609,6 +810,10 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 			instrs = append(instrs, instruction.Br{Index: stmt.Index})
 		case *ir.CallStmt:
 			if err := c.compileCallStmt(stmt, &instrs); err != nil {
+				return nil, err
+			}
+		case *ir.CallDynamicStmt:
+			if err := c.compileCallDynamicStmt(stmt, &instrs); err != nil {
 				return nil, err
 			}
 		case *ir.WithStmt:
@@ -1046,6 +1251,57 @@ func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.Local, loc
 	return instrs
 }
 
+func (c *Compiler) compileCallDynamicStmt(stmt *ir.CallDynamicStmt, result *[]instruction.Instruction) error {
+	block := instruction.Block{}
+	larray := c.genLocal()
+	lidx := c.genLocal()
+
+	// init array:
+	block.Instrs = append(block.Instrs,
+		instruction.I32Const{Value: int32(len(stmt.Path))},
+		instruction.Call{Index: c.function(opaArrayWithCap)},
+		instruction.SetLocal{Index: larray},
+	)
+
+	// append to it:
+	for _, lv := range stmt.Path {
+		block.Instrs = append(block.Instrs,
+			instruction.GetLocal{Index: larray},
+			instruction.GetLocal{Index: c.local(lv)},
+			instruction.Call{Index: c.function(opaArrayAppend)},
+		)
+	}
+
+	// prep stack for later call_indirect
+	for _, arg := range stmt.Args {
+		block.Instrs = append(block.Instrs, instruction.GetLocal{Index: c.local(arg)})
+	}
+
+	tpe := module.FunctionType{
+		Params:  []types.ValueType{types.I32, types.I32}, // data, input
+		Results: []types.ValueType{types.I32},
+	}
+	typeIndex := c.emitFunctionType(tpe)
+
+	block.Instrs = append(block.Instrs,
+		// lookup elem idx via larray path
+		instruction.GetLocal{Index: larray},
+		instruction.Call{Index: c.function(opaMappingLookup)}, // [arg0 arg1 larray] -> [arg0 arg1 tbl_idx]
+		instruction.TeeLocal{Index: lidx},
+		instruction.I32Eqz{}, // mapping not found
+		instruction.BrIf{Index: 1},
+
+		instruction.GetLocal{Index: lidx},
+		instruction.CallIndirect{Index: typeIndex}, // [arg0 arg1 tbl_idx] -> [res]
+		instruction.TeeLocal{Index: c.local(stmt.Result)},
+		instruction.I32Eqz{},
+		instruction.BrIf{Index: 1},
+	)
+
+	*result = append(*result, block)
+	return nil
+}
+
 func (c *Compiler) compileCallStmt(stmt *ir.CallStmt, result *[]instruction.Instruction) error {
 
 	fn := stmt.Func
@@ -1069,22 +1325,7 @@ func (c *Compiler) compileCallStmt(stmt *ir.CallStmt, result *[]instruction.Inst
 
 func (c *Compiler) compileInternalCall(stmt *ir.CallStmt, index uint32, result *[]instruction.Instruction) error {
 
-	var memoized bool
-
-	if _, ok := c.planfuncs[stmt.Func]; ok && len(stmt.Args) == 2 {
-		memoized = true
-	}
-
 	block := instruction.Block{}
-
-	// Check if call can be memoized.
-	if memoized {
-		block.Instrs = append(block.Instrs,
-			instruction.I32Const{Value: int32(index)},
-			instruction.Call{Index: c.function(opaMemoizeGet)},
-			instruction.TeeLocal{Index: c.local(stmt.Result)},
-			instruction.BrIf{Index: 0})
-	}
 
 	// Prepare function args and call.
 	for _, arg := range stmt.Args {
@@ -1096,14 +1337,6 @@ func (c *Compiler) compileInternalCall(stmt *ir.CallStmt, index uint32, result *
 		instruction.TeeLocal{Index: c.local(stmt.Result)},
 		instruction.I32Eqz{},
 		instruction.BrIf{Index: 1})
-
-	// Memoize the result.
-	if memoized {
-		block.Instrs = append(block.Instrs,
-			instruction.I32Const{Value: int32(index)},
-			instruction.GetLocal{Index: c.local(stmt.Result)},
-			instruction.Call{Index: c.function(opaMemoizeInsert)})
-	}
 
 	*result = append(*result, block)
 
@@ -1183,6 +1416,17 @@ func (c *Compiler) emitFunction(name string, entry *module.CodeEntry) error {
 	}
 	index := c.function(name) - uint32(c.functionImportCount())
 	c.module.Code.Segments[index].Code = buf.Bytes()
+	return nil
+}
+
+// emitFuncs writes the compiled (and optimized) functions' code into the
+// module
+func (c *Compiler) emitFuncs() error {
+	for _, fn := range c.funcsCode {
+		if err := c.emitFunction(fn.name, fn.code); err != nil {
+			return fmt.Errorf("write function %s: %w", fn.name, err)
+		}
+	}
 	return nil
 }
 
@@ -1270,10 +1514,31 @@ func getLowestFreeDataSegmentOffset(m *module.Module) (int32, error) {
 	return offset, nil
 }
 
+func getLowestFreeElementSegmentOffset(m *module.Module) (int32, error) {
+	var offset int32
+
+	for _, seg := range m.Element.Segments {
+		if len(seg.Offset.Instrs) != 1 {
+			return 0, errors.New("bad data segment offset instructions")
+		}
+
+		instr, ok := seg.Offset.Instrs[0].(instruction.I32Const)
+		if !ok {
+			return 0, errors.New("bad data segment offset expr")
+		}
+
+		addr := instr.Value + int32(len(seg.Indices))
+		if addr > offset {
+			offset = addr
+		}
+	}
+
+	return offset, nil
+}
+
 // runtimeErrorAbort uses the passed source location to build the
 // arguments for a call to opa_runtime_error(file, row, col, msg).
-// It returns the instructions that make up the function call with
-// arguments, followed by Unreachable.
+// It returns the instructions that make up the function call.
 func (c *Compiler) runtimeErrorAbort(loc ir.Location, errType int) []instruction.Instruction {
 	index, row, col := loc.Index, loc.Row, loc.Col
 	return []instruction.Instruction{
@@ -1282,6 +1547,15 @@ func (c *Compiler) runtimeErrorAbort(loc ir.Location, errType int) []instruction
 		instruction.I32Const{Value: int32(col)},
 		instruction.I32Const{Value: c.builtinStringAddr(errType)},
 		instruction.Call{Index: c.function(opaRuntimeError)},
-		instruction.Unreachable{},
 	}
+}
+
+func (c *Compiler) storeFunc(name string, code *module.CodeEntry) error {
+	for _, fn := range c.funcsCode {
+		if fn.name == name {
+			return fmt.Errorf("duplicate function entry %s", name)
+		}
+	}
+	c.funcsCode = append(c.funcsCode, funcCode{name: name, code: code})
+	return nil
 }

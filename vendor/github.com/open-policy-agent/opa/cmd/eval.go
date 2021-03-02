@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/open-policy-agent/opa/compile"
+
 	"github.com/spf13/cobra"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -57,6 +59,8 @@ type evalCommandParams struct {
 	fail                bool
 	failDefined         bool
 	bundlePaths         repeatedStringFlag
+	schemaPath          string
+	target              *util.EnumFlag
 }
 
 func newEvalCommandParams() evalCommandParams {
@@ -69,6 +73,7 @@ func newEvalCommandParams() evalCommandParams {
 			evalSourceOutput,
 		}),
 		explain: newExplainFlag([]string{explainModeOff, explainModeFull, explainModeNotes, explainModeFails}),
+		target:  util.NewEnumFlag(compile.TargetRego, []string{compile.TargetRego, compile.TargetWasm}),
 	}
 }
 
@@ -196,6 +201,13 @@ Set the output format with the --format flag.
 	--format=values    : output line separated JSON arrays containing expression values
 	--format=bindings  : output line separated JSON objects containing variable bindings
 	--format=pretty    : output query results in a human-readable format
+
+Schema
+------
+
+The -s/--schema flag provides a single JSON Schema used to validate references to the input document.
+
+	$ opa eval --data policy.rego --input input.json --schema input-schema.json
 `,
 
 		PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -245,6 +257,8 @@ Set the output format with the --format flag.
 	addOutputFormat(evalCommand.Flags(), params.outputFormat)
 	addIgnoreFlag(evalCommand.Flags(), &params.ignore)
 	setExplainFlag(evalCommand.Flags(), params.explain)
+	addSchemaFlag(evalCommand.Flags(), &params.schemaPath)
+	addTargetFlag(evalCommand.Flags(), params.target)
 
 	RootCommand.AddCommand(evalCommand)
 }
@@ -394,6 +408,8 @@ func setupEval(args []string, params evalCommandParams) (*evalContext, error) {
 	// skip bundle verification
 	regoArgs = append(regoArgs, rego.SkipBundleVerification(true))
 
+	regoArgs = append(regoArgs, rego.Target(params.target.String()))
+
 	inputBytes, err := readInputBytes(params)
 	if err != nil {
 		return nil, err
@@ -410,11 +426,30 @@ func setupEval(args []string, params evalCommandParams) (*evalContext, error) {
 		regoArgs = append(regoArgs, rego.ParsedInput(inputValue))
 	}
 
+	schemaBytes, err := readSchemaBytes(params)
+	if err != nil {
+		return nil, err
+	}
+
+	if schemaBytes != nil {
+		var schema interface{}
+		err := util.Unmarshal(schemaBytes, &schema)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse schema: %s", err.Error())
+		}
+		schemaSet := &ast.SchemaSet{ByPath: map[string]interface{}{"input": schema}}
+		regoArgs = append(regoArgs, rego.Schemas(schemaSet))
+	}
+
 	var tracer *topdown.BufferTracer
 
 	if params.explain != nil && params.explain.String() != explainModeOff {
 		tracer = topdown.NewBufferTracer()
 		evalArgs = append(evalArgs, rego.EvalQueryTracer(tracer))
+
+		if params.target.String() == compile.TargetWasm {
+			fmt.Fprintf(os.Stderr, "warning: explain mode \"%v\" is not supported with wasm target\n", params.explain.String())
+		}
 	}
 
 	if params.disableIndexing {
@@ -495,6 +530,17 @@ func readInputBytes(params evalCommandParams) ([]byte, error) {
 		return ioutil.ReadAll(os.Stdin)
 	} else if params.inputPath != "" {
 		path, err := fileurl.Clean(params.inputPath)
+		if err != nil {
+			return nil, err
+		}
+		return ioutil.ReadFile(path)
+	}
+	return nil, nil
+}
+
+func readSchemaBytes(params evalCommandParams) ([]byte, error) {
+	if params.schemaPath != "" {
+		path, err := fileurl.Clean(params.schemaPath)
 		if err != nil {
 			return nil, err
 		}

@@ -8,10 +8,12 @@ package planner
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/ast/location"
+	"github.com/open-policy-agent/opa/internal/debug"
 	"github.com/open-policy-agent/opa/internal/ir"
 )
 
@@ -47,6 +49,19 @@ type Planner struct {
 	ltarget ir.Local                // target variable of last planned statement
 	lnext   ir.Local                // next variable to use
 	loc     *location.Location      // location currently "being planned"
+	debug   debug.Debug             // debug information produced during planning
+}
+
+// debugf prepends the planner location. We're passing callstack depth 2 because
+// it should still log the file location of p.debugf.
+func (p *Planner) debugf(format string, args ...interface{}) {
+	var msg string
+	if p.loc != nil {
+		msg = fmt.Sprintf("%s: "+format, append([]interface{}{p.loc}, args...)...)
+	} else {
+		msg = fmt.Sprintf(format, args...)
+	}
+	p.debug.Output(2, msg)
 }
 
 // New returns a new Planner object.
@@ -67,6 +82,7 @@ func New() *Planner {
 		}),
 		rules: newRuletrie(),
 		funcs: newFuncstack(),
+		debug: debug.Discard(),
 	}
 }
 
@@ -88,6 +104,14 @@ func (p *Planner) WithQueries(queries []QuerySet) *Planner {
 // WithModules sets the module set that contains query dependencies.
 func (p *Planner) WithModules(modules []*ast.Module) *Planner {
 	p.modules = modules
+	return p
+}
+
+// WithDebug sets where debug messages are written to.
+func (p *Planner) WithDebug(sink io.Writer) *Planner {
+	if sink != nil {
+		p.debug = debug.New(sink)
+	}
 	return p
 }
 
@@ -137,7 +161,13 @@ func (p *Planner) buildFunctrie() error {
 
 func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 
-	path := rules[0].Path().String()
+	pathRef := rules[0].Path()
+	path := pathRef.String()
+
+	var pathPieces []string
+	for i := 1; /* skip `data` */ i < len(pathRef); i++ {
+		pathPieces = append(pathPieces, string(pathRef[i].Value.(ast.String)))
+	}
 
 	if funcName, ok := p.funcs.Get(path); ok {
 		return funcName, nil
@@ -162,12 +192,13 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 
 	// Create function definition for rules.
 	fn := &ir.Func{
-		Name: fmt.Sprintf("g%d.%s", p.funcs.gen, path),
+		Name: fmt.Sprintf("g%d.%s", p.funcs.gen(), path),
 		Params: []ir.Local{
 			p.newLocal(), // input document
 			p.newLocal(), // data document
 		},
 		Return: p.newLocal(),
+		Path:   append([]string{fmt.Sprintf("g%d", p.funcs.gen())}, pathPieces...),
 	}
 
 	// Initialize parameters for functions.
@@ -578,11 +609,12 @@ func (p *Planner) planWith(e *ast.Expr, iter planiter) error {
 			restore[i] = [2]ir.Local{lorig, lsave}
 		}
 
-		// If any of the with statements targeted the data document we shadow
-		// the existing planned functions during expression planning. This
-		// causes the planner to re-plan any rules that may be required during
-		// planning of this expression (transitively).
-		if len(dataRefs) > 0 {
+		// If any of the `with` statements targeted the data document, overwriting
+		// parts of the ruletrie, we shadow the existing planned functions during
+		// expression planning. This causes the planner to re-plan any rules that
+		// may be required during planning of this expression (transitively).
+		shadowing := p.dataRefsShadowRuletrie(dataRefs)
+		if shadowing {
 			p.funcs.Push(map[string]string{})
 			for _, ref := range dataRefs {
 				p.rules.Push(ref)
@@ -590,7 +622,7 @@ func (p *Planner) planWith(e *ast.Expr, iter planiter) error {
 		}
 
 		err := p.planWithRec(e, paths, locals, 0, func() error {
-			if len(dataRefs) > 0 {
+			if shadowing {
 				p.funcs.Pop()
 				for i := len(dataRefs) - 1; i >= 0; i-- {
 					p.rules.Pop(dataRefs[i])
@@ -601,7 +633,7 @@ func (p *Planner) planWith(e *ast.Expr, iter planiter) error {
 
 				err := iter()
 
-				if len(dataRefs) > 0 {
+				if shadowing {
 					p.funcs.Push(map[string]string{})
 					for _, ref := range dataRefs {
 						p.rules.Push(ref)
@@ -613,7 +645,7 @@ func (p *Planner) planWith(e *ast.Expr, iter planiter) error {
 			return err
 		})
 
-		if len(dataRefs) > 0 {
+		if shadowing {
 			p.funcs.Pop()
 			for i := len(dataRefs) - 1; i >= 0; i-- {
 				p.rules.Pop(dataRefs[i])
@@ -677,6 +709,15 @@ func (p *Planner) planWithUndoRec(restore [][2]ir.Local, index int, iter planite
 	})
 
 	return nil
+}
+
+func (p *Planner) dataRefsShadowRuletrie(refs []ast.Ref) bool {
+	for _, ref := range refs {
+		if p.rules.Lookup(ref) != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Planner) planExprTerm(e *ast.Expr, iter planiter) error {
@@ -1471,7 +1512,7 @@ func (p *Planner) planRefRec(ref ast.Ref, index int, iter planiter) error {
 		})
 	}
 
-	return p.planScan(ref[index], func(lkey ir.Local) error {
+	return p.planScan(ref[index], func(ir.Local) error {
 		return p.planRefRec(ref, index+1, iter)
 	})
 }
@@ -1490,6 +1531,43 @@ func (p *Planner) planRefData(virtual *ruletrie, base *baseptr, ref ast.Ref, ind
 	// plan has to materialize the full extent of the referenced value.
 	if index >= len(ref) {
 		return p.planRefDataExtent(virtual, base, iter)
+	}
+
+	// On the first iteration, we check if this can be optimized using a
+	// CallDynamicStatement
+	// NOTE(sr): we do it on the first index because later on, the recursion
+	// on subtrees of virtual already lost parts of the path we've taken.
+	if index == 1 && virtual != nil {
+		rulesets, stmts, locals, index, optimize := p.optimizeLookup(virtual, ref)
+		if optimize {
+			// If there are no rulesets in a situation that otherwise would
+			// allow for a call_indirect optimization, then there's nothing
+			// to do for this ref, except scanning the base document.
+			if len(rulesets) == 0 {
+				return p.planRefData(nil, base, ref, 1, iter) // ignore index returned by optimizeLookup
+			}
+			// plan rules
+			for _, rules := range rulesets {
+				if _, err := p.planRules(rules); err != nil {
+					return err
+				}
+			}
+			// plan MakeStringStmts needed for ground ref[j]
+			for _, stmt := range stmts {
+				p.appendStmt(stmt)
+			}
+
+			p.ltarget = p.newLocal()
+			p.appendStmt(&ir.CallDynamicStmt{
+				Args: []ir.Local{
+					p.vars.GetOrEmpty(ast.InputRootDocument.Value.(ast.Var)),
+					p.vars.GetOrEmpty(ast.DefaultRootDocument.Value.(ast.Var)),
+				},
+				Path:   locals,
+				Result: p.ltarget,
+			})
+			return p.planRefRec(ref, index+1, iter)
+		}
 	}
 
 	// If the reference operand is ground then either continue to the next
@@ -1589,11 +1667,14 @@ func (p *Planner) planRefData(virtual *ruletrie, base *baseptr, ref ast.Ref, ind
 	}
 
 	p.ltarget = base.local
+	return p.planRefDataBaseScan(base.path, ref, index, lexclude, iter)
+}
 
-	// Perform a scan of the base documents starting from the location referred
-	// to by the data pointer. Use the set we built above to avoid revisiting
-	// sub trees.
-	return p.planRefRec(base.path, 0, func() error {
+// Perform a scan of the base documents starting from the location referred
+// to by the 'path' data pointer. Use the set (planned into 'lexclude') to
+// avoid revisiting sub trees.
+func (p *Planner) planRefDataBaseScan(path ast.Ref, ref ast.Ref, index int, lexclude *ir.Local, iter planiter) error {
+	return p.planRefRec(path, 0, func() error {
 		return p.planScan(ref[index], func(lkey ir.Local) error {
 			if lexclude != nil {
 				lignore := p.newLocal()
@@ -1940,4 +2021,153 @@ func rewrittenVar(vars map[ast.Var]ast.Var, k ast.Var) ast.Var {
 		return k
 	}
 	return rw
+}
+
+// optimizeLookup returns a set of rulesets and required statements planning
+// the locals (strings) needed with the used local variables, and the index
+// into ref's parth that is still to be planned; if the passed ref's vars
+// allow for optimization using CallDynamicStmt.
+//
+// It's possible iff
+// - all vars in ref have been seen
+// - all ground terms (strings) match some child key on their respective
+//   layer of the ruletrie
+// - there are no child trees left (only rulesets) if we're done checking
+//   ref
+//
+// The last condition is necessary because we don't deal with _which key a
+// var actually matched_ -- so we don't know which subtree to evaluate
+// with the results.
+func (p *Planner) optimizeLookup(t *ruletrie, ref ast.Ref) ([][]*ast.Rule, []ir.Stmt, []ir.Local, int, bool) {
+	dont := func() ([][]*ast.Rule, []ir.Stmt, []ir.Local, int, bool) {
+		return nil, nil, nil, 0, false
+	}
+	if t == nil {
+		p.debugf("no optimization of %s: trie is nil", ref)
+		return dont()
+	}
+
+	nodes := []*ruletrie{t}
+	opt := false
+	var index int
+
+	// ref[0] is data, ignore
+	for i := 1; i < len(ref); i++ {
+		index = i
+		r := ref[i]
+		var nextNodes []*ruletrie
+
+		switch r := r.Value.(type) {
+		case ast.Var:
+			// check if it's been "seen" before
+			_, ok := p.vars.Get(r)
+			if !ok {
+				p.debugf("no optimization of %s: ref[%d] is unseen var: %v", ref, i, r)
+				return dont()
+			}
+			opt = true
+			// take all children, they might match
+			for _, node := range nodes {
+				for _, child := range node.Children() {
+					if node := node.Get(child); node != nil {
+						nextNodes = append(nextNodes, node)
+					}
+				}
+			}
+		case ast.String:
+			// take matching children
+			for _, node := range nodes {
+				if node := node.Get(r); node != nil {
+					nextNodes = append(nextNodes, node)
+				}
+			}
+		default:
+			p.debugf("no optimization of %s: ref[%d] is type %T", ref, i, r) // TODO(sr): think more about this
+			return dont()
+		}
+
+		nodes = nextNodes
+
+		// if all nodes have 0 children, abort ref check and optimize
+		all := true
+		for _, node := range nodes {
+			all = all && len(node.Children()) == 0
+		}
+		if all {
+			p.debugf("ref %s: all nodes have 0 children, break", ref[0:index+1])
+			break
+		}
+	}
+
+	var res [][]*ast.Rule
+
+	// if there hasn't been any var, we're not making things better by
+	// introducing CallDynamicStmt
+	if !opt {
+		p.debugf("no optimization of %s: no vars seen before trie descend encountered no children", ref)
+		return dont()
+	}
+
+	for _, node := range nodes {
+		// we're done with ref, check if there's only ruleset leaves; collect rules
+		if index == len(ref)-1 {
+			if len(node.Children()) > 0 {
+				p.debugf("no optimization of %s: unbalanced ruletrie", ref)
+				return dont()
+			}
+		}
+		if rules := node.Rules(); len(rules) > 0 {
+			res = append(res, rules)
+		}
+	}
+	if len(res) == 0 {
+		p.debugf("ref %s: nothing to plan, no rule leaves", ref[0:index+1])
+		return nil, nil, nil, index, true
+	}
+
+	// If we've made it here, optimization is possible -- let's plan strings!
+	// NOTE(sr): this is a bit of a dirty side-effect; the code here assumes
+	// that the returned block and locals are going to be used. Technically,
+	// it might still be discarded, and we've planned a few strings we don't
+	// actually need.
+	var stmts []ir.Stmt
+	var locals []ir.Local
+
+	// plan generation
+	lvar := p.newLocal()
+	stmts = append(stmts, &ir.MakeStringStmt{
+		Index:  p.getStringConst(fmt.Sprintf("g%d", p.funcs.gen())),
+		Target: lvar,
+	})
+	locals = append(locals, lvar)
+
+	for i := 1; i <= index; i++ {
+		switch r := ref[i].Value.(type) {
+		case ast.Var:
+			lv, ok := p.vars.Get(r)
+			if !ok {
+				p.debugf("no optimization of %s: ref[%d] not a seen var: %v", ref, i, ref[i])
+				return dont()
+			}
+			locals = append(locals, lv)
+		case ast.String:
+			// plan string
+			lvar := p.newLocal()
+			stmts = append(stmts, &ir.MakeStringStmt{
+				Index:  p.getStringConst(string(r)),
+				Target: lvar,
+			})
+			locals = append(locals, lvar)
+		}
+	}
+
+	return res, stmts, locals, index, true
+}
+
+func (p *Planner) seenVar(ref *ast.Term) (bool, bool) {
+	if v, ok := ref.Value.(ast.Var); ok {
+		_, ok := p.vars.Get(v)
+		return true, ok
+	}
+	return false, false
 }
