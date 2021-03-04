@@ -8,7 +8,9 @@ VERSION_ISTIO := $(VERSION_OPA)-istio$(shell ./build/get-plugin-rev.sh)
 
 PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 
-GO := go
+# GOPROXY=off: Don't pull anything off the network
+# see https://github.com/thepudds/go-module-knobs/blob/master/README.md
+GO := GOPROXY=off go
 GOVERSION := $(shell cat ./.go-version)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
@@ -37,9 +39,6 @@ LDFLAGS := "-X github.com/open-policy-agent/opa/version.Version=$(VERSION) \
 	-X github.com/open-policy-agent/opa/version.Vcs=$(BUILD_COMMIT) \
 	-X github.com/open-policy-agent/opa/version.Timestamp=$(BUILD_TIMESTAMP) \
 	-X github.com/open-policy-agent/opa/version.Hostname=$(BUILD_HOSTNAME)"
-
-GO15VENDOREXPERIMENT := 1
-export GO15VENDOREXPERIMENT
 
 .PHONY: all build build-darwin build-linux build-windows clean check check-fmt check-vet check-lint \
     deploy-ci docker-login generate image image-quick push push-latest tag-latest \
