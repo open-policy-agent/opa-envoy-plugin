@@ -11,7 +11,7 @@ PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 # GOPROXY=off: Don't pull anything off the network
 # see https://github.com/thepudds/go-module-knobs/blob/master/README.md
 GO := GOPROXY=off go
-GOVERSION := $(shell cat ./.go-version)
+GOVERSION := $(shell ./build/go-version.sh)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
