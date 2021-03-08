@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/open-policy-agent/opa/compile"
+
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown/lineage"
 
@@ -47,12 +49,14 @@ type testCommandParams struct {
 	benchMem     bool
 	runRegex     string
 	count        int
+	target       *util.EnumFlag
 }
 
 func newTestCommandParams() *testCommandParams {
 	return &testCommandParams{
 		outputFormat: util.NewEnumFlag(testPrettyOutput, []string{testPrettyOutput, testJSONOutput, benchmarkGoBenchOutput}),
 		explain:      newExplainFlag([]string{explainModeFails, explainModeFull, explainModeNotes}),
+		target:       util.NewEnumFlag(compile.TargetRego, []string{compile.TargetRego, compile.TargetWasm}),
 	}
 }
 
@@ -70,6 +74,9 @@ If the '--bundle' option is specified the paths will be treated as policy bundle
 and loaded following standard bundle conventions. The path can be a compressed archive
 file or a directory which will be treated as a bundle. Without the '--bundle' flag OPA
 will recursively load ALL *.rego, *.json, and *.yaml files for evaluating the test cases.
+
+Test cases under development may be prefixed "todo_" in order to skip their execution,
+while still getting marked as skipped in the test results.
 
 Example policy (example/authz.rego):
 
@@ -104,6 +111,10 @@ Example test (example/authz_test.rego):
 
 	test_get_another_user_denied {
 		not allow with input as {"path": ["users", "bob"], "method": "GET", "user_id": "alice"}
+	}
+
+	todo_test_user_allowed_http_client_data {
+		false # Remember to test this later!
 	}
 
 Example test run:
@@ -210,7 +221,8 @@ func opaTest(args []string) int {
 		SetModules(modules).
 		SetBundles(bundles).
 		SetTimeout(testParams.timeout).
-		Filter(testParams.runRegex)
+		Filter(testParams.runRegex).
+		Target(testParams.target.String())
 
 	var reporter tester.Reporter
 
@@ -330,7 +342,7 @@ func init() {
 	testCommand.Flags().BoolVarP(&testParams.verbose, "verbose", "v", false, "set verbose reporting mode")
 	testCommand.Flags().BoolVarP(&testParams.failureLine, "show-failure-line", "l", false, "show test failure line")
 	testCommand.Flags().MarkDeprecated("show-failure-line", "use -v instead")
-	testCommand.Flags().DurationVarP(&testParams.timeout, "timeout", "t", time.Second*5, "set test timeout")
+	testCommand.Flags().DurationVarP(&testParams.timeout, "timeout", "", time.Second*5, "set test timeout")
 	testCommand.Flags().VarP(testParams.outputFormat, "format", "f", "set output format")
 	testCommand.Flags().BoolVarP(&testParams.coverage, "coverage", "c", false, "report coverage (overrides debug tracing)")
 	testCommand.Flags().Float64VarP(&testParams.threshold, "threshold", "", 0, "set coverage threshold and exit with non-zero status if coverage is less than threshold %")
@@ -342,5 +354,6 @@ func init() {
 	addMaxErrorsFlag(testCommand.Flags(), &testParams.errLimit)
 	addIgnoreFlag(testCommand.Flags(), &testParams.ignore)
 	setExplainFlag(testCommand.Flags(), testParams.explain)
+	addTargetFlag(testCommand.Flags(), testParams.target)
 	RootCommand.AddCommand(testCommand)
 }
