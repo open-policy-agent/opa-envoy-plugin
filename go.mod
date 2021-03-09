@@ -4,11 +4,12 @@ go 1.15
 
 require (
 	github.com/envoyproxy/go-control-plane v0.9.7
-	github.com/open-policy-agent/opa v0.26.0
+	github.com/open-policy-agent/opa v0.27.0
 	github.com/peterh/liner v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v0.0.5 // indirect
+	github.com/wasmerio/go-ext-wasm v0.3.1 // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b
 	golang.org/x/net v0.0.0-20201027133719-8eef5233e2a1 // indirect
 	golang.org/x/sys v0.0.0-20201028094953-708e7fb298ac // indirect

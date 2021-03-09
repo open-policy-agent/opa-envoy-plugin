@@ -42,7 +42,7 @@ type Result struct {
 func New() *OPA {
 	opa := &OPA{
 		memoryMinPages: 16,
-		memoryMaxPages: 0,
+		memoryMaxPages: 0x10000, // 4GB
 		poolSize:       uint32(runtime.GOMAXPROCS(0)),
 		logError:       func(error) {},
 	}
@@ -182,7 +182,7 @@ func (o *OPA) Eval(ctx context.Context, opts EvalOpts) (*Result, error) {
 		return nil, fmt.Errorf("%v: %w", err, errors.ErrInternal)
 	}
 
-	return &Result{result}, nil
+	return &Result{Result: result}, nil
 }
 
 // Close waits until all the pending evaluations complete and then

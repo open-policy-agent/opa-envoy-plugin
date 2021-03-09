@@ -130,6 +130,14 @@ func addUnknownsFlag(fs *pflag.FlagSet, unknowns *[]string, value []string) {
 	fs.StringArrayVarP(unknowns, "unknowns", "u", value, "set paths to treat as unknown during partial evaluation")
 }
 
+func addSchemaFlag(fs *pflag.FlagSet, schemaPath *string) {
+	fs.StringVarP(schemaPath, "schema", "s", "", "set schema file path")
+}
+
+func addTargetFlag(fs *pflag.FlagSet, target *util.EnumFlag) {
+	fs.VarP(target, "target", "t", "set the runtime to exercise")
+}
+
 const (
 	explainModeOff   = "off"
 	explainModeFull  = "full"
