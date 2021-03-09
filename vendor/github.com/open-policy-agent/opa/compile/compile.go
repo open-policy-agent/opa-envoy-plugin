@@ -14,16 +14,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/open-policy-agent/opa/internal/wasm/encoding"
-
 	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/internal/compiler/wasm"
+	"github.com/open-policy-agent/opa/internal/debug"
 	"github.com/open-policy-agent/opa/internal/planner"
 	"github.com/open-policy-agent/opa/internal/ref"
 	initload "github.com/open-policy-agent/opa/internal/runtime/init"
+	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
@@ -44,8 +44,8 @@ const (
 const wasmResultVar = ast.Var("result")
 
 var validTargets = map[string]struct{}{
-	TargetRego: struct{}{},
-	TargetWasm: struct{}{},
+	TargetRego: {},
+	TargetWasm: {},
 }
 
 // Compiler implements bundle compilation and linking.
@@ -62,30 +62,10 @@ type Compiler struct {
 	output            *io.Writer                 // output stream to write bundle to
 	entrypointrefs    []*ast.Term                // validated entrypoints computed from default decision or manually supplied entrypoints
 	compiler          *ast.Compiler              // rego ast compiler used for semantic checks and rewriting
-	debug             *debugEvents               // debug information produced during build
+	debug             debug.Debug                // optionally outputs debug information produced during build
 	bvc               *bundle.VerificationConfig // represents the key configuration used to verify a signed bundle
 	bsc               *bundle.SigningConfig      // represents the key configuration used to generate a signed bundle
 	keyID             string                     // represents the name of the default key used to verify a signed bundle
-}
-
-type debugEvents struct {
-	debug []Debug
-}
-
-func (d *debugEvents) Add(info Debug) {
-	if d != nil {
-		d.debug = append(d.debug, info)
-	}
-}
-
-// Debug contains debugging information produced by the build about optimizations and other operations.
-type Debug struct {
-	Location *ast.Location
-	Message  string
-}
-
-func (d Debug) String() string {
-	return fmt.Sprintf("%v: %v", d.Location, d.Message)
 }
 
 // New returns a new compiler instance that can be invoked.
@@ -94,13 +74,8 @@ func New() *Compiler {
 		asBundle:          false,
 		optimizationLevel: 0,
 		target:            TargetRego,
-		debug:             &debugEvents{},
+		debug:             debug.Discard(),
 	}
-}
-
-// Debug returns a list of debug events produced by the compiler.
-func (c *Compiler) Debug() []Debug {
-	return c.debug.debug
 }
 
 // WithRevision sets the revision to include in the output bundle manifest.
@@ -140,6 +115,14 @@ func (c *Compiler) WithTarget(t string) *Compiler {
 // WithOutput sets the output stream to write the bundle to.
 func (c *Compiler) WithOutput(w io.Writer) *Compiler {
 	c.output = &w
+	return c
+}
+
+// WithDebug sets the output stream to write debug info to.
+func (c *Compiler) WithDebug(sink io.Writer) *Compiler {
+	if sink != nil {
+		c.debug = debug.New(sink)
+	}
 	return c
 }
 
@@ -339,13 +322,13 @@ func (c *Compiler) optimize(ctx context.Context) error {
 
 	if c.optimizationLevel <= 0 {
 		var err error
-		c.compiler, err = compile(c.capabilities, c.bundle)
+		c.compiler, err = compile(c.capabilities, c.bundle, c.debug)
 		return err
 	}
 
 	o := newOptimizer(c.capabilities, c.bundle).
 		WithEntrypoints(c.entrypointrefs).
-		WithDebug(c.debug).
+		WithDebug(c.debug.Writer()).
 		WithShallowInlining(c.optimizationLevel <= 1)
 
 	err := o.Do(ctx)
@@ -364,7 +347,7 @@ func (c *Compiler) compileWasm(ctx context.Context) error {
 	// AST compiler will not be set because the default target does not require it.
 	if c.compiler == nil {
 		var err error
-		c.compiler, err = compile(c.capabilities, c.bundle)
+		c.compiler, err = compile(c.capabilities, c.bundle, c.debug)
 		if err != nil {
 			return err
 		}
@@ -408,7 +391,6 @@ func (c *Compiler) compileWasm(ctx context.Context) error {
 		qc := c.compiler.QueryCompiler()
 		query := ast.NewBody(ast.Equality.Expr(resultSym, c.entrypointrefs[i]))
 		compiled, err := qc.Compile(query)
-
 		if err != nil {
 			return err
 		}
@@ -431,25 +413,40 @@ func (c *Compiler) compileWasm(ctx context.Context) error {
 		builtins[bi.Name] = bi
 	}
 
+	compiler := wasm.New()
+	found := false
+	have := compiler.ABIVersion()
+	for _, v := range c.capabilities.WasmABIVersions {
+		if v.Version == have.Version && v.Minor <= have.Minor {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("compiler ABI version not in capabilities (have %v, want %d)",
+			c.capabilities.WasmABIVersions,
+			compiler.ABIVersion(),
+		)
+	}
+
 	// Plan the query sets.
-	policy, err := planner.New().
+	p := planner.New().
 		WithQueries(queries).
 		WithModules(modules).
 		WithBuiltinDecls(builtins).
-		Plan()
-
+		WithDebug(c.debug.Writer())
+	policy, err := p.Plan()
 	if err != nil {
 		return err
 	}
 
 	// Compile the policy into a wasm binary.
-	m, err := wasm.New().WithPolicy(policy).Compile()
+	m, err := compiler.WithPolicy(policy).WithDebug(c.debug.Writer()).Compile()
 	if err != nil {
 		return err
 	}
 
 	var buf bytes.Buffer
-
 	if err := encoding.WriteModule(&buf, m); err != nil {
 		return err
 	}
@@ -554,7 +551,7 @@ type optimizer struct {
 	resultsymprefix string
 	outputprefix    string
 	shallow         bool
-	debug           *debugEvents
+	debug           debug.Debug
 }
 
 func newOptimizer(c *ast.Capabilities, b *bundle.Bundle) *optimizer {
@@ -564,11 +561,14 @@ func newOptimizer(c *ast.Capabilities, b *bundle.Bundle) *optimizer {
 		nsprefix:        "partial",
 		resultsymprefix: ast.WildcardPrefix,
 		outputprefix:    "optimized",
+		debug:           debug.Discard(),
 	}
 }
 
-func (o *optimizer) WithDebug(debug *debugEvents) *optimizer {
-	o.debug = debug
+func (o *optimizer) WithDebug(sink io.Writer) *optimizer {
+	if sink != nil {
+		o.debug = debug.New(sink)
+	}
 	return o
 }
 
@@ -611,7 +611,7 @@ func (o *optimizer) Do(ctx context.Context) error {
 	for i, e := range o.entrypoints {
 
 		var err error
-		o.compiler, err = compile(o.capabilities, o.bundle)
+		o.compiler, err = compile(o.capabilities, o.bundle, o.debug)
 		if err != nil {
 			return err
 		}
@@ -707,10 +707,7 @@ func (o *optimizer) findRequiredDocuments(ref *ast.Term) []string {
 	sort.Strings(result)
 
 	for _, k := range result {
-		o.debug.Add(Debug{
-			Location: keep[k],
-			Message:  fmt.Sprintf("disables inlining of %v", k),
-		})
+		o.debug.Printf("%s: disables inlining of %v", keep[k], k)
 	}
 
 	return result
@@ -732,10 +729,7 @@ func (o *optimizer) findUnknowns() []*ast.Term {
 				return true
 			}
 			if !refs.ContainsPrefix(prefix) {
-				o.debug.Add(Debug{
-					Location: x[0].Location,
-					Message:  fmt.Sprintf("marking %v as unknown", prefix),
-				})
+				o.debug.Printf("%s: marking %v as unknown", x[0].Location, prefix)
 				unknowns.AddPrefix(prefix)
 			}
 			return false
@@ -861,7 +855,7 @@ func (o *optimizer) getSupportModuleFilename(used map[string]int, module *ast.Mo
 
 var safePathPattern = regexp.MustCompile(`^[\w-_/]+$`)
 
-func compile(c *ast.Capabilities, b *bundle.Bundle) (*ast.Compiler, error) {
+func compile(c *ast.Capabilities, b *bundle.Bundle, dbg debug.Debug) (*ast.Compiler, error) {
 
 	modules := map[string]*ast.Module{}
 
@@ -873,7 +867,7 @@ func compile(c *ast.Capabilities, b *bundle.Bundle) (*ast.Compiler, error) {
 		modules[mf.URL] = mf.Parsed
 	}
 
-	compiler := ast.NewCompiler().WithCapabilities(c)
+	compiler := ast.NewCompiler().WithCapabilities(c).WithDebug(dbg.Writer())
 	compiler.Compile(modules)
 
 	if compiler.Failed() {

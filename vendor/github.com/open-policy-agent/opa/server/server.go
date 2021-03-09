@@ -1056,7 +1056,7 @@ func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
 	includeInstrumentation := getBoolParam(r.URL, types.ParamInstrumentV1, true)
 
 	m := metrics.New()
-
+	m.Timer(metrics.ServerHandler).Start()
 	m.Timer(metrics.RegoQueryParse).Start()
 
 	request, reqErr := readInputCompilePostV1(r.Body)
@@ -1105,6 +1105,8 @@ func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	m.Timer(metrics.ServerHandler).Stop()
 
 	result := types.CompileResponseV1{}
 
@@ -1601,7 +1603,13 @@ func (s *Server) v1PoliciesDelete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	pretty := getBoolParam(r.URL, types.ParamPrettyV1, true)
 	includeMetrics := getBoolParam(r.URL, types.ParamPrettyV1, true)
-	id := vars["path"]
+
+	id, err := url.PathUnescape(vars["path"])
+	if err != nil {
+		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
+		return
+	}
+
 	m := metrics.New()
 
 	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
@@ -1658,7 +1666,13 @@ func (s *Server) v1PoliciesDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) v1PoliciesGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
-	path := vars["path"]
+
+	path, err := url.PathUnescape(vars["path"])
+	if err != nil {
+		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
+		return
+	}
+
 	pretty := getBoolParam(r.URL, types.ParamPrettyV1, true)
 
 	txn, err := s.store.NewTransaction(ctx)
@@ -1735,7 +1749,13 @@ func (s *Server) v1PoliciesList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
-	path := vars["path"]
+
+	path, err := url.PathUnescape(vars["path"])
+	if err != nil {
+		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
+		return
+	}
+
 	includeMetrics := getBoolParam(r.URL, types.ParamMetricsV1, true)
 	pretty := getBoolParam(r.URL, types.ParamPrettyV1, true)
 	m := metrics.New()
