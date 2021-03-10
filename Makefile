@@ -15,6 +15,7 @@ GOVERSION := $(shell ./build/go-version.sh)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
+GOFLAGS := -tags=opa_wasm
 
 BIN := opa_envoy_$(GOOS)_$(GOARCH)
 
@@ -59,16 +60,16 @@ generate:
 	$(GO) generate ./...
 
 build: generate
-	$(GO) build -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
+	$(GO) build $(GOFLAGS) -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
 
 build-darwin:
-	@$(MAKE) build GOOS=darwin
+	@$(MAKE) build GOOS=darwin CGO_ENABLED=0 WASM_ENABLED=0
 
 build-linux:
-	@$(MAKE) build GOOS=linux
+	@$(MAKE) build GOOS=linux CGO_ENABLED=0 WASM_ENABLED=0
 
 build-windows:
-	@$(MAKE) build GOOS=windows
+	@$(MAKE) build GOOS=windows CGO_ENABLED=0 WASM_ENABLED=0
 
 image:
 	@$(MAKE) build-linux
@@ -134,6 +135,22 @@ generatepb:
 	  --include_imports \
 	  test/files/example/Example.proto \
 	  test/files/book/Book.proto
+
+CI_GOLANG_DOCKER_MAKE := docker run \
+        $(DOCKER_FLAGS) \
+        -u $(shell id -u):$(shell id -g) \
+        -v $(PWD):/src \
+        -w /src \
+        -e GOCACHE=/src/.go/cache \
+        -e CGO_ENABLED=1 \
+        -e WASM_ENABLED=1 \
+        -e TELEMETRY_URL=$(TELEMETRY_URL) \
+        golang:$(GOVERSION) \
+        make
+
+.PHONY: ci-go-%
+ci-go-%:
+	$(CI_GOLANG_DOCKER_MAKE) "$*"
 
 .PHONY: release
 release:
