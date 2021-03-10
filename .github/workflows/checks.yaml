@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Build Golang
-        run: make build
+        run: make ci-go-build
         timeout-minutes: 15
 
   go-test:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Unit Test Golang
-        run: make test
+        run: make ci-go-test
         timeout-minutes: 15
 
   go-lint:
@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Golang Style and Lint Check
-        run: make check
+        run: make ci-go-check
         timeout-minutes: 15
 
   deploy:
@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Build docker image
-        run: make image tag-latest
+        run: make ci-go-build image-quick tag-latest
 
       - name: Setup kind/istio
         run: |
@@ -99,7 +99,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Build docker image
-        run: make image tag-latest
+        run: make ci-go-build image-quick tag-latest
 
       - name: Build testsrv docker image
         run: make testsrv-image
