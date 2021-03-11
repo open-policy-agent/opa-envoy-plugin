@@ -71,13 +71,13 @@ build: generate
 	$(GO) build $(GO_TAGS) -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
 
 build-darwin:
-	@$(MAKE) build GOOS=darwin CGO_ENABLED=0 WASM_ENABLED=0
+	@$(MAKE) build GOOS=darwin
 
 build-linux:
-	@$(MAKE) build GOOS=linux CGO_ENABLED=0 WASM_ENABLED=0
+	@$(MAKE) build GOOS=linux
 
 build-windows:
-	@$(MAKE) build GOOS=windows CGO_ENABLED=0 WASM_ENABLED=0
+	@$(MAKE) build GOOS=windows
 
 image:
 	@$(MAKE) ci-go-build-linux
