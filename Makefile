@@ -8,19 +8,27 @@ VERSION_ISTIO := $(VERSION_OPA)-istio$(shell ./build/get-plugin-rev.sh)
 
 PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
 
+
+CGO_ENABLED ?= 1
+WASM_ENABLED ?= 1
+
 # GOPROXY=off: Don't pull anything off the network
 # see https://github.com/thepudds/go-module-knobs/blob/master/README.md
-GO := GOPROXY=off go
+GO := CGO_ENABLED=$(CGO_ENABLED) GO111MODULE=on GOFLAGS=-mod=vendor GOPROXY=off go
 GOVERSION := $(shell ./build/go-version.sh)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
-GOFLAGS := -tags=opa_wasm
 
 BIN := opa_envoy_$(GOOS)_$(GOARCH)
 
 REPOSITORY := openpolicyagent
 IMAGE := $(REPOSITORY)/opa
+
+GO_TAGS := -tags=
+ifeq ($(WASM_ENABLED),1)
+GO_TAGS = -tags=opa_wasm
+endif
 
 ifeq ($(shell tty > /dev/null && echo 1 || echo 0), 1)
 DOCKER_FLAGS := --rm -it
@@ -60,7 +68,7 @@ generate:
 	$(GO) generate ./...
 
 build: generate
-	$(GO) build $(GOFLAGS) -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
+	$(GO) build $(GO_TAGS) -o $(BIN) -ldflags $(LDFLAGS) ./cmd/opa-envoy-plugin/...
 
 build-darwin:
 	@$(MAKE) build GOOS=darwin CGO_ENABLED=0 WASM_ENABLED=0
@@ -72,7 +80,7 @@ build-windows:
 	@$(MAKE) build GOOS=windows CGO_ENABLED=0 WASM_ENABLED=0
 
 image:
-	@$(MAKE) build-linux
+	@$(MAKE) ci-go-build-linux
 	@$(MAKE) image-quick
 
 image-quick:
@@ -142,8 +150,8 @@ CI_GOLANG_DOCKER_MAKE := docker run \
         -v $(PWD):/src \
         -w /src \
         -e GOCACHE=/src/.go/cache \
-        -e CGO_ENABLED=1 \
-        -e WASM_ENABLED=1 \
+        -e CGO_ENABLED=$(CGO_ENABLED) \
+        -e WASM_ENABLED=$(WASM_ENABLED) \
         -e TELEMETRY_URL=$(TELEMETRY_URL) \
         golang:$(GOVERSION) \
         make
