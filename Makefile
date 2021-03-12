@@ -170,15 +170,18 @@ release:
 
 
 .PHONY: release-build-linux
-release-build-linux: ensure-release-dir build-linux
+release-build-linux: ensure-release-dir
+	@$(MAKE) build GOOS=linux CGO_ENABLED=0 WASM_ENABLED=0
 	mv opa_envoy_linux_$(GOARCH) $(RELEASE_DIR)/
 
 .PHONY: release-build-darwin
-release-build-darwin: ensure-release-dir build-darwin
+release-build-darwin: ensure-release-dir
+	@$(MAKE) build GOOS=darwin CGO_ENABLED=0 WASM_ENABLED=0
 	mv opa_envoy_darwin_$(GOARCH) $(RELEASE_DIR)/
 
 .PHONY: release-build-windows
-release-build-windows: ensure-release-dir build-windows
+release-build-windows: ensure-release-dir
+	@$(MAKE) build GOOS=windows CGO_ENABLED=0 WASM_ENABLED=0
 	mv opa_envoy_windows_$(GOARCH) $(RELEASE_DIR)/opa_envoy_windows_$(GOARCH).exe
 
 .PHONY: ensure-release-dir
