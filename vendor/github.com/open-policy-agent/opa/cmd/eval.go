@@ -14,16 +14,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/open-policy-agent/opa/compile"
-
 	"github.com/spf13/cobra"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/ast/location"
+	"github.com/open-policy-agent/opa/compile"
 	"github.com/open-policy-agent/opa/cover"
 	fileurl "github.com/open-policy-agent/opa/internal/file/url"
 	pr "github.com/open-policy-agent/opa/internal/presentation"
 	"github.com/open-policy-agent/opa/internal/runtime"
+	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/profiler"
 	"github.com/open-policy-agent/opa/rego"
@@ -178,7 +178,7 @@ Where /some/path contains:
 	  |     |
 	  |     +-- data.json
 	  |
-	  +-- baz_test.rego
+	  +-- baz.rego
 	  |
 	  +-- manifest.yaml
 
@@ -207,9 +207,11 @@ Set the output format with the --format flag.
 Schema
 ------
 
-The -s/--schema flag provides a single JSON Schema used to validate references to the input document.
+The -s/--schema flag provides one or more JSON Schemas used to validate references to the input or data documents.
+Loads a single JSON file, applying it to the input document; or all the schema files under the specified directory.
 
-	$ opa eval --data policy.rego --input input.json --schema input-schema.json
+	$ opa eval --data policy.rego --input input.json --schema schema.json
+	$ opa eval --data policy.rego --input input.json --schema schemas/
 `,
 
 		PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -264,6 +266,8 @@ The -s/--schema flag provides a single JSON Schema used to validate references t
 
 	RootCommand.AddCommand(evalCommand)
 }
+
+const schemaVar = "schema"
 
 func eval(args []string, params evalCommandParams, w io.Writer) (bool, error) {
 
@@ -430,20 +434,15 @@ func setupEval(args []string, params evalCommandParams) (*evalContext, error) {
 		regoArgs = append(regoArgs, rego.ParsedInput(inputValue))
 	}
 
-	schemaBytes, err := readSchemaBytes(params)
+	/*
+		-s {file} (one input schema file)
+		-s {directory} (one schema directory with input and data schema files)
+	*/
+	schemaSet, err := loader.Schemas(params.schemaPath)
 	if err != nil {
 		return nil, err
 	}
-
-	if schemaBytes != nil {
-		var schema interface{}
-		err := util.Unmarshal(schemaBytes, &schema)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse schema: %s", err.Error())
-		}
-		schemaSet := &ast.SchemaSet{ByPath: map[string]interface{}{"input": schema}}
-		regoArgs = append(regoArgs, rego.Schemas(schemaSet))
-	}
+	regoArgs = append(regoArgs, rego.Schemas(schemaSet))
 
 	var tracer *topdown.BufferTracer
 
@@ -534,17 +533,6 @@ func readInputBytes(params evalCommandParams) ([]byte, error) {
 		return ioutil.ReadAll(os.Stdin)
 	} else if params.inputPath != "" {
 		path, err := fileurl.Clean(params.inputPath)
-		if err != nil {
-			return nil, err
-		}
-		return ioutil.ReadFile(path)
-	}
-	return nil, nil
-}
-
-func readSchemaBytes(params evalCommandParams) ([]byte, error) {
-	if params.schemaPath != "" {
-		path, err := fileurl.Clean(params.schemaPath)
 		if err != nil {
 			return nil, err
 		}

@@ -36,9 +36,8 @@ import (
 const (
 	defaultPartialNamespace = "partial"
 	targetWasm              = "wasm"
+	wasmVarPrefix           = "^"
 )
-
-var wasmVarPrefix = "^"
 
 // CompileResult represents the result of compiling a Rego query, zero or more
 // Rego modules, and arbitrary contextual data into an executable.
@@ -1440,10 +1439,15 @@ func (r *Rego) PrepareForEval(ctx context.Context, opts ...PrepareOption) (Prepa
 			},
 		},
 	})
+	if err != nil {
+		txnClose(ctx, err) // Ignore error
+		return PreparedEvalQuery{}, err
+	}
 
 	if r.target == targetWasm {
 
 		if r.hasWasmModule() {
+			txnClose(ctx, err) // Ignore error
 			return PreparedEvalQuery{}, fmt.Errorf("wasm target not supported")
 		}
 
@@ -1456,16 +1460,19 @@ func (r *Rego) PrepareForEval(ctx context.Context, opts ...PrepareOption) (Prepa
 
 		cr, err := r.compileWasm(modules, queries, evalQueryType)
 		if err != nil {
+			txnClose(ctx, err) // Ignore error
 			return PreparedEvalQuery{}, err
 		}
 
 		data, err := r.store.Read(ctx, r.txn, storage.Path{})
 		if err != nil {
+			txnClose(ctx, err) // Ignore error
 			return PreparedEvalQuery{}, err
 		}
 
 		o, err := opa.New().WithPolicyBytes(cr.Bytes).WithDataJSON(data).Init()
 		if err != nil {
+			txnClose(ctx, err) // Ignore error
 			return PreparedEvalQuery{}, err
 		}
 		r.opa = o
@@ -1631,7 +1638,10 @@ func (r *Rego) loadFiles(ctx context.Context, txn storage.Transaction, m metrics
 	m.Timer(metrics.RegoLoadFiles).Start()
 	defer m.Timer(metrics.RegoLoadFiles).Stop()
 
-	result, err := loader.NewFileLoader().WithMetrics(m).Filtered(r.loadPaths.paths, r.loadPaths.filter)
+	result, err := loader.NewFileLoader().
+		WithMetrics(m).
+		WithProcessAnnotation(r.schemaSet != nil).
+		Filtered(r.loadPaths.paths, r.loadPaths.filter)
 	if err != nil {
 		return err
 	}
@@ -1657,7 +1667,11 @@ func (r *Rego) loadBundles(ctx context.Context, txn storage.Transaction, m metri
 	defer m.Timer(metrics.RegoLoadBundles).Stop()
 
 	for _, path := range r.bundlePaths {
-		bndl, err := loader.NewFileLoader().WithMetrics(m).WithSkipBundleVerification(r.skipBundleVerification).AsBundle(path)
+		bndl, err := loader.NewFileLoader().
+			WithMetrics(m).
+			WithProcessAnnotation(r.schemaSet != nil).
+			WithSkipBundleVerification(r.skipBundleVerification).
+			AsBundle(path)
 		if err != nil {
 			return fmt.Errorf("loading error: %s", err)
 		}
@@ -1807,8 +1821,7 @@ func (r *Rego) compileQuery(query ast.Body, m metrics.Metrics, extras []extraSta
 		WithPackage(pkg).
 		WithImports(imports)
 
-	var qc ast.QueryCompiler
-	qc = r.compiler.QueryCompiler().
+	qc := r.compiler.QueryCompiler().
 		WithContext(qctx).
 		WithUnsafeBuiltins(r.unsafeBuiltins)
 
@@ -1916,36 +1929,26 @@ func (r *Rego) evalWasm(ctx context.Context, ectx *EvalContext) (ResultSet, erro
 		return nil, nil
 	}
 
-	qr := topdown.QueryResult{}
+	var rs ResultSet
 	err = resultSet.Iter(func(term *ast.Term) error {
 		obj, ok := term.Value.(ast.Object)
 		if !ok {
 			return fmt.Errorf("illegal result type")
 		}
-
+		qr := topdown.QueryResult{}
 		obj.Foreach(func(k, v *ast.Term) {
 			kvt := ast.VarTerm(string(k.Value.(ast.String)))
 			qr[kvt.Value.(ast.Var)] = v
 		})
-
+		result, err := r.generateResult(qr, ectx)
+		if err != nil {
+			return err
+		}
+		rs = append(rs, result)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
 
-	res, err := r.generateResult(qr, ectx)
-	if err != nil {
-		return nil, err
-	}
-
-	rs := ResultSet{res}
-
-	if len(rs) == 0 {
-		return nil, nil
-	}
-
-	return rs, nil
+	return rs, err
 }
 
 func (r *Rego) generateResult(qr topdown.QueryResult, ectx *EvalContext) (Result, error) {
@@ -1953,8 +1956,8 @@ func (r *Rego) generateResult(qr topdown.QueryResult, ectx *EvalContext) (Result
 	rewritten := ectx.compiledQuery.compiler.RewrittenVars()
 
 	result := newResult()
-	for k := range qr {
-		v, err := ast.JSONWithOpt(qr[k].Value, ast.JSONOpt{SortSets: ectx.sortSets})
+	for k, term := range qr {
+		v, err := ast.JSONWithOpt(term.Value, ast.JSONOpt{SortSets: ectx.sortSets})
 		if err != nil {
 			return result, err
 		}
