@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"math"
 	"math/rand"
 	"net/http"
 	"reflect"
@@ -16,15 +18,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/open-policy-agent/opa/sdk"
-
 	"github.com/pkg/errors"
+
+	"golang.org/x/time/rate"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/ref"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/rest"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/sdk"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/util"
@@ -211,14 +215,16 @@ const (
 	defaultUploadSizeLimitBytes = int64(32768) // 32KB limit
 	defaultBufferSizeLimitBytes = int64(0)     // unlimited
 	defaultMaskDecisionPath     = "/system/log/mask"
+	logDropCounterName          = "decision_logs_dropped"
 )
 
 // ReportingConfig represents configuration for the plugin's reporting behaviour.
 type ReportingConfig struct {
-	BufferSizeLimitBytes *int64 `json:"buffer_size_limit_bytes,omitempty"` // max size of in-memory buffer
-	UploadSizeLimitBytes *int64 `json:"upload_size_limit_bytes,omitempty"` // max size of upload payload
-	MinDelaySeconds      *int64 `json:"min_delay_seconds,omitempty"`       // min amount of time to wait between successful poll attempts
-	MaxDelaySeconds      *int64 `json:"max_delay_seconds,omitempty"`       // max amount of time to wait between poll attempts
+	BufferSizeLimitBytes  *int64   `json:"buffer_size_limit_bytes,omitempty"`  // max size of in-memory buffer
+	UploadSizeLimitBytes  *int64   `json:"upload_size_limit_bytes,omitempty"`  // max size of upload payload
+	MinDelaySeconds       *int64   `json:"min_delay_seconds,omitempty"`        // min amount of time to wait between successful poll attempts
+	MaxDelaySeconds       *int64   `json:"max_delay_seconds,omitempty"`        // max amount of time to wait between poll attempts
+	MaxDecisionsPerSecond *float64 `json:"max_decisions_per_second,omitempty"` // max number of decision logs to buffer per second
 }
 
 // Config represents the plugin configuration.
@@ -302,6 +308,10 @@ func (c *Config) validateAndInjectDefaults(services []string, plugins []string) 
 
 	c.Reporting.UploadSizeLimitBytes = &uploadLimit
 
+	if c.Reporting.BufferSizeLimitBytes != nil && c.Reporting.MaxDecisionsPerSecond != nil {
+		return fmt.Errorf("invalid decision_log config, specify either 'buffer_size_limit_bytes' or 'max_decisions_per_second'")
+	}
+
 	// default the buffer size limit
 	bufferLimit := defaultBufferSizeLimitBytes
 	if c.Reporting.BufferSizeLimitBytes != nil {
@@ -336,6 +346,8 @@ type Plugin struct {
 	mask      *rego.PreparedEvalQuery
 	maskMutex sync.Mutex
 	logger    sdk.Logger
+	limiter   *rate.Limiter
+	metrics   metrics.Metrics
 }
 
 type reconfigure struct {
@@ -375,11 +387,22 @@ func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
 		logger:   manager.Logger().WithFields(map[string]interface{}{"plugin": Name}),
 	}
 
+	if parsedConfig.Reporting.MaxDecisionsPerSecond != nil {
+		limit := *parsedConfig.Reporting.MaxDecisionsPerSecond
+		plugin.limiter = rate.NewLimiter(rate.Limit(limit), int(math.Max(1, limit)))
+	}
+
 	manager.RegisterCompilerTrigger(plugin.compilerUpdated)
 
 	manager.UpdatePluginStatus(Name, &plugins.Status{State: plugins.StateNotReady})
 
 	return plugin
+}
+
+// WithMetrics sets the global metrics provider to be used by the plugin.
+func (p *Plugin) WithMetrics(m metrics.Metrics) *Plugin {
+	p.metrics = m
+	return p
 }
 
 // Name identifies the plugin on manager.
@@ -499,19 +522,7 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 	if p.config.Service != "" {
 		p.mtx.Lock()
 		defer p.mtx.Unlock()
-
-		result, err := p.enc.Write(event)
-		if err != nil {
-			// TODO(tsandall): revisit this now that we have an API that
-			// can return an error. Should the default behaviour be to
-			// fail-closed as we do for plugins?
-			p.logger.Error("Log encoding failed: %v.", err)
-			return nil
-		}
-
-		if result != nil {
-			p.bufferChunk(p.buffer, result)
-		}
+		p.encodeAndBufferEvent(event)
 	}
 
 	return nil
@@ -626,10 +637,24 @@ func (p *Plugin) oneShot(ctx context.Context) (ok bool, err error) {
 			err = uploadChunk(ctx, p.manager.Client(p.config.Service), p.config.PartitionName, bs)
 		}
 		if err != nil {
-			// requeue the chunk
-			p.mtx.Lock()
-			p.bufferChunk(p.buffer, bs)
-			p.mtx.Unlock()
+			if p.limiter != nil {
+				events, decErr := newChunkDecoder(bs).decode()
+				if decErr != nil {
+					continue
+				}
+
+				p.mtx.Lock()
+				for _, event := range events {
+					p.encodeAndBufferEvent(event)
+				}
+				p.mtx.Unlock()
+
+			} else {
+				// requeue the chunk
+				p.mtx.Lock()
+				p.bufferChunk(p.buffer, bs)
+				p.mtx.Unlock()
+			}
 		}
 	}
 
@@ -647,6 +672,32 @@ func (p *Plugin) reconfigure(config interface{}) {
 
 	p.logger.Info("Decision log uploader configuration changed.")
 	p.config = *newConfig
+}
+
+func (p *Plugin) encodeAndBufferEvent(event EventV1) {
+	if p.limiter != nil {
+		if !p.limiter.Allow() {
+			if p.metrics != nil {
+				p.metrics.Counter(logDropCounterName).Incr()
+			}
+
+			p.logger.Error("Decision log dropped as rate limit exceeded. Reduce reporting interval or increase rate limit.")
+			return
+		}
+	}
+
+	result, err := p.enc.Write(event)
+	if err != nil {
+		// TODO(tsandall): revisit this now that we have an API that
+		// can return an error. Should the default behaviour be to
+		// fail-closed as we do for plugins?
+		p.logger.Error("Log encoding failed: %v.", err)
+		return
+	}
+
+	if result != nil {
+		p.bufferChunk(p.buffer, result)
+	}
 }
 
 func (p *Plugin) bufferChunk(buffer *logBuffer, bs []byte) {

@@ -76,6 +76,7 @@ const (
 	PromHandlerV1Query    = "v1/query"
 	PromHandlerV1Policies = "v1/policies"
 	PromHandlerV1Compile  = "v1/compile"
+	PromHandlerV1Config   = "v1/config"
 	PromHandlerIndex      = "index"
 	PromHandlerCatch      = "catchall"
 	PromHandlerHealth     = "health"
@@ -105,8 +106,6 @@ type Server struct {
 	store                  storage.Store
 	manager                *plugins.Manager
 	decisionIDFactory      func() string
-	revisions              map[string]string
-	legacyRevision         string
 	buffer                 Buffer
 	logger                 func(context.Context, *Info) error
 	errLimit               int
@@ -158,15 +157,7 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 
 	s.partials = map[string]rego.PartialResult{}
 	s.preparedEvalQueries = newCache(pqMaxCacheSize)
-
-	// Check if there is a bundle revision available at the legacy storage path
-	rev, err := bundle.LegacyReadRevisionFromStore(ctx, s.store, txn)
-	if err == nil && rev != "" {
-		s.legacyRevision = rev
-	}
-
 	s.defaultDecisionPath = s.generateDefaultDecisionPath()
-
 	s.interQueryBuiltinCache = iCache.NewInterQueryCache(s.manager.InterQueryBuiltinCacheConfig())
 	s.manager.RegisterCacheTrigger(s.updateCacheConfig)
 
@@ -622,6 +613,7 @@ func (s *Server) initRouters() {
 	s.registerHandler(mainRouter, 1, "/query", http.MethodGet, s.instrumentHandler(s.v1QueryGet, PromHandlerV1Query))
 	s.registerHandler(mainRouter, 1, "/query", http.MethodPost, s.instrumentHandler(s.v1QueryPost, PromHandlerV1Query))
 	s.registerHandler(mainRouter, 1, "/compile", http.MethodPost, s.instrumentHandler(s.v1CompilePost, PromHandlerV1Compile))
+	s.registerHandler(mainRouter, 1, "/config", http.MethodGet, s.instrumentHandler(s.v1ConfigGet, PromHandlerV1Config))
 	mainRouter.Handle("/", s.instrumentHandler(s.unversionedPost, PromHandlerIndex)).Methods(http.MethodPost)
 	mainRouter.Handle("/", s.instrumentHandler(s.indexGet, PromHandlerIndex)).Methods(http.MethodGet)
 
@@ -660,9 +652,9 @@ func (s *Server) instrumentHandler(handler func(http.ResponseWriter, *http.Reque
 	return http.HandlerFunc(handler)
 }
 
-func (s *Server) execQuery(ctx context.Context, r *http.Request, txn storage.Transaction, decisionID string, parsedQuery ast.Body, input ast.Value, m metrics.Metrics, explainMode types.ExplainModeV1, includeMetrics, includeInstrumentation, pretty bool) (results types.QueryResponseV1, err error) {
+func (s *Server) execQuery(ctx context.Context, r *http.Request, br bundleRevisions, txn storage.Transaction, decisionID string, parsedQuery ast.Body, input ast.Value, m metrics.Metrics, explainMode types.ExplainModeV1, includeMetrics, includeInstrumentation, pretty bool) (results types.QueryResponseV1, err error) {
 
-	logger := s.getDecisionLogger()
+	logger := s.getDecisionLogger(br)
 
 	var buf *topdown.BufferTracer
 	if explainMode != types.ExplainOffV1 {
@@ -768,7 +760,13 @@ func (s *Server) indexGet(w http.ResponseWriter, r *http.Request) {
 
 	defer s.store.Abort(ctx, txn)
 
-	results, err := s.execQuery(ctx, r, txn, decisionID, parsedQuery, input, nil, explainMode, false, false, true)
+	br, err := getRevisions(ctx, s.store, txn)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	results, err := s.execQuery(ctx, r, br, txn, decisionID, parsedQuery, input, nil, explainMode, false, false, true)
 	if err != nil {
 		renderQueryResult(w, nil, err, t0)
 		return
@@ -782,6 +780,40 @@ func (s *Server) registerHandler(router *mux.Router, version int, path string, m
 	router.Handle(prefix+path, h).Methods(method)
 }
 
+type bundleRevisions struct {
+	LegacyRevision string
+	Revisions      map[string]string
+}
+
+func getRevisions(ctx context.Context, store storage.Store, txn storage.Transaction) (bundleRevisions, error) {
+
+	var err error
+	var br bundleRevisions
+	br.Revisions = map[string]string{}
+
+	// Check if we still have a legacy bundle manifest in the store
+	br.LegacyRevision, err = bundle.LegacyReadRevisionFromStore(ctx, store, txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return br, err
+	}
+
+	// read all bundle revisions from storage (if any exist)
+	names, err := bundle.ReadBundleNamesFromStore(ctx, store, txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return br, err
+	}
+
+	for _, name := range names {
+		r, err := bundle.ReadBundleRevisionFromStore(ctx, store, txn, name)
+		if err != nil && !storage.IsNotFound(err) {
+			return br, err
+		}
+		br.Revisions[name] = r
+	}
+
+	return br, nil
+}
+
 func (s *Server) reload(ctx context.Context, txn storage.Transaction, event storage.TriggerEvent) {
 
 	// NOTE(tsandall): We currently rely on the storage txn to provide
@@ -793,29 +825,8 @@ func (s *Server) reload(ctx context.Context, txn storage.Transaction, event stor
 
 	// reset some cached info
 	s.partials = map[string]rego.PartialResult{}
-	s.revisions = map[string]string{}
 	s.preparedEvalQueries = newCache(pqMaxCacheSize)
 	s.defaultDecisionPath = s.generateDefaultDecisionPath()
-
-	// read all bundle revisions from storage (if any exist)
-	names, err := bundle.ReadBundleNamesFromStore(ctx, s.store, txn)
-	if err != nil && !storage.IsNotFound(err) {
-		panic(err)
-	}
-
-	for _, name := range names {
-		r, err := bundle.ReadBundleRevisionFromStore(ctx, s.store, txn, name)
-		if err != nil && !storage.IsNotFound(err) {
-			panic(err)
-		}
-		s.revisions[name] = r
-	}
-
-	// Check if we still have a legacy bundle manifest in the store
-	s.legacyRevision, err = bundle.LegacyReadRevisionFromStore(ctx, s.store, txn)
-	if err != nil && !storage.IsNotFound(err) {
-		panic(err)
-	}
 }
 
 func (s *Server) unversionedPost(w http.ResponseWriter, r *http.Request) {
@@ -858,11 +869,17 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 
 	defer s.store.Abort(ctx, txn)
 
+	br, err := getRevisions(ctx, s.store, txn)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
 	if useDefaultDecisionPath {
 		urlPath = s.defaultDecisionPath
 	}
 
-	logger := s.getDecisionLogger()
+	logger := s.getDecisionLogger(br)
 
 	pqID := "v0QueryPath::" + urlPath
 	preparedQuery, ok := s.getCachedPreparedEvalQuery(pqID, m)
@@ -934,7 +951,8 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 		return
 	}
 
-	writer.JSON(w, 200, rs[0].Expressions[0].Value, false)
+	pretty := getBoolParam(r.URL, types.ParamPrettyV1, true)
+	writer.JSON(w, 200, rs[0].Expressions[0].Value, pretty)
 }
 
 func (s *Server) getCachedPreparedEvalQuery(key string, m metrics.Metrics) (*rego.PreparedEvalQuery, bool) {
@@ -1180,7 +1198,13 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.store.Abort(ctx, txn)
 
-	logger := s.getDecisionLogger()
+	br, err := getRevisions(ctx, s.store, txn)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	logger := s.getDecisionLogger(br)
 
 	var buf *topdown.BufferTracer
 
@@ -1257,7 +1281,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if provenance {
-		result.Provenance = s.getProvenance()
+		result.Provenance = s.getProvenance(br)
 	}
 
 	if len(rs) == 0 {
@@ -1380,9 +1404,16 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		writer.ErrorAuto(w, err)
 		return
 	}
+
 	defer s.store.Abort(ctx, txn)
 
-	logger := s.getDecisionLogger()
+	br, err := getRevisions(ctx, s.store, txn)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	logger := s.getDecisionLogger(br)
 
 	var buf *topdown.BufferTracer
 
@@ -1464,7 +1495,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if provenance {
-		result.Provenance = s.getProvenance()
+		result.Provenance = s.getProvenance(br)
 	}
 
 	if len(rs) == 0 {
@@ -1472,6 +1503,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 			result.Explanation, err = types.NewTraceV1(*buf, pretty)
 			if err != nil {
 				writer.ErrorAuto(w, err)
+				return
 			}
 		}
 		err = logger.Log(ctx, txn, decisionID, r.RemoteAddr, urlPath, "", goInput, input, nil, nil, m)
@@ -1897,7 +1929,13 @@ func (s *Server) v1QueryGet(w http.ResponseWriter, r *http.Request) {
 
 	defer s.store.Abort(ctx, txn)
 
-	results, err := s.execQuery(ctx, r, txn, decisionID, parsedQuery, nil, m, explainMode, includeMetrics, includeInstrumentation, pretty)
+	br, err := getRevisions(ctx, s.store, txn)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	results, err := s.execQuery(ctx, r, br, txn, decisionID, parsedQuery, nil, m, explainMode, includeMetrics, includeInstrumentation, pretty)
 	if err != nil {
 		switch err := err.(type) {
 		case ast.Errors:
@@ -1950,7 +1988,13 @@ func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
 
 	defer s.store.Abort(ctx, txn)
 
-	results, err := s.execQuery(ctx, r, txn, decisionID, parsedQuery, nil, m, explainMode, includeMetrics, includeInstrumentation, pretty)
+	br, err := getRevisions(ctx, s.store, txn)
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	results, err := s.execQuery(ctx, r, br, txn, decisionID, parsedQuery, nil, m, explainMode, includeMetrics, includeInstrumentation, pretty)
 	if err != nil {
 		switch err := err.(type) {
 		case ast.Errors:
@@ -1962,6 +2006,20 @@ func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writer.JSON(w, 200, results, pretty)
+}
+
+func (s *Server) v1ConfigGet(w http.ResponseWriter, r *http.Request) {
+	pretty := getBoolParam(r.URL, types.ParamPrettyV1, true)
+	result, err := s.manager.Config.ActiveConfig()
+	if err != nil {
+		writer.ErrorAuto(w, err)
+		return
+	}
+
+	var resp types.ConfigResponseV1
+	resp.Result = &result
+
+	writer.JSON(w, http.StatusOK, resp, pretty)
 }
 
 func (s *Server) checkPolicyIDScope(ctx context.Context, txn storage.Transaction, id string) error {
@@ -2032,12 +2090,12 @@ func (s *Server) checkPathScope(ctx context.Context, txn storage.Transaction, pa
 	return nil
 }
 
-func (s *Server) getDecisionLogger() (logger decisionLogger) {
+func (s *Server) getDecisionLogger(br bundleRevisions) (logger decisionLogger) {
 	// For backwards compatibility use `revision` as needed.
-	if s.hasLegacyBundle() {
-		logger.revision = s.legacyRevision
+	if s.hasLegacyBundle(br) {
+		logger.revision = br.LegacyRevision
 	} else {
-		logger.revisions = s.revisions
+		logger.revisions = br.Revisions
 	}
 	logger.logger = s.logger
 	logger.buffer = s.buffer
@@ -2201,7 +2259,7 @@ func (s *Server) generateDecisionID() string {
 	return ""
 }
 
-func (s *Server) getProvenance() *types.ProvenanceV1 {
+func (s *Server) getProvenance(br bundleRevisions) *types.ProvenanceV1 {
 
 	p := &types.ProvenanceV1{
 		Version:   version.Version,
@@ -2213,11 +2271,11 @@ func (s *Server) getProvenance() *types.ProvenanceV1 {
 	// For backwards compatibility, if the bundles are using the old
 	// style config we need to fill in the older `Revision` field.
 	// Otherwise use the newer `Bundles` keyword.
-	if s.hasLegacyBundle() {
-		p.Revision = s.legacyRevision
+	if s.hasLegacyBundle(br) {
+		p.Revision = br.LegacyRevision
 	} else {
 		p.Bundles = map[string]types.ProvenanceBundleV1{}
-		for name, revision := range s.revisions {
+		for name, revision := range br.Revisions {
 			p.Bundles[name] = types.ProvenanceBundleV1{Revision: revision}
 		}
 	}
@@ -2225,9 +2283,9 @@ func (s *Server) getProvenance() *types.ProvenanceV1 {
 	return p
 }
 
-func (s *Server) hasLegacyBundle() bool {
+func (s *Server) hasLegacyBundle(br bundleRevisions) bool {
 	bp := bundlePlugin.Lookup(s.manager)
-	return s.legacyRevision != "" || (bp != nil && !bp.Config().IsMultiBundle())
+	return br.LegacyRevision != "" || (bp != nil && !bp.Config().IsMultiBundle())
 }
 
 func (s *Server) generateDefaultDecisionPath() string {

@@ -126,6 +126,12 @@ var builtinsFunctions = map[string]string{
 	ast.NetCIDRContains.Name:            "opa_cidr_contains",
 	ast.NetCIDROverlap.Name:             "opa_cidr_contains",
 	ast.NetCIDRIntersects.Name:          "opa_cidr_intersects",
+	ast.Equal.Name:                      "opa_cmp_eq",
+	ast.GreaterThan.Name:                "opa_cmp_gt",
+	ast.GreaterThanEq.Name:              "opa_cmp_gte",
+	ast.LessThan.Name:                   "opa_cmp_lt",
+	ast.LessThanEq.Name:                 "opa_cmp_lte",
+	ast.NotEqual.Name:                   "opa_cmp_neq",
 	ast.GlobMatch.Name:                  "opa_glob_match",
 	ast.JSONMarshal.Name:                "opa_json_marshal",
 	ast.JSONUnmarshal.Name:              "opa_json_unmarshal",
@@ -714,6 +720,7 @@ func (c *Compiler) compilePlans() error {
 	main.Instrs = append(main.Instrs,
 		instruction.I32Const{Value: c.builtinStringAddr(errIllegalEntrypoint)},
 		instruction.Call{Index: c.function(opaAbort)},
+		instruction.Unreachable{},
 	)
 
 	c.appendInstr(main)
@@ -1017,34 +1024,6 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 				instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
 				instrs = append(instrs, instruction.BrIf{Index: 0})
 			}
-		case *ir.LessThanStmt:
-			instrs = append(instrs, c.instrRead(stmt.A))
-			instrs = append(instrs, c.instrRead(stmt.B))
-			instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
-			instrs = append(instrs, instruction.I32Const{Value: 0})
-			instrs = append(instrs, instruction.I32GeS{})
-			instrs = append(instrs, instruction.BrIf{Index: 0})
-		case *ir.LessThanEqualStmt:
-			instrs = append(instrs, c.instrRead(stmt.A))
-			instrs = append(instrs, c.instrRead(stmt.B))
-			instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
-			instrs = append(instrs, instruction.I32Const{Value: 0})
-			instrs = append(instrs, instruction.I32GtS{})
-			instrs = append(instrs, instruction.BrIf{Index: 0})
-		case *ir.GreaterThanStmt:
-			instrs = append(instrs, c.instrRead(stmt.A))
-			instrs = append(instrs, c.instrRead(stmt.B))
-			instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
-			instrs = append(instrs, instruction.I32Const{Value: 0})
-			instrs = append(instrs, instruction.I32LeS{})
-			instrs = append(instrs, instruction.BrIf{Index: 0})
-		case *ir.GreaterThanEqualStmt:
-			instrs = append(instrs, c.instrRead(stmt.A))
-			instrs = append(instrs, c.instrRead(stmt.B))
-			instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
-			instrs = append(instrs, instruction.I32Const{Value: 0})
-			instrs = append(instrs, instruction.I32LtS{})
-			instrs = append(instrs, instruction.BrIf{Index: 0})
 		case *ir.NotEqualStmt:
 			if stmt.A == stmt.B { // same local, same bool constant, or same string constant
 				instrs = append(instrs, instruction.Br{Index: 0})
@@ -1396,12 +1375,12 @@ func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.LocalOrCon
 }
 
 func (c *Compiler) compileCallDynamicStmt(stmt *ir.CallDynamicStmt, result *[]instruction.Instruction) error {
-	block := instruction.Block{}
+	instrs := []instruction.Instruction{}
 	larray := c.genLocal()
 	lidx := c.genLocal()
 
 	// init array:
-	block.Instrs = append(block.Instrs,
+	instrs = append(instrs,
 		instruction.I32Const{Value: int32(len(stmt.Path))},
 		instruction.Call{Index: c.function(opaArrayWithCap)},
 		instruction.SetLocal{Index: larray},
@@ -1409,7 +1388,7 @@ func (c *Compiler) compileCallDynamicStmt(stmt *ir.CallDynamicStmt, result *[]in
 
 	// append to it:
 	for _, lv := range stmt.Path {
-		block.Instrs = append(block.Instrs,
+		instrs = append(instrs,
 			instruction.GetLocal{Index: larray},
 			c.instrRead(lv),
 			instruction.Call{Index: c.function(opaArrayAppend)},
@@ -1418,7 +1397,7 @@ func (c *Compiler) compileCallDynamicStmt(stmt *ir.CallDynamicStmt, result *[]in
 
 	// prep stack for later call_indirect
 	for _, arg := range stmt.Args {
-		block.Instrs = append(block.Instrs, instruction.GetLocal{Index: c.local(arg)})
+		instrs = append(instrs, instruction.GetLocal{Index: c.local(arg)})
 	}
 
 	tpe := module.FunctionType{
@@ -1427,22 +1406,22 @@ func (c *Compiler) compileCallDynamicStmt(stmt *ir.CallDynamicStmt, result *[]in
 	}
 	typeIndex := c.emitFunctionType(tpe)
 
-	block.Instrs = append(block.Instrs,
+	instrs = append(instrs,
 		// lookup elem idx via larray path
 		instruction.GetLocal{Index: larray},
 		instruction.Call{Index: c.function(opaMappingLookup)}, // [arg0 arg1 larray] -> [arg0 arg1 tbl_idx]
 		instruction.TeeLocal{Index: lidx},
-		instruction.I32Eqz{}, // mapping not found
-		instruction.BrIf{Index: 1},
+		instruction.I32Eqz{},       // mapping not found
+		instruction.BrIf{Index: 0}, // check data
 
 		instruction.GetLocal{Index: lidx},
 		instruction.CallIndirect{Index: typeIndex}, // [arg0 arg1 tbl_idx] -> [res]
 		instruction.TeeLocal{Index: c.local(stmt.Result)},
 		instruction.I32Eqz{},
-		instruction.BrIf{Index: 1},
+		instruction.BrIf{Index: 2}, // mapping found, "undefined" result counts
 	)
 
-	*result = append(*result, block)
+	*result = append(*result, instrs...)
 	return nil
 }
 
@@ -1690,7 +1669,8 @@ func getLowestFreeElementSegmentOffset(m *module.Module) (int32, error) {
 
 // runtimeErrorAbort uses the passed source location to build the
 // arguments for a call to opa_runtime_error(file, row, col, msg).
-// It returns the instructions that make up the function call.
+// It returns the instructions that make up the function call with
+// arguments, followed by Unreachable.
 func (c *Compiler) runtimeErrorAbort(loc ir.Location, errType int) []instruction.Instruction {
 	index, row, col := loc.Index, loc.Row, loc.Col
 	return []instruction.Instruction{
@@ -1699,6 +1679,7 @@ func (c *Compiler) runtimeErrorAbort(loc ir.Location, errType int) []instruction
 		instruction.I32Const{Value: int32(col)},
 		instruction.I32Const{Value: c.builtinStringAddr(errType)},
 		instruction.Call{Index: c.function(opaRuntimeError)},
+		instruction.Unreachable{},
 	}
 }
 

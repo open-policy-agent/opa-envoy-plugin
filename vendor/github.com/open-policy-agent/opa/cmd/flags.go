@@ -98,6 +98,10 @@ func addSigningKeyFlag(fs *pflag.FlagSet, key *string) {
 	fs.StringVarP(key, "signing-key", "", "", "set the secret (HMAC) or path of the PEM file containing the private key (RSA and ECDSA)")
 }
 
+func addSigningPluginFlag(fs *pflag.FlagSet, plugin *string) {
+	fs.StringVarP(plugin, "signing-plugin", "", "", "name of the plugin to use for signing/verification (see https://openpolicyagent.org/docs/latest/management/#signature-plugin")
+}
+
 func addVerificationKeyFlag(fs *pflag.FlagSet, key *string) {
 	fs.StringVarP(key, "verification-key", "", "", "set the secret (HMAC) or path of the PEM file containing the public key (RSA and ECDSA)")
 }
@@ -131,7 +135,7 @@ func addUnknownsFlag(fs *pflag.FlagSet, unknowns *[]string, value []string) {
 }
 
 func addSchemaFlag(fs *pflag.FlagSet, schemaPath *string) {
-	fs.StringVarP(schemaPath, "schema", "s", "", "set schema file path")
+	fs.StringVarP(schemaPath, "schema", "s", "", "set schema file path or directory path")
 }
 
 func addTargetFlag(fs *pflag.FlagSet, target *util.EnumFlag) {

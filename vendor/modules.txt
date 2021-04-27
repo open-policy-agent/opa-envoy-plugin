@@ -2,7 +2,7 @@
 github.com/OneOfOne/xxhash
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
-# github.com/bytecodealliance/wasmtime-go v0.24.0
+# github.com/bytecodealliance/wasmtime-go v0.26.0
 github.com/bytecodealliance/wasmtime-go
 github.com/bytecodealliance/wasmtime-go/build/include
 github.com/bytecodealliance/wasmtime-go/build/linux-x86_64
@@ -59,7 +59,7 @@ github.com/mattn/go-runewidth
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/olekukonko/tablewriter v0.0.1
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.27.1
+# github.com/open-policy-agent/opa v0.28.0
 ## explicit
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -126,6 +126,7 @@ github.com/open-policy-agent/opa/plugins/logs
 github.com/open-policy-agent/opa/plugins/rest
 github.com/open-policy-agent/opa/plugins/status
 github.com/open-policy-agent/opa/profiler
+github.com/open-policy-agent/opa/refactor
 github.com/open-policy-agent/opa/rego
 github.com/open-policy-agent/opa/repl
 github.com/open-policy-agent/opa/resolver
@@ -186,6 +187,10 @@ github.com/xeipuuv/gojsonpointer
 github.com/xeipuuv/gojsonreference
 # github.com/yashtewari/glob-intersection v0.0.0-20180916065949-5c77d914dd0b
 github.com/yashtewari/glob-intersection
+# go.uber.org/automaxprocs v1.4.0
+go.uber.org/automaxprocs/internal/cgroups
+go.uber.org/automaxprocs/internal/runtime
+go.uber.org/automaxprocs/maxprocs
 # golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5
 ## explicit
 golang.org/x/lint
@@ -213,6 +218,8 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+# golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+golang.org/x/time/rate
 # golang.org/x/tools v0.1.0
 ## explicit
 golang.org/x/tools/cmd/goimports

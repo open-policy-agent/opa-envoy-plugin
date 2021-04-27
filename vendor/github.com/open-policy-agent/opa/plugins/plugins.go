@@ -250,6 +250,13 @@ func GracefulShutdownPeriod(gracefulShutdownPeriod int) func(*Manager) {
 	}
 }
 
+// Logger configures the passed logger on the plugin manager (useful to configure default fields)
+func Logger(logger sdk.Logger) func(*Manager) {
+	return func(m *Manager) {
+		m.logger = logger
+	}
+}
+
 // New creates a new Manager using config.
 func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*Manager, error) {
 
@@ -279,10 +286,15 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		interQueryBuiltinCacheConfig: interQueryBuiltinCacheConfig,
 	}
 
+	if m.logger == nil {
+		m.logger = sdk.NewStandardLogger()
+	}
+
 	serviceOpts := cfg.ServiceOptions{
 		Raw:        parsedConfig.Services,
 		AuthPlugin: m.AuthPlugin,
 		Keys:       keys,
+		Logger:     m.logger,
 	}
 	services, err := cfg.ParseServicesConfig(serviceOpts)
 	if err != nil {
@@ -293,10 +305,6 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 
 	for _, f := range opts {
 		f(m)
-	}
-
-	if m.logger == nil {
-		m.logger = sdk.NewStandardLogger()
 	}
 
 	return m, nil
@@ -505,6 +513,7 @@ func (m *Manager) Reconfigure(config *config.Config) error {
 	opts := cfg.ServiceOptions{
 		Raw:        config.Services,
 		AuthPlugin: m.AuthPlugin,
+		Logger:     m.logger,
 	}
 
 	keys, err := keys.ParseKeysConfig(config.Keys)
@@ -641,7 +650,7 @@ func (m *Manager) onCommit(ctx context.Context, txn storage.Transaction, event s
 			}
 			m.setWasmResolvers(resolvers)
 		} else {
-			err := m.updateWasmResolversData(event)
+			err := m.updateWasmResolversData(ctx, event)
 			if err != nil {
 				panic(err)
 			}
@@ -685,7 +694,7 @@ func requiresWasmResolverReload(event storage.TriggerEvent) bool {
 	return false
 }
 
-func (m *Manager) updateWasmResolversData(event storage.TriggerEvent) error {
+func (m *Manager) updateWasmResolversData(ctx context.Context, event storage.TriggerEvent) error {
 	m.wasmResolversMtx.Lock()
 	defer m.wasmResolversMtx.Unlock()
 
@@ -697,9 +706,9 @@ func (m *Manager) updateWasmResolversData(event storage.TriggerEvent) error {
 		for _, dataEvent := range event.Data {
 			var err error
 			if dataEvent.Removed {
-				err = resolver.RemoveDataPath(dataEvent.Path)
+				err = resolver.RemoveDataPath(ctx, dataEvent.Path)
 			} else {
-				err = resolver.SetDataPath(dataEvent.Path, dataEvent.Data)
+				err = resolver.SetDataPath(ctx, dataEvent.Path, dataEvent.Data)
 			}
 			if err != nil {
 				return fmt.Errorf("failed to update wasm runtime data: %s", err)
