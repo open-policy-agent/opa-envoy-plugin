@@ -90,6 +90,18 @@ IP/port of the Istio Ingress gateway.
     curl --user bob:password -i http://$GATEWAY_URL/productpage
     curl --user bob:password -i http://$GATEWAY_URL/api/v1/products
     ```
+## Controlling the injection policy at the pod level
+
+If you want to control the injection policy at the pod level, set the `sidecar.opa-istio.io/inject` label to `false` on the pod.
+An example of the updated admission controller configuration is shown below:
+```yaml
+objectSelector:
+  matchExpressions:
+  - key: sidecar.opa-istio.io/inject
+    operator: NotIn
+    values:
+    - "false"
+```
 
 ## Example Bundle Configuration
 
