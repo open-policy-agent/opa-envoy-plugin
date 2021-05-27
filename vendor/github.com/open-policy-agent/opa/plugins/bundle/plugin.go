@@ -2,27 +2,26 @@
 // Use of this source code is governed by an Apache2
 // license that can be found in the LICENSE file.
 
-// Package bundle implements bundle downloading.
+// Package bundle implements bundle loading.
 package bundle
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
 	"time"
 
-	"github.com/open-policy-agent/opa/sdk"
-
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/download"
 	bundleUtils "github.com/open-policy-agent/opa/internal/bundle"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/storage"
@@ -36,13 +35,13 @@ type Plugin struct {
 	etags             map[string]string                        // etag on last successful activation
 	listeners         map[interface{}]func(Status)             // listeners to send status updates to
 	bulkListeners     map[interface{}]func(map[string]*Status) // listeners to send aggregated status updates to
-	downloaders       map[string]*download.Downloader
-	logger            sdk.Logger
+	downloaders       map[string]bundleLoader
+	logger            logging.Logger
 	mtx               sync.Mutex
 	cfgMtx            sync.Mutex
-	legacyConfig      bool
 	ready             bool
 	bundlePersistPath string
+	stopped           bool
 }
 
 // New returns a new Plugin with the given config.
@@ -58,7 +57,7 @@ func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
 		manager:     manager,
 		config:      *parsedConfig,
 		status:      initialStatus,
-		downloaders: make(map[string]*download.Downloader),
+		downloaders: make(map[string]bundleLoader),
 		etags:       make(map[string]string),
 		ready:       false,
 		logger:      manager.Logger(),
@@ -100,8 +99,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 
 	p.initDownloaders()
 	for name, dl := range p.downloaders {
-
-		p.log(name).Info("Starting bundle downloader.")
+		p.log(name).Info("Starting bundle loader.")
 		dl.Start(ctx)
 	}
 	return nil
@@ -110,9 +108,16 @@ func (p *Plugin) Start(ctx context.Context) error {
 // Stop stops the plugin.
 func (p *Plugin) Stop(ctx context.Context) {
 	p.mtx.Lock()
-	defer p.mtx.Unlock()
+	stopDownloaders := map[string]bundleLoader{}
 	for name, dl := range p.downloaders {
-		p.log(name).Info("Stopping bundle downloader.")
+		stopDownloaders[name] = dl
+	}
+	p.downloaders = nil
+	p.stopped = true
+	p.mtx.Unlock()
+
+	for name, dl := range stopDownloaders {
+		p.log(name).Info("Stopping bundle loader.")
 		dl.Stop(ctx)
 	}
 }
@@ -155,7 +160,7 @@ func (p *Plugin) Reconfigure(ctx context.Context, config interface{}) {
 	// Cleanup existing downloaders that are deleted
 	for name := range p.downloaders {
 		if _, deleted := deletedBundles[name]; deleted {
-			p.log(name).Info("Bundle downloader configuration removed. Stopping bundle downloader.")
+			p.log(name).Info("Bundle loader configuration removed. Stopping bundle loader.")
 			delete(p.downloaders, name)
 			delete(p.status, name)
 			delete(p.etags, name)
@@ -194,9 +199,9 @@ func (p *Plugin) Reconfigure(ctx context.Context, config interface{}) {
 		if isNew || updated {
 			if isNew {
 				p.status[name] = &Status{Name: name}
-				p.log(name).Info("New bundle downloader configuration added. Starting bundle downloader.")
+				p.log(name).Info("New bundle loader configuration added. Starting bundle loader.")
 			} else {
-				p.log(name).Info("Bundle downloader configuration changed. Restarting bundle downloader.")
+				p.log(name).Info("Bundle loader configuration changed. Restarting bundle loader.")
 			}
 			p.downloaders[name] = p.newDownloader(name, source)
 			p.downloaders[name].Start(ctx)
@@ -297,7 +302,21 @@ func (p *Plugin) loadAndActivateBundlesFromDisk(ctx context.Context) error {
 	return nil
 }
 
-func (p *Plugin) newDownloader(name string, source *Source) *download.Downloader {
+func (p *Plugin) newDownloader(name string, source *Source) bundleLoader {
+
+	if u, err := url.Parse(source.Resource); err == nil {
+		switch u.Scheme {
+		case "file":
+			return &fileLoader{
+				name:           name,
+				path:           u.Path,
+				bvc:            source.Signing,
+				sizeLimitBytes: source.SizeLimitBytes,
+				f:              p.oneShot,
+			}
+		}
+	}
+
 	conf := source.Config
 	client := p.manager.Client(source.Service)
 	path := source.Resource
@@ -308,7 +327,8 @@ func (p *Plugin) newDownloader(name string, source *Source) *download.Downloader
 	return download.New(conf, client, path).
 		WithCallback(callback).
 		WithBundleVerificationConfig(source.Signing).
-		WithSizeLimitBytes(source.SizeLimitBytes)
+		WithSizeLimitBytes(source.SizeLimitBytes).
+		WithBundlePersistence(p.persistBundle(name))
 }
 
 func (p *Plugin) oneShot(ctx context.Context, name string, u download.Update) {
@@ -328,7 +348,8 @@ func (p *Plugin) oneShot(ctx context.Context, name string, u download.Update) {
 		// made to it.
 		statusCpy := map[string]*Status{}
 		for k, v := range p.status {
-			statusCpy[k] = v
+			v := *v
+			statusCpy[k] = &v
 		}
 		listener(statusCpy)
 	}
@@ -345,9 +366,11 @@ func (p *Plugin) process(ctx context.Context, name string, u download.Update) {
 	p.status[name].SetRequest()
 
 	if u.Error != nil {
-		p.log(name).Error("Bundle download failed: %v", u.Error)
+		p.log(name).Error("Bundle load failed: %v", u.Error)
 		p.status[name].SetError(u.Error)
-		p.downloaders[name].ClearCache()
+		if !p.stopped {
+			p.downloaders[name].ClearCache()
+		}
 		return
 	}
 
@@ -362,18 +385,22 @@ func (p *Plugin) process(ctx context.Context, name string, u download.Update) {
 		if err := p.activate(ctx, name, u.Bundle); err != nil {
 			p.log(name).Error("Bundle activation failed: %v", err)
 			p.status[name].SetError(err)
-			p.downloaders[name].ClearCache()
+			if !p.stopped {
+				p.downloaders[name].ClearCache()
+			}
 			return
 		}
 
 		if p.persistBundle(name) {
 			p.log(name).Debug("Persisting bundle to disk in progress.")
 
-			err := p.saveBundleToDisk(name, u.Bundle)
+			err := p.saveBundleToDisk(name, u.Raw)
 			if err != nil {
 				p.log(name).Error("Persisting bundle to disk failed: %v", err)
 				p.status[name].SetError(err)
-				p.downloaders[name].ClearCache()
+				if !p.stopped {
+					p.downloaders[name].ClearCache()
+				}
 				return
 			}
 			p.log(name).Debug("Bundle persisted to disk successfully at path %v.", filepath.Join(p.bundlePersistPath, name))
@@ -383,9 +410,9 @@ func (p *Plugin) process(ctx context.Context, name string, u download.Update) {
 		p.status[name].SetActivateSuccess(u.Bundle.Manifest.Revision)
 
 		if u.ETag != "" {
-			p.log(name).Info("Bundle downloaded and activated successfully. Etag updated to %v.", u.ETag)
+			p.log(name).Info("Bundle loaded and activated successfully. Etag updated to %v.", u.ETag)
 		} else {
-			p.log(name).Info("Bundle downloaded and activated successfully.")
+			p.log(name).Info("Bundle loaded and activated successfully.")
 		}
 		p.etags[name] = u.ETag
 
@@ -395,7 +422,7 @@ func (p *Plugin) process(ctx context.Context, name string, u download.Update) {
 	}
 
 	if etag, ok := p.etags[name]; ok && u.ETag == etag {
-		p.log(name).Debug("Bundle download skipped, server replied with not modified.")
+		p.log(name).Debug("Bundle load skipped, server replied with not modified.")
 		p.status[name].SetError(nil)
 		return
 	}
@@ -497,13 +524,13 @@ func (p *Plugin) configDelta(newConfig *Config) (map[string]*Source, map[string]
 	return newBundles, updatedBundles, deletedBundles
 }
 
-func (p *Plugin) saveBundleToDisk(name string, b *bundle.Bundle) error {
+func (p *Plugin) saveBundleToDisk(name string, raw io.Reader) error {
 
 	bundleDir := filepath.Join(p.bundlePersistPath, name)
 	tmpFile := filepath.Join(bundleDir, ".bundle.tar.gz.tmp")
 	bundleFile := filepath.Join(bundleDir, "bundle.tar.gz")
 
-	saveErr := saveCurrentBundleToDisk(bundleDir, ".bundle.tar.gz.tmp", b)
+	saveErr := saveCurrentBundleToDisk(bundleDir, ".bundle.tar.gz.tmp", raw)
 	if saveErr != nil {
 		p.log(name).Error("Failed to save new bundle to disk: %v", saveErr)
 
@@ -521,13 +548,7 @@ func (p *Plugin) saveBundleToDisk(name string, b *bundle.Bundle) error {
 	return os.Rename(tmpFile, bundleFile)
 }
 
-func saveCurrentBundleToDisk(path, filename string, b *bundle.Bundle) error {
-	var buf bytes.Buffer
-
-	if err := bundle.NewWriter(&buf).UseModulePath(true).Write(*b); err != nil {
-		return err
-	}
-
+func saveCurrentBundleToDisk(path, filename string, raw io.Reader) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err = os.MkdirAll(path, os.ModePerm)
 		if err != nil {
@@ -535,11 +556,18 @@ func saveCurrentBundleToDisk(path, filename string, b *bundle.Bundle) error {
 		}
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(path, filename), buf.Bytes(), 0644); err != nil {
-		return err
+	if raw == nil {
+		return fmt.Errorf("no raw bundle bytes to persist to disk")
 	}
 
-	return nil
+	dest, err := os.OpenFile(filepath.Join(path, filename), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	_, err = io.Copy(dest, raw)
+	return err
 }
 
 func loadBundleFromDisk(path, name string, src *Source) (*bundle.Bundle, error) {
@@ -570,9 +598,9 @@ func loadBundleFromDisk(path, name string, src *Source) (*bundle.Bundle, error) 
 	}
 }
 
-func (p *Plugin) log(name string) sdk.Logger {
+func (p *Plugin) log(name string) logging.Logger {
 	if p.logger == nil {
-		p.logger = sdk.NewStandardLogger()
+		p.logger = logging.NewStandardLogger()
 	}
 	return p.logger.WithFields(map[string]interface{}{"name": name, "plugin": Name})
 }
@@ -584,4 +612,47 @@ func (p *Plugin) getBundlePersistPath() (string, error) {
 	}
 
 	return filepath.Join(persistDir, "bundles"), nil
+}
+
+type bundleLoader interface {
+	Start(context.Context)
+	Stop(context.Context)
+	ClearCache()
+}
+
+type fileLoader struct {
+	name           string
+	path           string
+	bvc            *bundle.VerificationConfig
+	sizeLimitBytes int64
+	f              func(context.Context, string, download.Update)
+}
+
+func (fl *fileLoader) Start(context.Context) {
+	go func() {
+		var u download.Update
+		u.Metrics = metrics.New()
+		f, err := os.Open(fl.path)
+		u.Error = err
+		if err == nil {
+			defer f.Close()
+			b, err := bundle.NewReader(f).
+				WithMetrics(u.Metrics).
+				WithBundleVerificationConfig(fl.bvc).
+				WithSizeLimitBytes(fl.sizeLimitBytes).Read()
+			u.Error = err
+			if err == nil {
+				u.Bundle = &b
+			}
+		}
+		fl.f(context.Background(), fl.name, u)
+	}()
+}
+
+func (*fileLoader) Stop(context.Context) {
+
+}
+
+func (*fileLoader) ClearCache() {
+
 }

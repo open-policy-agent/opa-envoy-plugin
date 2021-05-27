@@ -2,6 +2,7 @@
 // Use of this source code is governed by an Apache2
 // license that can be found in the LICENSE file.
 
+// nolint: deadcode // Public API.
 package ast
 
 import (
@@ -888,9 +889,8 @@ func (ref Ref) Insert(x *Term, pos int) Ref {
 // other will be converted to a string.
 func (ref Ref) Extend(other Ref) Ref {
 	dst := make(Ref, len(ref)+len(other))
-	for i := range ref {
-		dst[i] = ref[i]
-	}
+	copy(dst, ref)
+
 	head := other[0].Copy()
 	head.Value = String(head.Value.(Var))
 	offset := len(ref)
@@ -907,9 +907,8 @@ func (ref Ref) Concat(terms []*Term) Ref {
 		return ref
 	}
 	cpy := make(Ref, len(ref)+len(terms))
-	for i := range ref {
-		cpy[i] = ref[i]
-	}
+	copy(cpy, ref)
+
 	for i := range terms {
 		cpy[len(ref)+i] = terms[i]
 	}
@@ -1233,10 +1232,10 @@ func (arr *Array) Until(f func(*Term) bool) bool {
 
 // Foreach calls f on each element in arr.
 func (arr *Array) Foreach(f func(*Term)) {
-	arr.Iter(func(t *Term) error {
+	_ = arr.Iter(func(t *Term) error {
 		f(t)
 		return nil
-	})
+	}) // ignore error
 }
 
 // Append appends a term to arr, returning the appended array.
@@ -1443,10 +1442,10 @@ func (s *set) Until(f func(*Term) bool) bool {
 
 // Foreach calls f on each element in s.
 func (s *set) Foreach(f func(*Term)) {
-	s.Iter(func(t *Term) error {
+	_ = s.Iter(func(t *Term) error {
 		f(t)
 		return nil
-	})
+	}) // ignore error
 }
 
 // Map returns a new Set obtained by applying f to each value in s.
@@ -1544,16 +1543,44 @@ func (s *set) insert(x *Term) {
 		// big.Float comes with a default precision of 64, and setting a
 		// larger precision results in more memory being allocated
 		// (regardless of the actual number we are parsing with SetString).
-		a, ok := new(big.Rat).SetString(string(x))
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Rat).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
@@ -1610,23 +1637,52 @@ func (s *set) get(x *Term) *Term {
 		// big.Float comes with a default precision of 64, and setting a
 		// larger precision results in more memory being allocated
 		// (regardless of the actual number we are parsing with SetString).
-		a, ok := new(big.Rat).SetString(string(x))
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Rat).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
 			}
-
 			return false
+
 		}
+
 	default:
 		equal = func(y Value) bool { return Compare(x, y) == 0 }
 	}
@@ -1860,10 +1916,10 @@ func (obj *object) Until(f func(*Term, *Term) bool) bool {
 
 // Foreach calls f for each key-value pair in the object.
 func (obj *object) Foreach(f func(*Term, *Term)) {
-	obj.Iter(func(k, v *Term) error {
+	_ = obj.Iter(func(k, v *Term) error {
 		f(k, v)
 		return nil
-	})
+	}) // ignore error
 }
 
 // Map returns a new Object constructed by mapping each element in the object
@@ -2019,16 +2075,44 @@ func (obj *object) get(k *Term) *objectElem {
 		// big.Float comes with a default precision of 64, and setting a
 		// larger precision results in more memory being allocated
 		// (regardless of the actual number we are parsing with SetString).
-		a, ok := new(big.Rat).SetString(string(x))
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Rat).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
@@ -2079,16 +2163,44 @@ func (obj *object) insert(k, v *Term) {
 		// big.Float comes with a default precision of 64, and setting a
 		// larger precision results in more memory being allocated
 		// (regardless of the actual number we are parsing with SetString).
-		a, ok := new(big.Rat).SetString(string(x))
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Rat).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0

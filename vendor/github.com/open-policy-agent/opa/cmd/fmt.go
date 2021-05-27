@@ -23,6 +23,7 @@ type fmtCommandParams struct {
 	overwrite bool
 	list      bool
 	diff      bool
+	fail      bool
 }
 
 var fmtParams = fmtCommandParams{}
@@ -45,7 +46,10 @@ original and formatted source.
 
 If the '-l' option is supplied, the 'fmt' command will output the names of files
 that would change if formatted. The '-l' option will suppress any other output
-to stdout from the 'fmt' command.`,
+to stdout from the 'fmt' command.
+
+If the '-e' option is supplied, the 'fmt' command will return a non zero exit
+code if a file would be reformatted.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		os.Exit(opaFmt(args))
 	},
@@ -111,6 +115,12 @@ func formatFile(params *fmtCommandParams, out io.Writer, filename string, info o
 	}
 
 	changed := !bytes.Equal(contents, formatted)
+
+	if params.fail {
+		if changed {
+			return newError("unexpected diff")
+		}
+	}
 
 	if params.list {
 		if changed {
@@ -180,8 +190,14 @@ func doDiff(old, new []byte) (stdout, stderr bytes.Buffer, err error) {
 	defer os.Remove(n.Name())
 	defer n.Close()
 
-	o.Write(old)
-	n.Write(new)
+	_, err = o.Write(old)
+	if err != nil {
+		return stdout, stderr, err
+	}
+	_, err = n.Write(new)
+	if err != nil {
+		return stdout, stderr, err
+	}
 
 	cmd := exec.Command("diff", "-u", o.Name(), n.Name())
 	cmd.Stdout = &stdout
@@ -209,5 +225,6 @@ func init() {
 	formatCommand.Flags().BoolVarP(&fmtParams.overwrite, "write", "w", false, "overwrite the original source file")
 	formatCommand.Flags().BoolVarP(&fmtParams.list, "list", "l", false, "list all files who would change when formatted")
 	formatCommand.Flags().BoolVarP(&fmtParams.diff, "diff", "d", false, "only display a diff of the changes")
+	formatCommand.Flags().BoolVar(&fmtParams.fail, "fail", false, "non zero exit code on reformat")
 	RootCommand.AddCommand(formatCommand)
 }

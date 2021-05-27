@@ -92,7 +92,7 @@ func (c *Compiler) WithAsBundle(enabled bool) *Compiler {
 }
 
 // WithEntrypoints sets the policy entrypoints on the compiler. Entrypoints tell the
-// compiler what rules to expect and where optimizations can be targetted. The wasm
+// compiler what rules to expect and where optimizations can be targeted. The wasm
 // target requires at least one entrypoint as does optimization.
 func (c *Compiler) WithEntrypoints(e ...string) *Compiler {
 	c.entrypoints = c.entrypoints.Append(e...)
@@ -446,7 +446,10 @@ func (c *Compiler) compileWasm(ctx context.Context) error {
 	}
 
 	// dump policy IR (if "debug" wasn't requested, debug.Witer will discard it)
-	ir.Pretty(c.debug.Writer(), policy)
+	err = ir.Pretty(c.debug.Writer(), policy)
+	if err != nil {
+		return err
+	}
 
 	// Compile the policy into a wasm binary.
 	m, err := compiler.WithPolicy(policy).WithDebug(c.debug.Writer()).Compile()
@@ -533,9 +536,7 @@ func pruneBundleEntrypoints(b *bundle.Bundle, entrypointrefs []*ast.Term) error 
 		pkgPath := mf.Parsed.Package.Path.String()
 		if imports, ok := requiredImports[pkgPath]; ok {
 			mf.Raw = nil
-			for _, newImport := range imports {
-				mf.Parsed.Imports = append(mf.Parsed.Imports, newImport)
-			}
+			mf.Parsed.Imports = append(mf.Parsed.Imports, imports...)
 		}
 	}
 
@@ -628,16 +629,27 @@ func (o *optimizer) Do(ctx context.Context) error {
 			unknowns = o.findUnknowns()
 		}
 
+		required := o.findRequiredDocuments(e)
+
 		r := rego.New(
 			rego.ParsedQuery(ast.NewBody(ast.Equality.Expr(resultsym, e))),
 			rego.PartialNamespace(o.nsprefix),
-			rego.DisableInlining(o.findRequiredDocuments(e)),
+			rego.DisableInlining(required),
 			rego.ShallowInlining(o.shallow),
 			rego.SkipPartialNamespace(true),
 			rego.ParsedUnknowns(unknowns),
 			rego.Compiler(o.compiler),
 			rego.Store(store),
 		)
+
+		o.debug.Printf("optimizer: entrypoint: %v", e)
+		o.debug.Printf("  partial-namespace: %v", o.nsprefix)
+		o.debug.Printf("  disable-inlining: %v", required)
+		o.debug.Printf("  shallow-inlining: %v", o.shallow)
+
+		for i := range unknowns {
+			o.debug.Printf("  unknown: %v", unknowns[i])
+		}
 
 		pq, err := r.Partial(ctx)
 		if err != nil {
@@ -737,7 +749,6 @@ func (o *optimizer) findUnknowns() []*ast.Term {
 				return true
 			}
 			if !refs.ContainsPrefix(prefix) {
-				o.debug.Printf("%s: marking %v as unknown", x[0].Location, prefix)
 				unknowns.AddPrefix(prefix)
 			}
 			return false

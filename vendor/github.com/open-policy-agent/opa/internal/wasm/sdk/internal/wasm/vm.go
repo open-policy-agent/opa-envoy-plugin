@@ -8,8 +8,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/bytecodealliance/wasmtime-go"
@@ -19,7 +19,7 @@ import (
 	_ "github.com/bytecodealliance/wasmtime-go/build/windows-x86_64" // to include the static lib for linking.
 
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors"
+	sdk_errors "github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/topdown"
 )
@@ -31,7 +31,6 @@ type VM struct {
 	instance             *wasmtime.Instance // Pointer to avoid unintented destruction (triggering finalizers within).
 	intHandle            *wasmtime.InterruptHandle
 	policy               []byte
-	data                 []byte
 	memory               *wasmtime.Memory
 	memoryMin            uint32
 	memoryMax            uint32
@@ -74,15 +73,27 @@ func newVM(opts vmOpts) (*VM, error) {
 	store := wasmtime.NewStore(wasmtime.NewEngineWithConfig(cfg))
 	memorytype := wasmtime.NewMemoryType(wasmtime.Limits{Min: opts.memoryMin, Max: opts.memoryMax})
 	memory := wasmtime.NewMemory(store, memorytype)
-	imports := []*wasmtime.Extern{
-		memory.AsExtern(),
-	}
 
-	v.dispatcher = newBuiltinDispatcher()
-	imports = append(imports, opaFunctions(v.dispatcher, store)...)
 	module, err := wasmtime.NewModule(store.Engine, opts.policy)
 	if err != nil {
 		return nil, err
+	}
+
+	v.dispatcher = newBuiltinDispatcher()
+	externs := opaFunctions(v.dispatcher, store)
+	imports := []*wasmtime.Extern{}
+	for _, imp := range module.Imports() {
+		if imp.Type().MemoryType() != nil {
+			imports = append(imports, memory.AsExtern())
+		}
+		if imp.Type().FuncType() == nil {
+			continue
+		}
+		if ext, ok := externs[*imp.Name()]; ok {
+			imports = append(imports, ext)
+		} else {
+			return nil, fmt.Errorf("cannot provide import %s", *imp.Name())
+		}
 	}
 
 	i, err := wasmtime.NewInstance(store, module, imports)
@@ -529,32 +540,6 @@ func (i *VM) toRegoJSON(ctx context.Context, v interface{}, free bool) (int32, e
 	return addr, nil
 }
 
-// fromRegoValue parses serialized opa values from the Wasm memory buffer into
-// Rego AST types.
-func (i *VM) fromRegoValue(ctx context.Context, addr int32, free bool) (*ast.Term, error) {
-	serialized, err := i.valueDump(ctx, addr)
-	if err != nil {
-		return nil, err
-	}
-
-	data := i.memory.UnsafeData()[serialized:]
-	n := bytes.IndexByte(data, 0)
-	if n < 0 {
-		n = 0
-	}
-
-	// Parse the result into ast types.
-	result, err := ast.ParseTerm(string(data[0:n]))
-
-	if free {
-		if err := i.free(ctx, serialized); err != nil {
-			return nil, err
-		}
-	}
-
-	return result, err
-}
-
 func (i *VM) getHeapState(ctx context.Context) (int32, error) {
 	return i.heapPtrGet(ctx)
 }
@@ -591,54 +576,71 @@ func callOrCancel(ctx context.Context, vm *VM, name string, args ...int32) (inte
 		sl[i] = args[i]
 	}
 
-	var res interface{}
-	errc := make(chan error) // unbuffered, we'll read it once at least
+	// `done` is closed when the eval is done;
+	// `ctxdone` is used to ensure that this goroutine is not running rogue;
+	// it may interact badly with other calls into this VM because of async
+	// execution. Concretely, there's no guarantee which branch of done or
+	// ctx.Done() is selected when they're both good to go. Hence, this may
+	// interrupt the VM long after _this_ functions is done. By tying them
+	// together (`<-ctxdone` at the end of callOrCancel, `close(ctxdone)`
+	// here), we can avoid that.
+	done := make(chan struct{})
+	ctxdone := make(chan struct{})
 	go func() {
-		var err error
-		// If this call into the VM ends up calling host functions (builtins not
-		// implemented in Wasm), and those panic, wasmtime will re-throw them,
-		// and this is where we deal with that:
+		select {
+		case <-ctx.Done():
+			vm.intHandle.Interrupt()
+		case <-done:
+		}
+		close(ctxdone)
+	}()
+
+	f := vm.instance.GetFunc(name)
+	// If this call into the VM ends up calling host functions (builtins not
+	// implemented in Wasm), and those panic, wasmtime will re-throw them,
+	// and this is where we deal with that:
+	res, err := func() (res interface{}, err error) {
+		defer close(done)
 		defer func() {
 			if e := recover(); e != nil {
 				switch e := e.(type) {
 				case abortError:
-					errc <- fmt.Errorf(e.message)
+					err = sdk_errors.New(sdk_errors.InternalErr, e.message)
 				case cancelledError:
-					errc <- errors.ErrCancelled
+					err = sdk_errors.New(sdk_errors.CancelledErr, e.message)
 				case builtinError:
-					if _, ok := e.err.(topdown.Halt); !ok {
-						errc <- nil
-						return
-					}
-					errc <- e.err
+					err = sdk_errors.New(sdk_errors.InternalErr, e.err.Error())
 				default:
 					panic(e)
 				}
 			}
 		}()
-		res, err = vm.instance.GetFunc(name).Call(sl...)
-		errc <- err
+		res, err = f.Call(sl...)
+		return
 	}()
-
-	select {
-	case <-ctx.Done():
-		// interrupt, wait for trap
-		vm.intHandle.Interrupt()
-	case err := <-errc:
-		if err != nil {
-			return 0, err
+	if err != nil {
+		// if last err was trap, extract information
+		var t *wasmtime.Trap
+		var msg string
+		if errors.As(err, &t) {
+			if len(t.Frames()) > 1 {
+				for _, fr := range t.Frames() {
+					if fun := fr.FuncName(); fun != nil {
+						if msg != "" {
+							msg = *fun + "/" + msg
+						} else {
+							msg = *fun
+						}
+					}
+				}
+				if msg != "" {
+					msg = "interrupted at " + msg
+				}
+			}
+			return 0, sdk_errors.New(sdk_errors.CancelledErr, msg)
 		}
-		return res, nil
+		return 0, err
 	}
-	// clear trap: reaching this, we have definitely been interrupted
-	err := <-errc
-	for err != errors.ErrCancelled && !trap(err) {
-		_, err = vm.instance.GetFunc("opa_heap_ptr_get").Call() // cheap call
-	}
-	return 0, errors.ErrCancelled
-}
-
-func trap(err error) bool {
-	t, ok := err.(*wasmtime.Trap)
-	return ok && strings.HasPrefix(t.Message(), "wasm trap: interrupt")
+	<-ctxdone // wait for the goroutine that's checking ctx
+	return res, nil
 }

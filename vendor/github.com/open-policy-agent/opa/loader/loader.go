@@ -100,20 +100,12 @@ func NewFileLoader() FileLoader {
 	}
 }
 
-type descriptor struct {
-	result  *Result
-	path    string
-	relPath string
-	depth   int
-}
-
 type fileLoader struct {
-	metrics     metrics.Metrics
-	bvc         *bundle.VerificationConfig
-	skipVerify  bool
-	descriptors []*descriptor
-	files       map[string]bundle.FileInfo
-	opts        ast.ParserOptions
+	metrics    metrics.Metrics
+	bvc        *bundle.VerificationConfig
+	skipVerify bool
+	files      map[string]bundle.FileInfo
+	opts       ast.ParserOptions
 }
 
 // WithMetrics provides the metrics instance to use while loading
@@ -178,6 +170,10 @@ func (fl fileLoader) Filtered(paths []string, filter Filter) (*Result, error) {
 // it will be treated as a normal tarball bundle. If a directory
 // is supplied it will be loaded as an unzipped bundle tree.
 func (fl fileLoader) AsBundle(path string) (*bundle.Bundle, error) {
+	path, err := fileurl.Clean(path)
+	if err != nil {
+		return nil, err
+	}
 	bundleLoader, isDir, err := GetBundleDirectoryLoader(path)
 	if err != nil {
 		return nil, err
@@ -515,7 +511,7 @@ func newResult() *Result {
 }
 
 func all(paths []string, filter Filter, f func(*Result, string, int) error) (*Result, error) {
-	errors := Errors{}
+	errs := Errors{}
 	root := newResult()
 
 	for _, path := range paths {
@@ -531,11 +527,11 @@ func all(paths []string, filter Filter, f func(*Result, string, int) error) (*Re
 			}
 		}
 
-		allRec(path, filter, &errors, loaded, 0, f)
+		allRec(path, filter, &errs, loaded, 0, f)
 	}
 
-	if len(errors) > 0 {
-		return nil, errors
+	if len(errs) > 0 {
+		return nil, errs
 	}
 
 	return root, nil

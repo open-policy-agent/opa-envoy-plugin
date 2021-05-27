@@ -22,12 +22,11 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/opa/internal/jwx/jwa"
-	"github.com/open-policy-agent/opa/internal/jwx/jws/sign"
-
 	"github.com/open-policy-agent/opa/internal/jwx/jws"
+	"github.com/open-policy-agent/opa/internal/jwx/jws/sign"
 	"github.com/open-policy-agent/opa/internal/uuid"
 	"github.com/open-policy-agent/opa/keys"
-	"github.com/open-policy-agent/opa/sdk"
+	"github.com/open-policy-agent/opa/logging"
 )
 
 const (
@@ -43,7 +42,7 @@ func DefaultTLSConfig(c Config) (*tls.Config, error) {
 		return nil, err
 	}
 	if url.Scheme == "https" {
-		t.InsecureSkipVerify = c.AllowInsureTLS
+		t.InsecureSkipVerify = c.AllowInsecureTLS
 	}
 	return t, nil
 }
@@ -141,7 +140,7 @@ type oauth2ClientCredentialsAuthPlugin struct {
 	signingKeyParsed interface{}
 	tokenCache       *oauth2Token
 	tlsSkipVerify    bool
-	logger           sdk.Logger
+	logger           logging.Logger
 }
 
 type oauth2Token struct {
@@ -231,26 +230,26 @@ func (ap *oauth2ClientCredentialsAuthPlugin) NewClient(c Config) (*http.Client, 
 
 	if ap.GrantType == "" {
 		// Use client_credentials as default to not break existing config
-		ap.GrantType = "client_credentials"
-	} else if ap.GrantType != "client_credentials" && ap.GrantType != "jwt_bearer" {
+		ap.GrantType = grantTypeClientCredentials
+	} else if ap.GrantType != grantTypeClientCredentials && ap.GrantType != grantTypeJwtBearer {
 		return nil, errors.New("grant_type must be either client_credentials or jwt_bearer")
 	}
 
-	if ap.GrantType == "jwt_bearer" || (ap.GrantType == "client_credentials" && ap.SigningKeyID != "") {
+	if ap.GrantType == grantTypeJwtBearer || (ap.GrantType == grantTypeClientCredentials && ap.SigningKeyID != "") {
 		if err = ap.parseSigningKey(c); err != nil {
 			return nil, err
 		}
 	}
 
 	// Inherit skip verify from the "parent" settings. Should this be configurable on the credentials too?
-	ap.tlsSkipVerify = c.AllowInsureTLS
+	ap.tlsSkipVerify = c.AllowInsecureTLS
 
 	ap.logger = c.logger
 
 	if !strings.HasPrefix(ap.TokenURL, "https://") {
 		return nil, errors.New("token_url required to use https scheme")
 	}
-	if ap.GrantType == "client_credentials" {
+	if ap.GrantType == grantTypeClientCredentials {
 		if ap.ClientSecret != "" && ap.SigningKeyID != "" {
 			return nil, errors.New("can only use one of client_secret and signing_key for client_credentials")
 		}
@@ -268,7 +267,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) NewClient(c Config) (*http.Client, 
 // https://tools.ietf.org/html/rfc7523
 func (ap *oauth2ClientCredentialsAuthPlugin) requestToken() (*oauth2Token, error) {
 	body := url.Values{}
-	if ap.GrantType == "jwt_bearer" {
+	if ap.GrantType == grantTypeJwtBearer {
 		authJwt, err := ap.createAuthJWT(ap.Claims, ap.signingKeyParsed)
 		if err != nil {
 			return nil, err
@@ -276,7 +275,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) requestToken() (*oauth2Token, error
 		body.Add("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 		body.Add("assertion", *authJwt)
 	} else {
-		body.Add("grant_type", "client_credentials")
+		body.Add("grant_type", grantTypeClientCredentials)
 
 		if ap.SigningKeyID != "" {
 			authJwt, err := ap.createAuthJWT(ap.Claims, ap.signingKeyParsed)
@@ -302,7 +301,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) requestToken() (*oauth2Token, error
 	}
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	if ap.GrantType == "client_credentials" && ap.ClientSecret != "" {
+	if ap.GrantType == grantTypeClientCredentials && ap.ClientSecret != "" {
 		r.SetBasicAuth(ap.ClientID, ap.ClientSecret)
 	}
 
@@ -339,7 +338,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) requestToken() (*oauth2Token, error
 
 func (ap *oauth2ClientCredentialsAuthPlugin) Prepare(req *http.Request) error {
 	minTokenLifetime := float64(10)
-	if ap.tokenCache == nil || ap.tokenCache.ExpiresAt.Sub(time.Now()).Seconds() < minTokenLifetime {
+	if ap.tokenCache == nil || time.Until(ap.tokenCache.ExpiresAt).Seconds() < minTokenLifetime {
 		ap.logger.Debug("Requesting token from token_url %v", ap.TokenURL)
 		token, err := ap.requestToken()
 		if err != nil {
@@ -385,10 +384,12 @@ func (ap *clientTLSAuthPlugin) NewClient(c Config) (*http.Client, error) {
 		return nil, errors.New("PEM data could not be found")
 	}
 
+	// nolint: staticcheck // We don't want to forbid users from using this encryption.
 	if x509.IsEncryptedPEMBlock(block) {
 		if ap.PrivateKeyPassphrase == "" {
 			return nil, errors.New("client certificate passphrase is needed, because the certificate is password encrypted")
 		}
+		// nolint: staticcheck // We don't want to forbid users from using this encryption.
 		block, err := x509.DecryptPEMBlock(block, []byte(ap.PrivateKeyPassphrase))
 		if err != nil {
 			return nil, err
@@ -463,7 +464,7 @@ type awsSigningAuthPlugin struct {
 	AWSWebIdentityCredentials *awsWebIdentityCredentialService `json:"web_identity_credentials,omitempty"`
 	AWSService                string                           `json:"service,omitempty"`
 
-	logger sdk.Logger
+	logger logging.Logger
 }
 
 func (ap *awsSigningAuthPlugin) awsCredentialService() awsCredentialService {
