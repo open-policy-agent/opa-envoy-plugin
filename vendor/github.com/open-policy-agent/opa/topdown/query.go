@@ -167,7 +167,7 @@ func (q *Query) WithPartialNamespace(ns string) *Query {
 }
 
 // WithSkipPartialNamespace disables namespacing of saved support rules that are generated
-// from the original policy (rules which are completely syntethic are still namespaced.)
+// from the original policy (rules which are completely synthetic are still namespaced.)
 func (q *Query) WithSkipPartialNamespace(yes bool) *Query {
 	q.skipSaveNamespace = yes
 	return q
@@ -336,10 +336,10 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		// Include bindings as exprs so that when caller evals the result, they
 		// can obtain values for the vars in their query.
 		bindingExprs := []*ast.Expr{}
-		e.bindings.Iter(e.bindings, func(a, b *ast.Term) error {
+		_ = e.bindings.Iter(e.bindings, func(a, b *ast.Term) error {
 			bindingExprs = append(bindingExprs, ast.Equality.Expr(a, b))
 			return nil
-		})
+		}) // cannot return error
 
 		// Sort binding expressions so that results are deterministic.
 		sort.Slice(bindingExprs, func(i, j int) bool {
@@ -368,6 +368,12 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 
 	if q.strictBuiltinErrors && len(e.builtinErrors.errs) > 0 {
 		err = e.builtinErrors.errs[0]
+	}
+
+	for i := range support {
+		sort.Slice(support[i].Rules, func(j, k int) bool {
+			return support[i].Rules[j].Compare(support[i].Rules[k]) < 0
+		})
 	}
 
 	return partials, support, err
@@ -432,10 +438,10 @@ func (q *Query) Iter(ctx context.Context, iter func(QueryResult) error) error {
 	q.metrics.Timer(metrics.RegoQueryEval).Start()
 	err := e.Run(func(e *eval) error {
 		qr := QueryResult{}
-		e.bindings.Iter(nil, func(k, v *ast.Term) error {
+		_ = e.bindings.Iter(nil, func(k, v *ast.Term) error {
 			qr[k.Value.(ast.Var)] = v
 			return nil
-		})
+		}) // cannot return error
 		return iter(qr)
 	})
 

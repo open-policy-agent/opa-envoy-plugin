@@ -21,6 +21,7 @@ import (
 const (
 	ServerHandler       = "server_handler"
 	ServerQueryCacheHit = "server_query_cache_hit"
+	SDKDecisionEval     = "sdk_decision_eval"
 	RegoQueryCompile    = "rego_query_compile"
 	RegoQueryEval       = "rego_query_eval"
 	RegoQueryParse      = "rego_query_parse"
@@ -199,7 +200,7 @@ func (t *timer) Start() {
 func (t *timer) Stop() int64 {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
-	delta := time.Now().Sub(t.start).Nanoseconds()
+	delta := time.Since(t.start).Nanoseconds()
 	t.value += delta
 	return delta
 }

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -34,6 +35,7 @@ import (
 	initload "github.com/open-policy-agent/opa/internal/runtime/init"
 	"github.com/open-policy-agent/opa/internal/uuid"
 	"github.com/open-policy-agent/opa/loader"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/discovery"
@@ -141,6 +143,9 @@ type Params struct {
 	// Logging configures the logging behaviour.
 	Logging LoggingConfig
 
+	// ConsoleLogger sets the logger implementation to use for console logs.
+	ConsoleLogger logging.Logger
+
 	// ConfigFile refers to the OPA configuration to load on startup.
 	ConfigFile string
 
@@ -178,6 +183,11 @@ type Params struct {
 	// configured bundles and plugins to be activated/ready before listening for traffic.
 	// A value of 0 or less means no wait is exercised.
 	ReadyTimeout int
+
+	// Router is the router to which handlers for the REST API are added.
+	// Router uses a first-matching-route-wins strategy, so no existing routes are overridden
+	// If it is nil, a new mux.Router will be created
+	Router *mux.Router
 }
 
 // LoggingConfig stores the configuration for OPA's logging behaviour.
@@ -246,7 +256,25 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, err
 	}
 
-	manager, err := plugins.New(config, params.ID, inmem.New(), plugins.Info(info), plugins.InitBundles(loaded.Bundles), plugins.InitFiles(loaded.Files), plugins.MaxErrors(params.ErrorLimit), plugins.GracefulShutdownPeriod(params.GracefulShutdownPeriod))
+	var consoleLogger logging.Logger
+
+	if params.ConsoleLogger == nil {
+		stdLogger := logging.NewStandardLogger()
+		stdLogger.SetFormatter(getFormatter(params.Logging.Format))
+		consoleLogger = stdLogger
+	} else {
+		consoleLogger = params.ConsoleLogger
+	}
+
+	manager, err := plugins.New(config,
+		params.ID,
+		inmem.New(),
+		plugins.Info(info),
+		plugins.InitBundles(loaded.Bundles),
+		plugins.InitFiles(loaded.Files),
+		plugins.MaxErrors(params.ErrorLimit),
+		plugins.GracefulShutdownPeriod(params.GracefulShutdownPeriod),
+		plugins.ConsoleLogger(consoleLogger))
 	if err != nil {
 		return nil, errors.Wrap(err, "config error")
 	}
@@ -330,6 +358,7 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 	defer rt.Manager.Stop(ctx)
 
 	rt.server = server.New().
+		WithRouter(rt.Params.Router).
 		WithStore(rt.Store).
 		WithManager(rt.Manager).
 		WithCompilerErrorLimit(rt.Params.ErrorLimit).
@@ -397,7 +426,11 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 		}(loop)
 	}
 
-	signalc := make(chan os.Signal)
+	// Buffer one element as os/signal uses non-blocking channel sends.
+	// This prevents potentially dropping the first element and failing to shut
+	// down gracefully. A buffer of 1 is sufficient as we're just looking for a
+	// one-time shutdown signal.
+	signalc := make(chan os.Signal, 1)
 	signal.Notify(signalc, syscall.SIGINT, syscall.SIGTERM)
 
 	rt.serverInitMtx.Lock()
@@ -545,24 +578,20 @@ func (rt *Runtime) startWatcher(ctx context.Context, paths []string, onReload fu
 }
 
 func (rt *Runtime) readWatcher(ctx context.Context, watcher *fsnotify.Watcher, paths []string, onReload func(time.Duration, error)) {
-	for {
-		select {
-		case evt := <-watcher.Events:
-
-			removalMask := (fsnotify.Remove | fsnotify.Rename)
-			mask := (fsnotify.Create | fsnotify.Write | removalMask)
-			if (evt.Op & mask) != 0 {
-				logrus.WithFields(logrus.Fields{
-					"event": evt.String(),
-				}).Debugf("registered file event")
-				t0 := time.Now()
-				removed := ""
-				if (evt.Op & removalMask) != 0 {
-					removed = evt.Name
-				}
-				err := rt.processWatcherUpdate(ctx, paths, removed)
-				onReload(time.Since(t0), err)
+	for evt := range watcher.Events {
+		removalMask := fsnotify.Remove | fsnotify.Rename
+		mask := fsnotify.Create | fsnotify.Write | removalMask
+		if (evt.Op & mask) != 0 {
+			logrus.WithFields(logrus.Fields{
+				"event": evt.String(),
+			}).Debugf("registered file event")
+			t0 := time.Now()
+			removed := ""
+			if (evt.Op & removalMask) != 0 {
+				removed = evt.Name
 			}
+			err := rt.processWatcherUpdate(ctx, paths, removed)
+			onReload(time.Since(t0), err)
 		}
 	}
 }
@@ -728,23 +757,22 @@ func onReloadPrinter(output io.Writer) func(time.Duration, error) {
 	}
 }
 
-func setupLogging(config LoggingConfig) {
-	var formatter logrus.Formatter
-	switch config.Format {
+func getFormatter(format string) logrus.Formatter {
+	switch format {
 	case "text":
-		formatter = &prettyFormatter{}
+		return &prettyFormatter{}
 	case "json-pretty":
-		formatter = &logrus.JSONFormatter{PrettyPrint: true}
+		return &logrus.JSONFormatter{PrettyPrint: true}
 	case "json":
 		fallthrough
 	default:
-		formatter = &logrus.JSONFormatter{}
+		return &logrus.JSONFormatter{}
 	}
-	logrus.SetFormatter(formatter)
-	// While the plugin console logger logs independently of the configured --log-level,
-	// it should follow the configured --log-format
-	plugins.GetConsoleLogger().SetFormatter(formatter)
+}
 
+func setupLogging(config LoggingConfig) {
+	formatter := getFormatter(config.Format)
+	logrus.SetFormatter(formatter)
 	lvl := logrus.InfoLevel
 
 	if config.Level != "" {

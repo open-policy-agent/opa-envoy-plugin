@@ -89,9 +89,10 @@ func NewFile(name, hash, alg string) FileInfo {
 // Manifest represents the manifest from a bundle. The manifest may contain
 // metadata such as the bundle revision.
 type Manifest struct {
-	Revision      string         `json:"revision"`
-	Roots         *[]string      `json:"roots,omitempty"`
-	WasmResolvers []WasmResolver `json:"wasm,omitempty"`
+	Revision      string                 `json:"revision"`
+	Roots         *[]string              `json:"roots,omitempty"`
+	WasmResolvers []WasmResolver         `json:"wasm,omitempty"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // WasmResolver maps a wasm module to an entrypoint ref.
@@ -590,7 +591,6 @@ type Writer struct {
 	usePath       bool
 	disableFormat bool
 	w             io.Writer
-	signingConfig *SigningConfig
 }
 
 // NewWriter returns a bundle writer that writes to w.

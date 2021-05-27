@@ -214,8 +214,6 @@ type QueryCompilerStageDefinition struct {
 	Stage      QueryCompilerStage
 }
 
-const compileStageMetricPrefex = "ast_compile_stage_"
-
 // NewCompiler returns a new empty compiler.
 func NewCompiler() *Compiler {
 
@@ -821,13 +819,13 @@ func (c *Compiler) checkSafetyRuleBodies() {
 		WalkRules(m, func(r *Rule) bool {
 			safe := ReservedVars.Copy()
 			safe.Update(r.Head.Args.Vars())
-			r.Body = c.checkBodySafety(safe, m, r.Body)
+			r.Body = c.checkBodySafety(safe, r.Body)
 			return false
 		})
 	}
 }
 
-func (c *Compiler) checkBodySafety(safe VarSet, m *Module, b Body) Body {
+func (c *Compiler) checkBodySafety(safe VarSet, b Body) Body {
 	reordered, unsafe := reorderBodyForSafety(c.builtins, c.GetArity, safe, b)
 	if errs := safetyErrorSlice(unsafe); len(errs) > 0 {
 		for _, err := range errs {
@@ -904,7 +902,7 @@ func parseSchema(schema interface{}) (types.Type, error) {
 			return types.N, nil
 
 		} else if subSchema.Types.Contains("object") {
-			if subSchema.PropertiesChildren != nil && len(subSchema.PropertiesChildren) > 0 {
+			if len(subSchema.PropertiesChildren) > 0 {
 				staticProps := make([]*types.StaticProperty, 0, len(subSchema.PropertiesChildren))
 				for _, pSchema := range subSchema.PropertiesChildren {
 					newtype, err := parseSchema(pSchema)
@@ -918,7 +916,15 @@ func parseSchema(schema interface{}) (types.Type, error) {
 			return types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)), nil
 
 		} else if subSchema.Types.Contains("array") {
-			if subSchema.ItemsChildren != nil && len(subSchema.ItemsChildren) > 0 {
+			if len(subSchema.ItemsChildren) > 0 {
+				if subSchema.ItemsChildrenIsSingleSchema {
+					iSchema := subSchema.ItemsChildren[0]
+					newtype, err := parseSchema(iSchema)
+					if err != nil {
+						return nil, fmt.Errorf("unexpected schema type %v", iSchema)
+					}
+					return types.NewArray(nil, newtype), nil
+				}
 				newTypes := make([]types.Type, 0, len(subSchema.ItemsChildren))
 				for i := 0; i != len(subSchema.ItemsChildren); i++ {
 					iSchema := subSchema.ItemsChildren[i]
@@ -1021,7 +1027,7 @@ func (c *Compiler) init() {
 
 	// Load the global input schema if one was provided.
 	if c.schemaSet != nil {
-		if schema := c.schemaSet.Get(InputRootRef); schema != nil {
+		if schema := c.schemaSet.Get(SchemaRootRef); schema != nil {
 			tpe, err := loadSchema(schema)
 			if err != nil {
 				c.err(NewError(TypeErr, nil, err.Error()))
@@ -1139,7 +1145,7 @@ func (c *Compiler) rewriteComprehensionTerms() {
 	f := newEqualityFactory(c.localvargen)
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
-		rewriteComprehensionTerms(f, mod)
+		_, _ = rewriteComprehensionTerms(f, mod) // ignore error
 	}
 }
 
@@ -1434,7 +1440,7 @@ func (c *Compiler) rewriteWithModifiers() {
 
 			return body, nil
 		})
-		Transform(t, mod)
+		_, _ = Transform(t, mod) // ignore error
 	}
 }
 
@@ -1788,7 +1794,7 @@ func getComprehensionIndex(dbg debug.Debug, arity func(Ref) int, candidates VarS
 	unsafe := body.Vars(SafetyCheckVisitorParams).Diff(outputs).Diff(ReservedVars)
 
 	if len(unsafe) > 0 {
-		dbg.Printf("%s: unsafe vars: %v", expr.Location, unsafe)
+		dbg.Printf("%s: comprehension index: unsafe vars: %v", expr.Location, unsafe)
 		return nil
 	}
 
@@ -1798,7 +1804,7 @@ func getComprehensionIndex(dbg debug.Debug, arity func(Ref) int, candidates VarS
 	regressionVis := newComprehensionIndexRegressionCheckVisitor(candidates)
 	regressionVis.Walk(body)
 	if regressionVis.worse {
-		dbg.Printf("%s: output vars intersect candidates", expr.Location)
+		dbg.Printf("%s: comprehension index: output vars intersect candidates", expr.Location)
 		return nil
 	}
 
@@ -1808,7 +1814,7 @@ func getComprehensionIndex(dbg debug.Debug, arity func(Ref) int, candidates VarS
 	nestedVis := newComprehensionIndexNestedCandidateVisitor(candidates)
 	nestedVis.Walk(body)
 	if nestedVis.found {
-		dbg.Printf("%s: nested comprehensions close over candidates", expr.Location)
+		dbg.Printf("%s: comprehension index: nested comprehensions close over candidates", expr.Location)
 		return nil
 	}
 
@@ -1818,7 +1824,7 @@ func getComprehensionIndex(dbg debug.Debug, arity func(Ref) int, candidates VarS
 	// empty, there is no indexing to do.
 	indexVars := candidates.Intersect(outputs)
 	if len(indexVars) == 0 {
-		dbg.Printf("%s: no index vars", expr.Location)
+		dbg.Printf("%s: comprehension index: no index vars", expr.Location)
 		return nil
 	}
 
@@ -1840,7 +1846,7 @@ func getComprehensionIndex(dbg debug.Debug, arity func(Ref) int, candidates VarS
 			debugRes[i] = r
 		}
 	}
-	dbg.Printf("%s: comprehension index built with keys: %v", expr.Location, debugRes)
+	dbg.Printf("%s: comprehension index: built with keys: %v", expr.Location, debugRes)
 	return &ComprehensionIndex{Term: term, Keys: result}
 }
 
@@ -1850,7 +1856,7 @@ type comprehensionIndexRegressionCheckVisitor struct {
 	worse      bool
 }
 
-// TOOD(tsandall): Improve this so that users can either supply this list explicitly
+// TODO(tsandall): Improve this so that users can either supply this list explicitly
 // or the information is maintained on the built-in function declaration. What we really
 // need to know is whether the built-in function allows callers to push down output
 // values or not. It's unlikely that anything outside of OPA does this today so this
@@ -1901,7 +1907,6 @@ func (vis *comprehensionIndexRegressionCheckVisitor) assertEmptyIntersection(vs 
 
 type comprehensionIndexNestedCandidateVisitor struct {
 	candidates VarSet
-	nested     bool
 	found      bool
 }
 
@@ -2144,7 +2149,7 @@ func (g *Graph) Sort() (sorted []util.T, ok bool) {
 		return g.sorted, true
 	}
 
-	sort := &graphSort{
+	sorter := &graphSort{
 		sorted: make([]util.T, 0, len(g.nodes)),
 		deps:   g.Dependencies,
 		marked: map[util.T]struct{}{},
@@ -2152,12 +2157,12 @@ func (g *Graph) Sort() (sorted []util.T, ok bool) {
 	}
 
 	for node := range g.nodes {
-		if !sort.Visit(node) {
+		if !sorter.Visit(node) {
 			return nil, false
 		}
 	}
 
-	g.sorted = sort.sorted
+	g.sorted = sorter.sorted
 	return g.sorted, true
 }
 
@@ -3074,7 +3079,7 @@ func rewriteEquals(x interface{}) {
 		}
 		return x, nil
 	})
-	Transform(t, x)
+	_, _ = Transform(t, x) // ignore error
 }
 
 // rewriteDynamics will rewrite the body so that dynamic terms (i.e., refs and

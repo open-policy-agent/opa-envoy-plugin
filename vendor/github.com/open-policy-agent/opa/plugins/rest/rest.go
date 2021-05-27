@@ -15,17 +15,17 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/open-policy-agent/opa/sdk"
-
-	"github.com/open-policy-agent/opa/keys"
-
 	"github.com/open-policy-agent/opa/internal/version"
-
+	"github.com/open-policy-agent/opa/keys"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/util"
 )
 
 const (
 	defaultResponseHeaderTimeoutSeconds = int64(10)
+
+	grantTypeClientCredentials = "client_credentials"
+	grantTypeJwtBearer         = "jwt_bearer"
 )
 
 // An HTTPAuthPlugin represents a mechanism to construct and configure HTTP authentication for a REST service
@@ -40,7 +40,7 @@ type Config struct {
 	Name                         string            `json:"name"`
 	URL                          string            `json:"url"`
 	Headers                      map[string]string `json:"headers"`
-	AllowInsureTLS               bool              `json:"allow_insecure_tls,omitempty"`
+	AllowInsecureTLS             bool              `json:"allow_insecure_tls,omitempty"`
 	ResponseHeaderTimeoutSeconds *int64            `json:"response_header_timeout_seconds,omitempty"`
 	Credentials                  struct {
 		Bearer      *bearerAuthPlugin                  `json:"bearer,omitempty"`
@@ -52,7 +52,7 @@ type Config struct {
 	} `json:"credentials"`
 
 	keys   map[string]*keys.Config
-	logger sdk.Logger
+	logger logging.Logger
 }
 
 // Equal returns true if this client config is equal to the other.
@@ -111,7 +111,7 @@ type Client struct {
 	config           Config
 	headers          map[string]string
 	authPluginLookup func(string) HTTPAuthPlugin
-	logger           sdk.Logger
+	logger           logging.Logger
 }
 
 // Name returns an option that overrides the service name on the client.
@@ -132,7 +132,7 @@ func AuthPluginLookup(l func(string) HTTPAuthPlugin) func(*Client) {
 }
 
 // Logger assigns a logger to the client
-func Logger(l sdk.Logger) func(*Client) {
+func Logger(l logging.Logger) func(*Client) {
 	return func(c *Client) {
 		c.logger = l
 	}
@@ -165,7 +165,7 @@ func New(config []byte, keys map[string]*keys.Config, opts ...func(*Client)) (Cl
 	}
 
 	if client.logger == nil {
-		client.logger = sdk.NewStandardLogger()
+		client.logger = logging.NewStandardLogger()
 	}
 	client.config.logger = client.logger
 
@@ -182,8 +182,14 @@ func (c Client) Config() *Config {
 	return &c.config
 }
 
+// SetResponseHeaderTimeout sets the "ResponseHeaderTimeout" in the http client's Transport
+func (c Client) SetResponseHeaderTimeout(timeout *int64) Client {
+	c.config.ResponseHeaderTimeoutSeconds = timeout
+	return c
+}
+
 // Logger returns the logger assigned to the Client
-func (c Client) Logger() sdk.Logger {
+func (c Client) Logger() logging.Logger {
 	return c.logger
 }
 
