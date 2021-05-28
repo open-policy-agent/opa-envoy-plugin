@@ -187,7 +187,7 @@ data:
     }]
 
     opa_container = {
-      "image": "openpolicyagent/opa:0.29.1-istio",
+      "image": "openpolicyagent/opa:0.29.2-istio",
       "name": "opa-istio",
       "args": [
         "run",
@@ -267,7 +267,7 @@ spec:
       name: admission-controller
     spec:
       containers:
-        - image: openpolicyagent/opa:0.29.1
+        - image: openpolicyagent/opa:0.29.2
           name: opa
           ports:
           - containerPort: 443
