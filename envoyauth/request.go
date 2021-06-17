@@ -160,7 +160,11 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 			if !known {
 				return nil, false, nil
 			}
+		} else {
+			logEntry.Debugf("content-type: %s parsing not supported", val)
 		}
+	} else {
+		logEntry.Debug("no content-type header supplied, performing no body parsing")
 	}
 
 	return data, false, nil
