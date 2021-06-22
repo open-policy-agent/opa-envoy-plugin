@@ -126,7 +126,7 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 				}
 			}
 
-			err := util.Unmarshal([]byte(body), &data)
+			err := util.UnmarshalJSON([]byte(body), &data)
 			if err != nil {
 				return nil, false, err
 			}

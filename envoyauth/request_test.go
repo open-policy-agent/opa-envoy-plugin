@@ -73,7 +73,7 @@ func TestGetParsedBody(t *testing.T) {
 			  "headers": {
 				"content-type": "application/json"
 			  },
-			  "body": "foo"
+			  "body": "\"foo\""
 			}
 		  }
 		}
@@ -171,12 +171,26 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
+	requestBodyWithJSONSpecialChars := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json"
+			  },
+			  "body": "[\"\\\"\", \"\\\\\", \"\\/\", \"/\", \"\\b\", \"\\f\", \"\\n\", \"\\r\", \"\\t\", \"\\u0041\"]"
+			}
+		  }
+		}
+	  }`
+
 	expectedNumber := json.Number("42")
 	expectedObject := map[string]interface{}{
 		"firstname": "foo",
 		"lastname":  "bar",
 	}
 	expectedArray := []interface{}{"hello", "opa"}
+	expectedJSONSpecialChars := []interface{}{`"`, `\`, "/", "/", "\b", "\f", "\n", "\r", "\t", "A"}
 
 	tests := map[string]struct {
 		input           *ext_authz.CheckRequest
@@ -184,16 +198,17 @@ func TestGetParsedBody(t *testing.T) {
 		isBodyTruncated bool
 		err             error
 	}{
-		"no_content_type":           {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_text":         {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_json_string":  {input: createCheckRequest(requestContentTypeJSONString), want: "foo", isBodyTruncated: false, err: nil},
-		"content_type_json_boolean": {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, isBodyTruncated: false, err: nil},
-		"content_type_json_number":  {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, isBodyTruncated: false, err: nil},
-		"content_type_json_null":    {input: createCheckRequest(requestContentTypeJSONNull), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_json_object":  {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, isBodyTruncated: false, err: nil},
-		"content_type_json_array":   {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, isBodyTruncated: false, err: nil},
-		"empty_content":             {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
-		"body_truncated":            {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
+		"no_content_type":                      {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_text":                    {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_json_string":             {input: createCheckRequest(requestContentTypeJSONString), want: "foo", isBodyTruncated: false, err: nil},
+		"content_type_json_boolean":            {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, isBodyTruncated: false, err: nil},
+		"content_type_json_number":             {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, isBodyTruncated: false, err: nil},
+		"content_type_json_null":               {input: createCheckRequest(requestContentTypeJSONNull), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_json_object":             {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, isBodyTruncated: false, err: nil},
+		"content_type_json_array":              {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, isBodyTruncated: false, err: nil},
+		"content_type_json_with_special_chars": {input: createCheckRequest(requestBodyWithJSONSpecialChars), want: expectedJSONSpecialChars, isBodyTruncated: false, err: nil},
+		"empty_content":                        {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
+		"body_truncated":                       {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
 	}
 
 	for name, tc := range tests {
