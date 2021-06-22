@@ -1,10 +1,11 @@
 # opa-envoy-plugin
 
-[![Build Status](https://github.com/open-policy-agent/opa-envoy-plugin/workflows/Post%20Merge/badge.svg?branch=master)](https://github.com/open-policy-agent/opa-envoy-plugin/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/open-policy-agent/opa-envoy-plugin)](https://goreportcard.com/report/github.com/open-policy-agent/opa-envoy-plugin)
+[![Build Status](https://github.com/open-policy-agent/opa-envoy-plugin/workflows/Post%20Merge/badge.svg?branch=main)](https://github.com/open-policy-agent/opa-envoy-plugin/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/open-policy-agent/opa-envoy-plugin)](https://goreportcard.com/report/github.com/open-policy-agent/opa-envoy-plugin)
 
 This repository contains an extended version of OPA (**OPA-Envoy**) that allows you to enforce OPA policies with Envoy.
 
 ## Issue Management
+
 Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
 
 ## Examples with Envoy-based service meshes
@@ -38,7 +39,7 @@ This section assumes you are testing with Envoy v1.10.0 or later.
 1. Install OPA-Envoy.
 
     ```bash
-    kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/opa-envoy-plugin/master/quick_start.yaml
+    kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/opa-envoy-plugin/main/quick_start.yaml
     ```
 
     The `quick_start.yaml` manifest defines the following resources:
@@ -52,7 +53,7 @@ This section assumes you are testing with Envoy v1.10.0 or later.
     about employees in a company and exposes APIs to `get` and `create` employees. More information about the app
     can be found [here](https://github.com/ashutosh-narkar/go-test-server). The deployment also includes an init container that
     installs iptables rules to redirect all container traffic through the Envoy proxy sidecar. More information can be
-    found [here](https://github.com/open-policy-agent/contrib/tree/master/envoy_iptables).
+    found [here](https://github.com/open-policy-agent/contrib/tree/main/envoy_iptables).
 
 1. Make the application accessible outside the cluster.
 

@@ -27,7 +27,7 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
 1. Install OPA-Envoy.
 
     ```bash
-    kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/opa-istio-plugin/master/examples/istio/quick_start.yaml
+    kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/opa-envoy-plugin/main/examples/istio/quick_start.yaml
     ```
 
     The `quick_start.yaml` manifest defines the following resources:

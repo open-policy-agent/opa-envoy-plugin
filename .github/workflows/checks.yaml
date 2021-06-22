@@ -3,10 +3,10 @@ name: Checks
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
-      - master
+      - main
 
 jobs:
   go-build:
@@ -44,7 +44,7 @@ jobs:
 
   deploy:
     name: Push Latest Release
-    if: github.ref == 'refs/heads/master' # only true for pushes to `master`
+    if: github.ref == 'refs/heads/main' # only true for pushes to `main`
     runs-on: ubuntu-18.04
     steps:
       - name: Check out code
