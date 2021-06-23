@@ -51,7 +51,7 @@ LDFLAGS := "-X github.com/open-policy-agent/opa/version.Version=$(VERSION) \
 
 .PHONY: all build build-darwin build-linux build-windows clean check check-fmt check-vet check-lint \
     deploy-ci docker-login generate image image-quick push push-latest tag-latest \
-    test test-cluster test-e2e update-opa update-istio-quickstart-version version
+    test test-cluster test-e2e update-istio-quickstart-version version
 
 ######################################################
 #
@@ -105,9 +105,6 @@ docker-login:
 	@echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USER} --password-stdin
 
 deploy-ci: docker-login image push tag-latest push-latest
-
-update-opa:
-	@./build/update-opa-version.sh $(TAG)
 
 update-istio-quickstart-version:
 	sed -i "/opa_container/{N;s/openpolicyagent\/opa:.*/openpolicyagent\/opa:latest-istio\"\,/;}" examples/istio/quick_start.yaml

@@ -1,0 +1,41 @@
+name: Post Merge
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate:
+    name: Update versions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Commit & Push
+        shell: bash
+        run: |
+          # Commit any changes and push as needed.
+
+          # See https://github.com/actions/checkout#push-a-commit-using-the-built-in-token
+          AUTHOR=version-tag-updater
+          git config user.name ${AUTHOR}
+          git config user.email ${AUTHOR}@github.com
+
+          # Prevent looping if the build was non-deterministic..
+          CAN_PUSH=1
+          if [[ "$(git log -1 --pretty=format:'%an')" == "${AUTHOR}" ]]; then
+              CAN_PUSH=0
+          fi
+
+          if ./build/update-opa-version.sh; then
+            if [[ "${CAN_PUSH}" == "1" ]]; then
+              git push
+            else
+              echo "Previous commit was auto-generated -- Aborting!"
+              exit 1
+            fi
+          else
+            echo "No generated changes to push!"
+          fi
