@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -201,9 +203,36 @@ func (p *envoyExtAuthzGrpcServer) compilerUpdated(txn storage.Transaction) {
 }
 
 func (p *envoyExtAuthzGrpcServer) listen() {
+	addr := p.cfg.Addr
+	if !strings.Contains(addr, "://") {
+		addr = "grpc://" + addr
+	}
+
+	parsedURL, err := url.Parse(addr)
+	if err != nil {
+		logrus.WithField("err", err).Fatal("Unable to parse url.")
+	}
 
 	// The listener is closed automatically by Serve when it returns.
-	l, err := net.Listen("tcp", p.cfg.Addr)
+	var l net.Listener
+
+	switch parsedURL.Scheme {
+	case "unix":
+		socketPath := parsedURL.Host + parsedURL.Path
+		// Recover @ prefix for abstract Unix sockets.
+		if strings.HasPrefix(parsedURL.String(), parsedURL.Scheme+"://@") {
+			socketPath = "@" + socketPath
+		} else {
+			// Remove domain socket file in case it already exists.
+			os.Remove(socketPath)
+		}
+		l, err = net.Listen("unix", socketPath)
+	case "grpc":
+		l, err = net.Listen("tcp", parsedURL.Host)
+	default:
+		err = fmt.Errorf("invalid url scheme %q", parsedURL.Scheme)
+	}
+
 	if err != nil {
 		logrus.WithField("err", err).Fatal("Unable to create listener.")
 	}
