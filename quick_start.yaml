@@ -50,7 +50,7 @@ spec:
             - "--config-path"
             - "/config/envoy.yaml"
         - name: opa-envoy
-          image: openpolicyagent/opa:0.29.4-envoy-2
+          image: openpolicyagent/opa:0.29.4-envoy
           securityContext:
             runAsUser: 1111
           volumeMounts:
