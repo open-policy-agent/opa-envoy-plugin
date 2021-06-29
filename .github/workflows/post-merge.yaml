@@ -16,7 +16,11 @@ jobs:
       - name: Commit & Push
         shell: bash
         run: |
-          # Commit any changes and push as needed.
+          # Only run this following a merge of dependabot's PR
+          if [[ "$(git log -1 --pretty=format:'%an')" != "dependabot[bot]" ]]; then
+            echo "Previous commit was not from dependabot, aborting."
+            exit 0
+          fi
 
           # See https://github.com/actions/checkout#push-a-commit-using-the-built-in-token
           AUTHOR=version-tag-updater
