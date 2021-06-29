@@ -61,7 +61,13 @@ jobs:
         run: make deploy-ci
 
   e2e:
-    name: Istio End-to-End Test
+    name: Istio End-to-End Test (${{ matrix.variant }})
+    strategy:
+      matrix:
+        include: # run tests with opa-envoy-plugin docker image built from...
+          - variant: branch # the current branch, i.e. the PR, or master
+          - variant: tag    # the version tag as put into quick_start.yaml, with no substitutions
+
     runs-on: ubuntu-18.04
     steps:
       - name: Check out code
@@ -79,14 +85,18 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y bats
 
+      - name: Use image built from main
+        run: |
           # Prepare quick_start.yaml
           make update-istio-quickstart-version
 
           # Make docker image available to k8s
           kind load docker-image openpolicyagent/opa:latest-istio
+        if: matrix.variant != 'tag'
 
       - name: Run e2e tests
         run: make test-e2e
+        timeout-minutes: 10
 
       - name: Cleanup
         run: kind delete cluster
