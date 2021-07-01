@@ -15,7 +15,7 @@ WASM_ENABLED ?= 1
 # GOPROXY=off: Don't pull anything off the network
 # see https://github.com/thepudds/go-module-knobs/blob/master/README.md
 GO := CGO_ENABLED=$(CGO_ENABLED) GO111MODULE=on GOFLAGS=-mod=vendor GOPROXY=off go
-GOVERSION := $(shell ./build/go-version.sh)
+GOVERSION := $(shell cat ./.go-version)
 GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
