@@ -108,7 +108,11 @@ func InterfaceToValue(x interface{}) (Value, error) {
 		}
 		return r, nil
 	default:
-		return nil, fmt.Errorf("ast: illegal value: %T", x)
+		ptr := util.Reference(x)
+		if err := util.RoundTrip(ptr); err != nil {
+			return nil, fmt.Errorf("ast: interface conversion: %w", err)
+		}
+		return InterfaceToValue(*ptr)
 	}
 }
 
@@ -128,12 +132,12 @@ func As(v Value, x interface{}) error {
 
 // Resolver defines the interface for resolving references to native Go values.
 type Resolver interface {
-	Resolve(ref Ref) (value interface{}, err error)
+	Resolve(ref Ref) (interface{}, error)
 }
 
 // ValueResolver defines the interface for resolving references to AST values.
 type ValueResolver interface {
-	Resolve(ref Ref) (value Value, err error)
+	Resolve(ref Ref) (Value, error)
 }
 
 // UnknownValueErr indicates a ValueResolver was unable to resolve a reference
@@ -466,7 +470,7 @@ func IsComprehension(x Value) bool {
 // ContainsRefs returns true if the Value v contains refs.
 func ContainsRefs(v interface{}) bool {
 	found := false
-	WalkRefs(v, func(r Ref) bool {
+	WalkRefs(v, func(Ref) bool {
 		found = true
 		return found
 	})
