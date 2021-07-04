@@ -37,9 +37,6 @@ var (
 	_ = v3.CodecClientType(0)
 )
 
-// define the regex for a UUID once up-front
-var _health_check_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-
 // Validate checks the field values on HealthCheck with the rules defined in
 // the proto definition for this message. If any rules are violated, an error
 // is returned.
@@ -195,6 +192,27 @@ func (m *HealthCheck) Validate() error {
 		if dur <= gt {
 			return HealthCheckValidationError{
 				field:  "NoTrafficInterval",
+				reason: "value must be greater than 0s",
+			}
+		}
+
+	}
+
+	if d := m.GetNoTrafficHealthyInterval(); d != nil {
+		dur, err := ptypes.Duration(d)
+		if err != nil {
+			return HealthCheckValidationError{
+				field:  "NoTrafficHealthyInterval",
+				reason: "value is not a valid duration",
+				cause:  err,
+			}
+		}
+
+		gt := time.Duration(0*time.Second + 0*time.Nanosecond)
+
+		if dur <= gt {
+			return HealthCheckValidationError{
+				field:  "NoTrafficHealthyInterval",
 				reason: "value must be greater than 0s",
 			}
 		}
