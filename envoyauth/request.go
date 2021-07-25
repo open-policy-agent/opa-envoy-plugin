@@ -117,11 +117,11 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 			}
 
 			if val, ok := headers["content-length"]; ok {
-				cl, err := strconv.ParseInt(val, 10, 64)
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(body)))
 				if err != nil {
 					return nil, false, err
 				}
-				if cl != -1 && cl > int64(len(body)) {
+				if truncated {
 					return nil, true, nil
 				}
 			}
@@ -160,6 +160,27 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 			if !known {
 				return nil, false, nil
 			}
+		} else if strings.Contains(val, "application/x-www-form-urlencoded") {
+			if body == "" {
+				return nil, false, nil
+			}
+
+			if val, ok := headers["content-length"]; ok {
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(body)))
+				if err != nil {
+					return nil, false, err
+				}
+				if truncated {
+					return nil, true, nil
+				}
+			}
+
+			parsed, err := url.ParseQuery(body)
+			if err != nil {
+				return nil, false, err
+			}
+
+			data = map[string][]string(parsed)
 		} else {
 			logEntry.Debugf("content-type: %s parsing not supported", val)
 		}
@@ -243,4 +264,15 @@ func findMessageInputDesc(name string, svc protoreflect.ServiceDescriptor) (prot
 		return method.Input(), nil
 	}
 	return nil, fmt.Errorf("method %q not found", name)
+}
+
+func checkIfHTTPBodyTruncated(contentLength string, bodyLength int64) (bool, error) {
+	cl, err := strconv.ParseInt(contentLength, 10, 64)
+	if err != nil {
+		return false, err
+	}
+	if cl != -1 && cl > bodyLength {
+		return true, nil
+	}
+	return false, nil
 }

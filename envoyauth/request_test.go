@@ -184,10 +184,70 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
+	requestContentTypeURLEncoded := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/x-www-form-urlencoded"
+			  },
+			  "body": "firstname=foo&lastname=bar"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeURLEncodedMultipleKeys := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/x-www-form-urlencoded"
+			  },
+			  "body": "firstname=foo&lastname=bar&lastname=foobar"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeURLEncodedTruncated := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/x-www-form-urlencoded",
+				"content-length": "1000"
+			  },
+			  "body": "firstname=foo&lastname=bar"
+			}
+		  }
+		}
+	  }`
+
+	requestContentTypeURLEncodedEmpty := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/x-www-form-urlencoded"
+			  },
+			  "body": ""
+			}
+		  }
+		}
+	  }`
 	expectedNumber := json.Number("42")
 	expectedObject := map[string]interface{}{
 		"firstname": "foo",
 		"lastname":  "bar",
+	}
+	expectedURLEncodedObject := map[string][]string{
+		"firstname": {"foo"},
+		"lastname":  {"bar"},
+	}
+	expectedURLEncodedObjectMultipleValues := map[string][]string{
+		"firstname": {"foo"},
+		"lastname":  {"bar", "foobar"},
 	}
 	expectedArray := []interface{}{"hello", "opa"}
 	expectedJSONSpecialChars := []interface{}{`"`, `\`, "/", "/", "\b", "\f", "\n", "\r", "\t", "A"}
@@ -198,17 +258,21 @@ func TestGetParsedBody(t *testing.T) {
 		isBodyTruncated bool
 		err             error
 	}{
-		"no_content_type":                      {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_text":                    {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_json_string":             {input: createCheckRequest(requestContentTypeJSONString), want: "foo", isBodyTruncated: false, err: nil},
-		"content_type_json_boolean":            {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, isBodyTruncated: false, err: nil},
-		"content_type_json_number":             {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, isBodyTruncated: false, err: nil},
-		"content_type_json_null":               {input: createCheckRequest(requestContentTypeJSONNull), want: nil, isBodyTruncated: false, err: nil},
-		"content_type_json_object":             {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, isBodyTruncated: false, err: nil},
-		"content_type_json_array":              {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, isBodyTruncated: false, err: nil},
-		"content_type_json_with_special_chars": {input: createCheckRequest(requestBodyWithJSONSpecialChars), want: expectedJSONSpecialChars, isBodyTruncated: false, err: nil},
-		"empty_content":                        {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
-		"body_truncated":                       {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
+		"no_content_type":                          {input: createCheckRequest(requestNoContentType), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_text":                        {input: createCheckRequest(requestContentTypeText), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_json_string":                 {input: createCheckRequest(requestContentTypeJSONString), want: "foo", isBodyTruncated: false, err: nil},
+		"content_type_json_boolean":                {input: createCheckRequest(requestContentTypeJSONBoolean), want: true, isBodyTruncated: false, err: nil},
+		"content_type_json_number":                 {input: createCheckRequest(requestContentTypeJSONNumber), want: expectedNumber, isBodyTruncated: false, err: nil},
+		"content_type_json_null":                   {input: createCheckRequest(requestContentTypeJSONNull), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_json_object":                 {input: createCheckRequest(requestContentTypeJSONObject), want: expectedObject, isBodyTruncated: false, err: nil},
+		"content_type_json_array":                  {input: createCheckRequest(requestContentTypeJSONArray), want: expectedArray, isBodyTruncated: false, err: nil},
+		"content_type_json_with_special_chars":     {input: createCheckRequest(requestBodyWithJSONSpecialChars), want: expectedJSONSpecialChars, isBodyTruncated: false, err: nil},
+		"empty_content":                            {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
+		"body_truncated":                           {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
+		"content_type_url_encoded":                 {input: createCheckRequest(requestContentTypeURLEncoded), want: expectedURLEncodedObject, isBodyTruncated: false, err: nil},
+		"content_type_url_encoded_empty":           {input: createCheckRequest(requestContentTypeURLEncodedEmpty), want: nil, isBodyTruncated: false, err: nil},
+		"content_type_url_encoded_multiple_values": {input: createCheckRequest(requestContentTypeURLEncodedMultipleKeys), want: expectedURLEncodedObjectMultipleValues, isBodyTruncated: false, err: nil},
+		"content_type_url_encoded_truncated":       {input: createCheckRequest(requestContentTypeURLEncodedTruncated), want: nil, isBodyTruncated: true, err: nil},
 	}
 
 	for name, tc := range tests {
