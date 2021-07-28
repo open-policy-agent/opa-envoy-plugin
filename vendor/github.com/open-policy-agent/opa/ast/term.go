@@ -399,7 +399,7 @@ func (term *Term) Hash() int {
 	return term.Value.Hash()
 }
 
-// IsGround returns true if this terms' Value is ground.
+// IsGround returns true if this term's Value is ground.
 func (term *Term) IsGround() bool {
 	return term.Value.IsGround()
 }
@@ -949,7 +949,7 @@ func (ref Ref) Compare(other Value) int {
 	return Compare(ref, other)
 }
 
-// Find returns the current value or a not found error.
+// Find returns the current value or a "not found" error.
 func (ref Ref) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return ref, nil
