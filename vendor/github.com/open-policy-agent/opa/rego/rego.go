@@ -35,8 +35,13 @@ import (
 
 const (
 	defaultPartialNamespace = "partial"
-	targetWasm              = "wasm"
 	wasmVarPrefix           = "^"
+)
+
+// nolint: deadcode,varcheck
+const (
+	targetWasm = "wasm"
+	targetRego = "rego"
 )
 
 // CompileResult represents the result of compiling a Rego query, zero or more
@@ -330,9 +335,11 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 			// Note that it could still be nil
 			ectx.rawInput = pq.r.rawInput
 		}
-		ectx.parsedInput, err = pq.r.parseRawInput(ectx.rawInput, ectx.metrics)
-		if err != nil {
-			return nil, finishFunc, err
+		if pq.r.target != targetWasm {
+			ectx.parsedInput, err = pq.r.parseRawInput(ectx.rawInput, ectx.metrics)
+			if err != nil {
+				return nil, finishFunc, err
+			}
 		}
 	}
 
@@ -1926,16 +1933,17 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 
 func (r *Rego) evalWasm(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 
-	var input *interface{}
+	input := ectx.rawInput
 	if ectx.parsedInput != nil {
-		i, err := ast.JSON(ectx.parsedInput)
-		if err != nil {
-			return nil, err
-		}
+		i := interface{}(ectx.parsedInput)
 		input = &i
 	}
-
-	result, err := r.opa.Eval(ctx, opa.EvalOpts{Metrics: r.metrics, Input: input, Time: ectx.time})
+	result, err := r.opa.Eval(ctx, opa.EvalOpts{
+		Metrics: r.metrics,
+		Input:   input,
+		Time:    ectx.time,
+		Seed:    ectx.seed,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -2454,6 +2462,14 @@ func parseStringsToRefs(s []string) ([]ast.Ref, error) {
 // was defined.
 func finishFunction(name string, bctx topdown.BuiltinContext, result *ast.Term, err error, iter func(*ast.Term) error) error {
 	if err != nil {
+		var e *HaltError
+		if errors.As(err, &e) {
+			return topdown.Halt{Err: &topdown.Error{
+				Code:     topdown.BuiltinErr,
+				Message:  fmt.Sprintf("%v: %v", name, e.Error()),
+				Location: bctx.Location,
+			}}
+		}
 		return &topdown.Error{
 			Code:     topdown.BuiltinErr,
 			Message:  fmt.Sprintf("%v: %v", name, err.Error()),

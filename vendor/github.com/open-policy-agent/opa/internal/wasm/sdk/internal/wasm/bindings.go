@@ -7,9 +7,11 @@ package wasm
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -77,21 +79,26 @@ func (d *builtinDispatcher) SetMap(m map[int32]topdown.BuiltinFunc) {
 }
 
 // Reset is called in Eval before using the builtinDispatcher.
-func (d *builtinDispatcher) Reset(ctx context.Context, ns time.Time) {
+func (d *builtinDispatcher) Reset(ctx context.Context, seed io.Reader, ns time.Time) {
 	if ns.IsZero() {
 		ns = time.Now()
 	}
+	if seed == nil {
+		seed = rand.Reader
+	}
 	d.ctx = &topdown.BuiltinContext{
-		Context:  ctx,
-		Cancel:   topdown.NewCancel(),
-		Runtime:  nil,
-		Time:     ast.NumberTerm(json.Number(strconv.FormatInt(ns.UnixNano(), 10))),
-		Metrics:  metrics.New(),
-		Cache:    make(builtins.Cache),
-		Location: nil,
-		Tracers:  nil,
-		QueryID:  0,
-		ParentID: 0,
+		Context:      ctx,
+		Metrics:      metrics.New(),
+		Seed:         seed,
+		Time:         ast.NumberTerm(json.Number(strconv.FormatInt(ns.UnixNano(), 10))),
+		Cancel:       topdown.NewCancel(),
+		Runtime:      nil,
+		Cache:        make(builtins.Cache),
+		Location:     nil,
+		Tracers:      nil,
+		QueryTracers: nil,
+		QueryID:      0,
+		ParentID:     0,
 	}
 
 }
