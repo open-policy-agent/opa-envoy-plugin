@@ -79,9 +79,6 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y bats
 
-          # Prepare quick_start.yaml
-          make update-istio-quickstart-version
-
           # Make docker image available to k8s
           kind load docker-image openpolicyagent/opa:latest-istio
 
