@@ -27,6 +27,14 @@ kubectl cluster-info --context kind-kind
 # Download and install Istio
 curl -L https://git.io/getLatestIstio | ISTIO_VERSION=${ISTIO_VERSION} sh - && mv istio-${ISTIO_VERSION} /tmp
 pushd /tmp/istio-${ISTIO_VERSION}
-bin/istioctl install -y --set profile=demo
+bin/istioctl install -y --set profile=demo || \
+  kubectl -n istio-system logs deployment/istio-ingressgateway; \
+  kubectl -n istio-system logs deployment/istio-egressgateway; \
+  kubectl -n istio-system logs deployment/istiod; \
+  exit 1
 popd
-kubectl -n istio-system wait --for=condition=available --timeout=600s --all deployment
+kubectl -n istio-system wait --for=condition=available --timeout=600s --all deployment || \
+  kubectl -n istio-system logs deployment/istio-ingressgateway; \
+  kubectl -n istio-system logs deployment/istio-egressgateway; \
+  kubectl -n istio-system logs deployment/istiod; \
+  exit 1
