@@ -100,6 +100,105 @@ var _ interface {
 	ErrorName() string
 } = TcpProtocolOptionsValidationError{}
 
+// Validate checks the field values on QuicProtocolOptions with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *QuicProtocolOptions) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	if v, ok := interface{}(m.GetMaxConcurrentStreams()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return QuicProtocolOptionsValidationError{
+				field:  "MaxConcurrentStreams",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if wrapper := m.GetInitialStreamWindowSize(); wrapper != nil {
+
+		if val := wrapper.GetValue(); val < 1 || val > 16777216 {
+			return QuicProtocolOptionsValidationError{
+				field:  "InitialStreamWindowSize",
+				reason: "value must be inside range [1, 16777216]",
+			}
+		}
+
+	}
+
+	if wrapper := m.GetInitialConnectionWindowSize(); wrapper != nil {
+
+		if val := wrapper.GetValue(); val < 1 || val > 25165824 {
+			return QuicProtocolOptionsValidationError{
+				field:  "InitialConnectionWindowSize",
+				reason: "value must be inside range [1, 25165824]",
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// QuicProtocolOptionsValidationError is the validation error returned by
+// QuicProtocolOptions.Validate if the designated constraints aren't met.
+type QuicProtocolOptionsValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e QuicProtocolOptionsValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e QuicProtocolOptionsValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e QuicProtocolOptionsValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e QuicProtocolOptionsValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e QuicProtocolOptionsValidationError) ErrorName() string {
+	return "QuicProtocolOptionsValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e QuicProtocolOptionsValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sQuicProtocolOptions.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = QuicProtocolOptionsValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = QuicProtocolOptionsValidationError{}
+
 // Validate checks the field values on UpstreamHttpProtocolOptions with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -171,6 +270,92 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = UpstreamHttpProtocolOptionsValidationError{}
+
+// Validate checks the field values on AlternateProtocolsCacheOptions with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *AlternateProtocolsCacheOptions) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	if utf8.RuneCountInString(m.GetName()) < 1 {
+		return AlternateProtocolsCacheOptionsValidationError{
+			field:  "Name",
+			reason: "value length must be at least 1 runes",
+		}
+	}
+
+	if wrapper := m.GetMaxEntries(); wrapper != nil {
+
+		if wrapper.GetValue() <= 0 {
+			return AlternateProtocolsCacheOptionsValidationError{
+				field:  "MaxEntries",
+				reason: "value must be greater than 0",
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// AlternateProtocolsCacheOptionsValidationError is the validation error
+// returned by AlternateProtocolsCacheOptions.Validate if the designated
+// constraints aren't met.
+type AlternateProtocolsCacheOptionsValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e AlternateProtocolsCacheOptionsValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e AlternateProtocolsCacheOptionsValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e AlternateProtocolsCacheOptionsValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e AlternateProtocolsCacheOptionsValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e AlternateProtocolsCacheOptionsValidationError) ErrorName() string {
+	return "AlternateProtocolsCacheOptionsValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e AlternateProtocolsCacheOptionsValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sAlternateProtocolsCacheOptions.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = AlternateProtocolsCacheOptionsValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = AlternateProtocolsCacheOptionsValidationError{}
 
 // Validate checks the field values on HttpProtocolOptions with the rules
 // defined in the proto definition for this message. If any rules are
@@ -809,6 +994,26 @@ func (m *Http3ProtocolOptions) Validate() error {
 		return nil
 	}
 
+	if v, ok := interface{}(m.GetQuicProtocolOptions()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return Http3ProtocolOptionsValidationError{
+				field:  "QuicProtocolOptions",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if v, ok := interface{}(m.GetOverrideStreamErrorOnInvalidHttpMessage()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return Http3ProtocolOptionsValidationError{
+				field:  "OverrideStreamErrorOnInvalidHttpMessage",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -884,6 +1089,18 @@ func (m *Http1ProtocolOptions_HeaderKeyFormat) Validate() error {
 			if err := v.Validate(); err != nil {
 				return Http1ProtocolOptions_HeaderKeyFormatValidationError{
 					field:  "ProperCaseWords",
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	case *Http1ProtocolOptions_HeaderKeyFormat_StatefulFormatter:
+
+		if v, ok := interface{}(m.GetStatefulFormatter()).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return Http1ProtocolOptions_HeaderKeyFormatValidationError{
+					field:  "StatefulFormatter",
 					reason: "embedded message failed validation",
 					cause:  err,
 				}

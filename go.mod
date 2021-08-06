@@ -3,7 +3,7 @@ module github.com/open-policy-agent/opa-envoy-plugin
 go 1.15
 
 require (
-	github.com/envoyproxy/go-control-plane v0.9.9-0.20210217033140-668b12f5399d
+	github.com/envoyproxy/go-control-plane v0.9.9
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/open-policy-agent/opa v0.31.0
 	github.com/peterh/liner v1.2.1 // indirect
