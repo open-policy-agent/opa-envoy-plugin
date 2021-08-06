@@ -2,7 +2,5 @@ version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
-    allow:
-      - dependency-name: github.com/open-policy-agent/opa
     schedule:
       interval: daily
