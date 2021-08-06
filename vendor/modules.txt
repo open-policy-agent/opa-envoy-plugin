@@ -11,10 +11,10 @@ github.com/bytecodealliance/wasmtime-go/build/macos-x86_64
 github.com/bytecodealliance/wasmtime-go/build/windows-x86_64
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
-# github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403
-github.com/cncf/udpa/go/udpa/annotations
-github.com/cncf/udpa/go/xds/core/v3
-# github.com/envoyproxy/go-control-plane v0.9.9-0.20210217033140-668b12f5399d
+# github.com/cncf/xds/go v0.0.0-20210312221358-fbca930ec8ed
+github.com/cncf/xds/go/udpa/annotations
+github.com/cncf/xds/go/xds/core/v3
+# github.com/envoyproxy/go-control-plane v0.9.9
 ## explicit
 github.com/envoyproxy/go-control-plane/envoy/annotations
 github.com/envoyproxy/go-control-plane/envoy/api/v2/core
@@ -200,7 +200,7 @@ golang.org/x/lint/golint
 # golang.org/x/mod v0.4.2
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.0.0-20210614182718-04defd469f4e
+# golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d
 ## explicit
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
@@ -223,7 +223,7 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.0.0-20210611083556-38a9dc6acbc6
 ## explicit
 golang.org/x/time/rate
-# golang.org/x/tools v0.1.2
+# golang.org/x/tools v0.1.5
 ## explicit
 golang.org/x/tools/cmd/goimports
 golang.org/x/tools/go/ast/astutil
@@ -237,14 +237,15 @@ golang.org/x/tools/internal/fastwalk
 golang.org/x/tools/internal/gocommand
 golang.org/x/tools/internal/gopathwalk
 golang.org/x/tools/internal/imports
+golang.org/x/tools/internal/typeparams
 # golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
-# google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c
+# google.golang.org/genproto v0.0.0-20210805201207-89edb61ffb67
 ## explicit
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.38.0
+# google.golang.org/grpc v1.39.1
 ## explicit
 google.golang.org/grpc
 google.golang.org/grpc/attributes
