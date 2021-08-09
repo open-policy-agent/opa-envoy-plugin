@@ -14,12 +14,13 @@ services:
     command:
       - run
       - --server
-      - --config-file=/opa.yaml
+      - --config-file=/opa-${EVAL_TARGET}.yaml
       - /policy.rego
     volumes:
       - ./testsrv.pb:/testsrv.pb
       - ./policy.rego:/policy.rego
-      - ./opa.yaml:/opa.yaml
+      - ./opa-wasm.yaml:/opa-wasm.yaml
+      - ./opa-rego.yaml:/opa-rego.yaml
   testsrv:
     image: testsrv:latest
     ports:

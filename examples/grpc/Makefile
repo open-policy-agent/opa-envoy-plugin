@@ -2,6 +2,7 @@ SHELL:=bash
 GRPCURL_IMAGE:=fullstorydev/grpcurl:v1.7.0
 GRPCURL=docker run --network=host -i --rm -v $$(pwd)/testsrv.pb:/testsrv.pb $(GRPCURL_IMAGE) \
   -d @ -plaintext -protoset /testsrv.pb 127.0.0.1:51051
+EVAL_TARGET?=rego
 
 all: testsrv.pb testsrv-image test-setup test test-teardown
 
@@ -14,7 +15,7 @@ testsrv.pb: testsrv/test.proto
 
 .PHONY: test-setup
 test-setup:
-	docker-compose up -d
+	EVAL_TARGET=$(EVAL_TARGET) docker-compose up -d
 
 .PHONY: test-teardown
 test-teardown:

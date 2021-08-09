@@ -27,7 +27,12 @@ type EvalContext interface {
 	SetPreparedQuery(*rego.PreparedEvalQuery)
 }
 
-//Eval - Evaluates an input against a provided EvalContext and yields result
+// EvalContextWithTarget is the interface that allows setting the evaluation's target engine.
+type EvalContextWithTarget interface {
+	Target() string
+}
+
+// Eval evaluates an input against a provided EvalContext and yields result
 func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
 	var err error
 
@@ -87,13 +92,18 @@ func constructPreparedQuery(evalContext EvalContext, txn storage.Transaction, m 
 	var pq rego.PreparedEvalQuery
 
 	evalContext.PreparedQueryDoOnce().Do(func() {
+		target := "rego"
+		if ec, ok := evalContext.(EvalContextWithTarget); ok {
+			target = ec.Target()
+		}
 		opts = append(opts,
 			rego.Metrics(m),
 			rego.ParsedQuery(evalContext.ParsedQuery()),
 			rego.Compiler(evalContext.Compiler()),
 			rego.Store(evalContext.Store()),
 			rego.Transaction(txn),
-			rego.Runtime(evalContext.Runtime()))
+			rego.Runtime(evalContext.Runtime()),
+			rego.Target(target))
 
 		r := rego.New(opts...)
 

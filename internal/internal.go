@@ -41,10 +41,13 @@ import (
 	"github.com/open-policy-agent/opa/util"
 )
 
-const defaultAddr = ":9191"
-const defaultPath = "envoy/authz/allow"
-const defaultDryRun = false
-const defaultEnableReflection = false
+const (
+	defaultAddr             = ":9191"
+	defaultPath             = "envoy/authz/allow"
+	defaultDryRun           = false
+	defaultEnableReflection = false
+	defaultEvalTarget       = "rego"
+)
 
 // PluginName is the name to register with the OPA plugin manager
 const PluginName = "envoy_ext_authz_grpc"
@@ -58,6 +61,7 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 		Addr:             defaultAddr,
 		DryRun:           defaultDryRun,
 		EnableReflection: defaultEnableReflection,
+		EvalTarget:       defaultEvalTarget,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -133,6 +137,7 @@ type Config struct {
 	Path             string `json:"path"`
 	DryRun           bool   `json:"dry-run"`
 	EnableReflection bool   `json:"enable-reflection"`
+	EvalTarget       string `json:"eval-target"`
 	parsedQuery      ast.Body
 	ProtoDescriptor  string `json:"proto-descriptor"`
 	protoSet         *protoregistry.Files
@@ -146,6 +151,8 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQueryDoOnce    *sync.Once
 	interQueryBuiltinCache iCache.InterQueryCache
 }
+
+var _ envoyauth.EvalContextWithTarget = (*envoyExtAuthzGrpcServer)(nil)
 
 type envoyExtAuthzV2Wrapper struct {
 	v3 *envoyExtAuthzGrpcServer
@@ -165,6 +172,10 @@ func (p *envoyExtAuthzGrpcServer) Compiler() *ast.Compiler {
 
 func (p *envoyExtAuthzGrpcServer) Runtime() *ast.Term {
 	return p.manager.Info
+}
+
+func (p *envoyExtAuthzGrpcServer) Target() string {
+	return p.cfg.EvalTarget
 }
 
 func (p *envoyExtAuthzGrpcServer) PreparedQueryDoOnce() *sync.Once {
@@ -243,6 +254,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 		"path":              p.cfg.Path,
 		"dry-run":           p.cfg.DryRun,
 		"enable-reflection": p.cfg.EnableReflection,
+		"eval-target":       p.cfg.EvalTarget,
 	}).Info("Starting gRPC server.")
 
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
