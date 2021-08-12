@@ -1,0 +1,15 @@
+############################################################
+# IstioOperator configuration with CUSTOM AuthZ provider that will query OPA.
+############################################################
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  namespace: istio-system
+  name: istiocontrolplane
+spec:
+  meshConfig:
+    extensionProviders:
+      - name: "opa-istio"
+        envoyExtAuthzGrpc:
+          service: "external-authz-grpc.local"
+          port: "9191"

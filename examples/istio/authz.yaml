@@ -1,0 +1,11 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: opa-istio
+spec:
+  action: CUSTOM
+  provider:
+    name: "opa-istio"
+  rules:
+    # An empty rule applies to all requests
+    - {}

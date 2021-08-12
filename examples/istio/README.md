@@ -18,11 +18,33 @@ availability) in order to perform the authorization check.
 
 ![arch](./arch.png)
 
+See Istio's [External Authoriation](https://istio.io/latest/docs/tasks/security/authorization/authz-custom/) documentation and [Better External Authorization
+](https://istio.io/latest/blog/2021/better-external-authz/) blog post for more information about the Istio configuration.
+
 ## Quick Start
 
-This section assumes you are testing with Istio v1.8.0 or later.
+This section assumes you are testing with Istio v1.9.0 or later. (Support for CUSTOM AuthorizationPolicies is required.)
 
-This section assumes you have Istio deployed on top of Kubernetes. See Istio's [Quick Start](https://istio.io/docs/setup/kubernetes/install/kubernetes/) page to get started.
+This section installs Istio using the [Istio operator](https://istio.io/latest/docs/setup/install/operator/) on top of Kubernetes.
+
+1. Install Istio operator
+
+   ```bash
+   kubectl create namespace istio-system  # Not needed with Istio v1.10+, created by operator automatically
+   istioctl operator init
+   ```
+
+   Create the IstioOperator resource to create the Istio control plane. The configuration includes an `envoyExtAuthzGrpc` extension provider named `opa-istio` for performing external authorization.
+
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/opa-envoy-plugin/main/examples/istio/istiooperator.yaml
+   ```
+
+   Wait for Istio to finish installing. The following command should show `HEALTHY`:
+
+   ```bash
+   kubectl get -n istio-system istiooperator istiocontrolplane -o 'jsonpath={.status.status}{"\n"}'
+   ```
 
 1. Install OPA-Envoy.
 
@@ -32,9 +54,9 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
 
     The `quick_start.yaml` manifest defines the following resources:
 
-    * External Authorization Filter to direct authorization checks to the OPA-Envoy sidecar. See `kubectl -n istio-system get envoyfilter ext-authz` for details.
-
     * Kubernetes namespace (`opa-istio`) for OPA-Envoy control plane components.
+
+    * A localhost `external-authz-grpc-local` ServiceEntry which is referenced by the `envoyExtAuthzGrpc` extension provider.
 
     * Kubernetes admission controller in the `opa-istio` namespace that automatically injects the OPA-Envoy sidecar into pods in namespaces labelled with `opa-istio-injection=enabled`.
 
@@ -45,6 +67,14 @@ This section assumes you have Istio deployed on top of Kubernetes. See Istio's [
     ```bash
     kubectl label namespace default opa-istio-injection="enabled"
     kubectl label namespace default istio-injection="enabled"
+    ```
+
+1.  Create an CUSTOM AuthorizationPolicy that references the `opa-istio` provider in the namespace where the app will be deployed, e.g., `default`.
+
+    This sample policy sends all requests through OPA (an empty rule is used), but the rules can be customized to use OPA for only some requests.
+
+    ```bash
+    kubectl apply -n default -f https://raw.githubusercontent.com/open-policy-agent/opa-envoy-plugin/main/examples/istio/authz.yaml
     ```
 
 1. Deploy the BookInfo application and make it accessible outside the cluster.
