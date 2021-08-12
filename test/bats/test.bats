@@ -6,6 +6,15 @@ BATS_TESTS_DIR=test/bats/tests
 WAIT_TIME=60
 SLEEP_TIME=1
 
+@test "deploy Istio control plane with operator" {
+  run kubectl apply -f examples/istio/istiooperator.yaml
+  assert_success
+
+  cmd='[[ $(kubectl get -n istio-system istiooperator istiocontrolplane -o "jsonpath={.status.status}") == "HEALTHY" ]]'
+  wait_for_process $WAIT_TIME $SLEEP_TIME "$cmd"
+  assert_success
+}
+
 @test "install OPA-Envoy" {
   run kubectl apply -f examples/istio/quick_start.yaml
   assert_success
@@ -16,6 +25,11 @@ SLEEP_TIME=1
   assert_success
 
   run kubectl label namespace default istio-injection="enabled"
+  assert_success
+}
+
+@test "add AuthorizationPolicy to default namespace for external authorization" {
+  run kubectl apply -n default -f examples/istio/authz.yaml
   assert_success
 }
 
