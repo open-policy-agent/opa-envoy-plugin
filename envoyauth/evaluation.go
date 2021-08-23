@@ -37,6 +37,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		}
 
 		result.TxnID = txn.ID()
+		result.Txn = txn
 
 		logrus.WithFields(logrus.Fields{
 			"input": input,

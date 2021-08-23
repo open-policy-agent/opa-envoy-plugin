@@ -27,6 +27,7 @@ func LogDecision(ctx context.Context, manager *plugins.Manager, info *server.Inf
 		return nil
 	}
 
+	info.Txn = result.Txn
 	info.Revision = result.Revision
 
 	bundles := map[string]server.BundleInfo{}

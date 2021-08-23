@@ -9,6 +9,7 @@ import (
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 	"github.com/open-policy-agent/opa/metrics"
+	"github.com/open-policy-agent/opa/storage"
 )
 
 // EvalResult - Captures the result from evaluating a query against an input
@@ -17,6 +18,7 @@ type EvalResult struct {
 	Revisions  map[string]string
 	DecisionID string
 	TxnID      uint64
+	Txn        storage.Transaction
 	Decision   interface{}
 	Metrics    metrics.Metrics
 }
