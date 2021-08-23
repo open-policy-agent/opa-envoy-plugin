@@ -34,15 +34,14 @@ func NewEvalResult() (*EvalResult, StopFunc, error) {
 		Metrics: metrics.New(),
 	}
 	er.DecisionID, err = util.UUID4()
-
 	if err != nil {
-		return nil, func() {}, err
+		return nil, nil, err
 	}
 
 	er.Metrics.Timer(metrics.ServerHandler).Start()
 
 	stop := func() {
-		er.Metrics.Timer(metrics.ServerHandler).Stop()
+		_ = er.Metrics.Timer(metrics.ServerHandler).Stop()
 	}
 
 	return &er, stop, nil
