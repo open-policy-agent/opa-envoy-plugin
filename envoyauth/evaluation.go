@@ -29,47 +29,57 @@ type EvalContext interface {
 
 //Eval - Evaluates an input against a provided EvalContext and yields result
 func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
+	var err error
 
-	err := storage.Txn(ctx, evalContext.Store(), storage.TransactionParams{}, func(txn storage.Transaction) error {
-		err := getRevision(ctx, evalContext.Store(), txn, result)
+	if result.Txn == nil {
+		var txn storage.Transaction
+		var txnClose TransactionCloser
+		txn, txnClose, err = result.GetTxn(ctx, evalContext.Store())
 		if err != nil {
+			logrus.WithField("err", err).Error("Unable to start new storage transaction.")
 			return err
 		}
+		defer txnClose(ctx, err)
+		result.Txn = txn
+	}
 
-		result.TxnID = txn.ID()
+	err = getRevision(ctx, evalContext.Store(), result.Txn, result)
+	if err != nil {
+		return err
+	}
 
-		logrus.WithFields(logrus.Fields{
-			"input": input,
-			"query": evalContext.ParsedQuery().String(),
-			"txn":   result.TxnID,
-		}).Debug("Executing policy query.")
+	result.TxnID = result.Txn.ID()
 
-		err = constructPreparedQuery(evalContext, txn, result.Metrics, opts)
-		if err != nil {
-			return err
-		}
+	logrus.WithFields(logrus.Fields{
+		"input": input,
+		"query": evalContext.ParsedQuery().String(),
+		"txn":   result.TxnID,
+	}).Debug("Executing policy query.")
 
-		rs, err := evalContext.PreparedQuery().Eval(
-			ctx,
-			rego.EvalParsedInput(input),
-			rego.EvalTransaction(txn),
-			rego.EvalMetrics(result.Metrics),
-			rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
-		)
+	err = constructPreparedQuery(evalContext, result.Txn, result.Metrics, opts)
+	if err != nil {
+		return err
+	}
 
-		if err != nil {
-			return err
-		} else if len(rs) == 0 {
-			return fmt.Errorf("undefined decision")
-		} else if len(rs) > 1 {
-			return fmt.Errorf("multiple evaluation results")
-		}
+	var rs rego.ResultSet
+	rs, err = evalContext.PreparedQuery().Eval(
+		ctx,
+		rego.EvalParsedInput(input),
+		rego.EvalTransaction(result.Txn),
+		rego.EvalMetrics(result.Metrics),
+		rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
+	)
 
-		result.Decision = rs[0].Expressions[0].Value
-		return nil
-	})
+	if err != nil {
+		return err
+	} else if len(rs) == 0 {
+		return fmt.Errorf("undefined decision")
+	} else if len(rs) > 1 {
+		return fmt.Errorf("multiple evaluation results")
+	}
 
-	return err
+	result.Decision = rs[0].Expressions[0].Value
+	return nil
 }
 
 func constructPreparedQuery(evalContext EvalContext, txn storage.Transaction, m metrics.Metrics, opts []func(*rego.Rego)) error {

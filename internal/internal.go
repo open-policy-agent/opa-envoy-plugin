@@ -266,6 +266,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz_v3.C
 
 func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*ext_authz_v3.CheckResponse, func() *rpc_status.Status, error) {
 	var err error
+	var evalErr error
 	start := time.Now()
 
 	result, stopeval, err := envoyauth.NewEvalResult()
@@ -273,6 +274,15 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		logrus.WithField("err", err).Error("Unable to start new evaluation.")
 		return nil, func() *rpc_status.Status { return nil }, err
 	}
+
+	txn, txnClose, err := result.GetTxn(ctx, p.Store())
+	if err != nil {
+		logrus.WithField("err", err).Error("Unable to start new storage transaction.")
+		return nil, func() *rpc_status.Status { return nil }, err
+	}
+
+	result.Txn = txn
+
 	logEntry := logrus.WithField("decision-id", result.DecisionID)
 
 	var input map[string]interface{}
@@ -281,11 +291,13 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		stopeval()
 		logErr := p.log(ctx, input, result, err)
 		if logErr != nil {
+			_ = txnClose(ctx, logErr) // Ignore error
 			return &rpc_status.Status{
 				Code:    int32(code.Code_UNKNOWN),
 				Message: logErr.Error(),
 			}
 		}
+		_ = txnClose(ctx, evalErr) // Ignore error
 		return nil
 	}
 
@@ -306,6 +318,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	err = envoyauth.Eval(ctx, p, inputValue, result)
 	if err != nil {
+		evalErr = err
 		return nil, stop, err
 	}
 

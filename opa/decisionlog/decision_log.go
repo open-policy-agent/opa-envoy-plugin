@@ -37,6 +37,7 @@ func LogDecision(ctx context.Context, manager *plugins.Manager, info *server.Inf
 
 	info.DecisionID = result.DecisionID
 	info.Metrics = result.Metrics
+	info.Txn = result.Txn
 
 	if err != nil {
 		switch err.(type) {
