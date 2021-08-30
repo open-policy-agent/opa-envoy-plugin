@@ -1,6 +1,7 @@
 package envoyauth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 	"github.com/open-policy-agent/opa/metrics"
+	"github.com/open-policy-agent/opa/storage"
 )
 
 // EvalResult - Captures the result from evaluating a query against an input
@@ -19,10 +21,14 @@ type EvalResult struct {
 	TxnID      uint64
 	Decision   interface{}
 	Metrics    metrics.Metrics
+	Txn        storage.Transaction
 }
 
 // StopFunc should be called as soon as the evaluation is finished
 type StopFunc = func()
+
+// TransactionCloser should be called to abort the transaction
+type TransactionCloser func(ctx context.Context, err error) error
 
 // NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics
 func NewEvalResult() (*EvalResult, StopFunc, error) {
@@ -34,16 +40,39 @@ func NewEvalResult() (*EvalResult, StopFunc, error) {
 	er.DecisionID, err = util.UUID4()
 
 	if err != nil {
-		return nil, func() {}, err
+		return nil, nil, err
 	}
 
 	er.Metrics.Timer(metrics.ServerHandler).Start()
 
 	stop := func() {
-		er.Metrics.Timer(metrics.ServerHandler).Stop()
+		_ = er.Metrics.Timer(metrics.ServerHandler).Stop()
 	}
 
 	return &er, stop, nil
+}
+
+// GetTxn creates a read transaction suitable for the configured EvalResult object
+func (result *EvalResult) GetTxn(ctx context.Context, store storage.Store) (storage.Transaction, TransactionCloser, error) {
+	params := storage.TransactionParams{}
+
+	noopCloser := func(ctx context.Context, err error) error {
+		return nil // no-op default
+	}
+
+	txn, err := store.NewTransaction(ctx, params)
+	if err != nil {
+		return nil, noopCloser, err
+	}
+
+	// Setup a closer function that will abort the transaction.
+	closer := func(ctx context.Context, txnErr error) error {
+		store.Abort(ctx, txn)
+		result.Txn = nil
+		return nil
+	}
+
+	return txn, closer, nil
 }
 
 func (result *EvalResult) invalidDecisionErr() error {
