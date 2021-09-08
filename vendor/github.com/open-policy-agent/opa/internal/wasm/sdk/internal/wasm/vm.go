@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/bytecodealliance/wasmtime-go"
@@ -19,11 +20,13 @@ import (
 	sdk_errors "github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/topdown/cache"
 )
 
 // VM is a wrapper around a Wasm VM instance
 type VM struct {
 	dispatcher           *builtinDispatcher
+	engine               *wasmtime.Engine
 	store                *wasmtime.Store
 	instance             *wasmtime.Instance // Pointer to avoid unintented destruction (triggering finalizers within).
 	intHandle            *wasmtime.InterruptHandle
@@ -65,12 +68,10 @@ type vmOpts struct {
 	memoryMax      uint32
 }
 
-func newVM(opts vmOpts) (*VM, error) {
+func newVM(opts vmOpts, engine *wasmtime.Engine) (*VM, error) {
 	ctx := context.Background()
-	v := &VM{}
-	cfg := wasmtime.NewConfig()
-	cfg.SetInterruptable(true)
-	store := wasmtime.NewStore(wasmtime.NewEngineWithConfig(cfg))
+	v := &VM{engine: engine}
+	store := wasmtime.NewStore(engine)
 	memorytype := wasmtime.NewMemoryType(wasmtime.Limits{Min: opts.memoryMin, Max: opts.memoryMax})
 	memory, err := wasmtime.NewMemory(store, memorytype)
 	if err != nil {
@@ -82,24 +83,19 @@ func newVM(opts vmOpts) (*VM, error) {
 		return nil, err
 	}
 
+	linker := wasmtime.NewLinker(store.Engine)
 	v.dispatcher = newBuiltinDispatcher()
 	externs := opaFunctions(v.dispatcher, store)
-	imports := []wasmtime.AsExtern{}
-	for _, imp := range module.Type().Imports() {
-		if imp.Type().MemoryType() != nil {
-			imports = append(imports, memory)
-		}
-		if imp.Type().FuncType() == nil {
-			continue
-		}
-		if ext, ok := externs[*imp.Name()]; ok {
-			imports = append(imports, ext)
-		} else {
-			return nil, fmt.Errorf("cannot provide import %s", *imp.Name())
+	for name, extern := range externs {
+		if err := linker.Define("env", name, extern); err != nil {
+			return nil, fmt.Errorf("linker: env.%s: %w", name, err)
 		}
 	}
+	if err := linker.Define("env", "memory", memory); err != nil {
+		return nil, fmt.Errorf("linker: env.memory: %w", err)
+	}
 
-	i, err := wasmtime.NewInstance(store, module, imports)
+	i, err := linker.Instantiate(store, module)
 	if err != nil {
 		return nil, err
 	}
@@ -267,9 +263,15 @@ func getABIVersion(i *wasmtime.Instance, store wasmtime.Storelike) (int32, int32
 
 // Eval performs an evaluation of the specified entrypoint, with any provided
 // input, and returns the resulting value dumped to a string.
-func (i *VM) Eval(ctx context.Context, entrypoint int32, input *interface{}, metrics metrics.Metrics, seed io.Reader, ns time.Time) ([]byte, error) {
+func (i *VM) Eval(ctx context.Context,
+	entrypoint int32,
+	input *interface{},
+	metrics metrics.Metrics,
+	seed io.Reader,
+	ns time.Time,
+	iqbCache cache.InterQueryCache) ([]byte, error) {
 	if i.abiMinorVersion < int32(2) {
-		return i.evalCompat(ctx, entrypoint, input, metrics, seed, ns)
+		return i.evalCompat(ctx, entrypoint, input, metrics, seed, ns, iqbCache)
 	}
 
 	metrics.Timer("wasm_vm_eval").Start()
@@ -311,7 +313,7 @@ func (i *VM) Eval(ctx context.Context, entrypoint int32, input *interface{}, met
 	// make use of it (e.g. `http.send`); and it will spawn a go routine
 	// cancelling the builtins that use topdown.Cancel, when the context is
 	// cancelled.
-	i.dispatcher.Reset(ctx, seed, ns)
+	i.dispatcher.Reset(ctx, seed, ns, iqbCache)
 
 	metrics.Timer("wasm_vm_eval_call").Start()
 	resultAddr, err := i.evalOneOff(ctx, int32(entrypoint), i.dataAddr, inputAddr, inputLen, heapPtr)
@@ -333,7 +335,13 @@ func (i *VM) Eval(ctx context.Context, entrypoint int32, input *interface{}, met
 // evalCompat evaluates a policy using multiple calls into the VM to set the stage.
 // It's been superceded with ABI version 1.2, but still here for compatibility with
 // Wasm modules lacking the needed export (i.e., ABI 1.1).
-func (i *VM) evalCompat(ctx context.Context, entrypoint int32, input *interface{}, metrics metrics.Metrics, seed io.Reader, ns time.Time) ([]byte, error) {
+func (i *VM) evalCompat(ctx context.Context,
+	entrypoint int32,
+	input *interface{},
+	metrics metrics.Metrics,
+	seed io.Reader,
+	ns time.Time,
+	iqbCache cache.InterQueryCache) ([]byte, error) {
 	metrics.Timer("wasm_vm_eval").Start()
 	defer metrics.Timer("wasm_vm_eval").Stop()
 
@@ -343,7 +351,7 @@ func (i *VM) evalCompat(ctx context.Context, entrypoint int32, input *interface{
 	// make use of it (e.g. `http.send`); and it will spawn a go routine
 	// cancelling the builtins that use topdown.Cancel, when the context is
 	// cancelled.
-	i.dispatcher.Reset(ctx, seed, ns)
+	i.dispatcher.Reset(ctx, seed, ns, iqbCache)
 
 	err := i.setHeapState(ctx, i.evalHeapPtr)
 	if err != nil {
@@ -416,7 +424,7 @@ func (i *VM) SetPolicyData(ctx context.Context, opts vmOpts) error {
 
 	if !bytes.Equal(opts.policy, i.policy) {
 		// Swap the instance to a new one, with new policy.
-		n, err := newVM(opts)
+		n, err := newVM(opts, i.engine)
 		if err != nil {
 			return err
 		}
@@ -720,32 +728,34 @@ func callOrCancel(ctx context.Context, vm *VM, name string, args ...int32) (inte
 	if err != nil {
 		// if last err was trap, extract information
 		var t *wasmtime.Trap
-		var msg string
 		if errors.As(err, &t) {
-			if len(t.Frames()) > 1 {
-				for _, fr := range t.Frames() {
-					if fun := fr.FuncName(); fun != nil {
-						if msg != "" {
-							msg = *fun + "/" + msg
-						} else {
-							msg = *fun
-						}
-					}
-				}
-				if msg != "" {
-					// TODO(sr): Out of bounds memory access is a trap, too!
-					// This "interrupted at" is a bit misleading, however, currently
-					// the only way to fix this is by looking at the string
-					// `t.Error()` which also contains a (long, prettily) rendered
-					// backtrace.
-					// See also https://github.com/bytecodealliance/wasmtime-go/issues/63
-					msg = "interrupted at " + msg
-				}
+			code := t.Code()
+			if code != nil && *code == wasmtime.Interrupt {
+				return 0, sdk_errors.New(sdk_errors.CancelledErr, getStack(t.Frames(), "interrupted"))
 			}
-			return 0, sdk_errors.New(sdk_errors.CancelledErr, msg)
+			return 0, sdk_errors.New(sdk_errors.InternalErr, getStack(t.Frames(), "trapped"))
 		}
 		return 0, err
 	}
 	<-ctxdone // wait for the goroutine that's checking ctx
 	return res, nil
+}
+
+func getStack(fs []*wasmtime.Frame, desc string) string {
+	var b strings.Builder
+	b.WriteString(desc)
+	if len(fs) > 1 {
+		b.WriteString(" at ")
+		for i := len(fs) - 1; i >= 0; i-- { // backwards
+			fr := fs[i]
+			if fun := fr.FuncName(); fun != nil {
+				if i != len(fs)-1 {
+					b.WriteRune('/')
+				}
+				b.WriteString(*fun)
+
+			}
+		}
+	}
+	return b.String()
 }

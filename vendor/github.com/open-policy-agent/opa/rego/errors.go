@@ -16,3 +16,9 @@ func (h *HaltError) Error() string {
 func NewHaltError(err error) error {
 	return &HaltError{err: err}
 }
+
+// ErrorDetails interface is satisfied by an error that provides further
+// details.
+type ErrorDetails interface {
+	Lines() []string
+}
