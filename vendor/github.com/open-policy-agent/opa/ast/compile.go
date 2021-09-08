@@ -867,7 +867,9 @@ func (c *Compiler) checkSafetyRuleHeads() {
 	}
 }
 
-func compileSchema(goSchema interface{}) (*gojsonschema.Schema, error) {
+func compileSchema(goSchema interface{}, allowNet []string) (*gojsonschema.Schema, error) {
+	gojsonschema.SetAllowNet(allowNet)
+
 	var refLoader gojsonschema.JSONLoader
 	sl := gojsonschema.NewSchemaLoader()
 
@@ -878,9 +880,50 @@ func compileSchema(goSchema interface{}) (*gojsonschema.Schema, error) {
 	}
 	schemasCompiled, err := sl.Compile(refLoader)
 	if err != nil {
-		return nil, fmt.Errorf("unable to compile the schema due to: %w", err)
+		return nil, fmt.Errorf("unable to compile the schema: %w", err)
 	}
 	return schemasCompiled, nil
+}
+
+func mergeSchemas(schemas ...*gojsonschema.SubSchema) (*gojsonschema.SubSchema, error) {
+	if len(schemas) == 0 {
+		return nil, nil
+	}
+	var result = schemas[0]
+
+	for i := range schemas {
+		if len(schemas[i].PropertiesChildren) > 0 {
+			if !schemas[i].Types.Contains("object") {
+				if err := schemas[i].Types.Add("object"); err != nil {
+					return nil, fmt.Errorf("unable to set the type in schemas")
+				}
+			}
+		} else if len(schemas[i].ItemsChildren) > 0 {
+			if !schemas[i].Types.Contains("array") {
+				if err := schemas[i].Types.Add("array"); err != nil {
+					return nil, fmt.Errorf("unable to set the type in schemas")
+				}
+			}
+		}
+	}
+
+	for i := 1; i < len(schemas); i++ {
+		if result.Types.String() != schemas[i].Types.String() {
+			return nil, fmt.Errorf("unable to merge these schemas: type mismatch: %v and %v", result.Types.String(), schemas[i].Types.String())
+		} else if result.Types.Contains("object") && len(result.PropertiesChildren) > 0 && schemas[i].Types.Contains("object") && len(schemas[i].PropertiesChildren) > 0 {
+			result.PropertiesChildren = append(result.PropertiesChildren, schemas[i].PropertiesChildren...)
+		} else if result.Types.Contains("array") && len(result.ItemsChildren) > 0 && schemas[i].Types.Contains("array") && len(schemas[i].ItemsChildren) > 0 {
+			for j := 0; j < len(schemas[i].ItemsChildren); j++ {
+				if len(result.ItemsChildren)-1 < j && !(len(schemas[i].ItemsChildren)-1 < j) {
+					result.ItemsChildren = append(result.ItemsChildren, schemas[i].ItemsChildren[j])
+				}
+				if result.ItemsChildren[j].Types.String() != schemas[i].ItemsChildren[j].Types.String() {
+					return nil, fmt.Errorf("unable to merge these schemas")
+				}
+			}
+		}
+	}
+	return result, nil
 }
 
 func parseSchema(schema interface{}) (types.Type, error) {
@@ -892,6 +935,61 @@ func parseSchema(schema interface{}) (types.Type, error) {
 	// Handle referenced schemas, returns directly when a $ref is found
 	if subSchema.RefSchema != nil {
 		return parseSchema(subSchema.RefSchema)
+	}
+
+	// Handle anyOf
+	if subSchema.AnyOf != nil {
+		var orType types.Type
+
+		// If there is a core schema, find its type first
+		if subSchema.Types.IsTyped() {
+			copySchema := *subSchema
+			copySchemaRef := &copySchema
+			copySchemaRef.AnyOf = nil
+			coreType, err := parseSchema(copySchemaRef)
+			if err != nil {
+				return nil, fmt.Errorf("unexpected schema type %v: %w", subSchema, err)
+			}
+
+			// Only add Object type with static props to orType
+			if objType, ok := coreType.(*types.Object); ok {
+				if objType.StaticProperties() != nil && objType.DynamicProperties() == nil {
+					orType = types.Or(orType, coreType)
+				}
+			}
+		}
+
+		// Iterate through every property of AnyOf and add it to orType
+		for _, pSchema := range subSchema.AnyOf {
+			newtype, err := parseSchema(pSchema)
+			if err != nil {
+				return nil, fmt.Errorf("unexpected schema type %v: %w", pSchema, err)
+			}
+			orType = types.Or(newtype, orType)
+		}
+
+		return orType, nil
+	}
+
+	if subSchema.AllOf != nil {
+		subSchemaArray := subSchema.AllOf
+		allOfResult, err := mergeSchemas(subSchemaArray...)
+		if err != nil {
+			return nil, err
+		}
+
+		if subSchema.Types.IsTyped() {
+			if (subSchema.Types.Contains("object") && allOfResult.Types.Contains("object")) || (subSchema.Types.Contains("array") && allOfResult.Types.Contains("array")) {
+				objectOrArrayResult, err := mergeSchemas(allOfResult, subSchema)
+				if err != nil {
+					return nil, err
+				}
+				return parseSchema(objectOrArrayResult)
+			} else if subSchema.Types.String() != allOfResult.Types.String() {
+				return nil, fmt.Errorf("unable to merge these schemas")
+			}
+		}
+		return parseSchema(allOfResult)
 	}
 
 	if subSchema.Types.IsTyped() {
@@ -942,6 +1040,18 @@ func parseSchema(schema interface{}) (types.Type, error) {
 			return types.NewArray(nil, types.A), nil
 		}
 	}
+
+	// Assume types if not specified in schema
+	if len(subSchema.PropertiesChildren) > 0 {
+		if err := subSchema.Types.Add("object"); err == nil {
+			return parseSchema(subSchema)
+		}
+	} else if len(subSchema.ItemsChildren) > 0 {
+		if err := subSchema.Types.Add("array"); err == nil {
+			return parseSchema(subSchema)
+		}
+	}
+
 	return types.A, nil
 }
 
@@ -1031,7 +1141,7 @@ func (c *Compiler) init() {
 	// Load the global input schema if one was provided.
 	if c.schemaSet != nil {
 		if schema := c.schemaSet.Get(SchemaRootRef); schema != nil {
-			tpe, err := loadSchema(schema)
+			tpe, err := loadSchema(schema, c.capabilities.AllowNet)
 			if err != nil {
 				c.err(NewError(TypeErr, nil, err.Error()))
 			} else {
@@ -1524,7 +1634,6 @@ func (qc *queryCompiler) runStageAfter(metricName string, query Body, s QueryCom
 }
 
 func (qc *queryCompiler) Compile(query Body) (Body, error) {
-
 	if len(query) == 0 {
 		return nil, Errors{NewError(CompileErr, nil, "empty query cannot be compiled")}
 	}
@@ -1726,8 +1835,8 @@ func (ci *ComprehensionIndex) String() string {
 
 func buildComprehensionIndices(dbg debug.Debug, arity func(Ref) int, candidates VarSet, rwVars map[Var]Var, node interface{}, result map[*Term]*ComprehensionIndex) uint64 {
 	var n uint64
+	cpy := candidates.Copy()
 	WalkBodies(node, func(b Body) bool {
-		cpy := candidates.Copy()
 		for _, expr := range b {
 			index := getComprehensionIndex(dbg, arity, cpy, rwVars, expr)
 			if index != nil {

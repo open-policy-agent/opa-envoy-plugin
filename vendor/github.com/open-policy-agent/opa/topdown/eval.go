@@ -1413,22 +1413,41 @@ func (e *eval) resolveReadFromStorage(ref ast.Ref, a ast.Value) (ast.Value, erro
 		}
 
 		if len(path) == 0 {
-			obj := blob.(map[string]interface{})
-			if len(obj) > 0 {
-				cpy := make(map[string]interface{}, len(obj)-1)
-				for k, v := range obj {
-					if string(ast.SystemDocumentKey) == k {
-						continue
+			switch obj := blob.(type) {
+			case map[string]interface{}:
+				if len(obj) > 0 {
+					cpy := make(map[string]interface{}, len(obj)-1)
+					for k, v := range obj {
+						if string(ast.SystemDocumentKey) != k {
+							cpy[k] = v
+						}
 					}
-					cpy[k] = v
+					blob = cpy
 				}
-				blob = cpy
+			case ast.Object:
+				if obj.Len() > 0 {
+					cpy := ast.NewObject()
+					if err := obj.Iter(func(k *ast.Term, v *ast.Term) error {
+						if !ast.SystemDocumentKey.Equal(k.Value) {
+							cpy.Insert(k, v)
+						}
+						return nil
+					}); err != nil {
+						return nil, err
+					}
+					blob = cpy
+
+				}
 			}
 		}
 
-		v, err = ast.InterfaceToValue(blob)
-		if err != nil {
-			return nil, err
+		var ok bool
+		v, ok = blob.(ast.Value)
+		if !ok {
+			v, err = ast.InterfaceToValue(blob)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -1573,7 +1592,7 @@ func (e evalFunc) eval(iter unifyIterator) error {
 			unknown = e.e.unknown(e.terms[i], e.e.bindings)
 		}
 		if unknown {
-			return e.partialEvalSupport(iter)
+			return e.partialEvalSupport(argCount, iter)
 		}
 	}
 
@@ -1709,7 +1728,7 @@ func (e evalFunc) evalOneRule(iter unifyIterator, rule *ast.Rule, cacheKey ast.R
 	return result, err
 }
 
-func (e evalFunc) partialEvalSupport(iter unifyIterator) error {
+func (e evalFunc) partialEvalSupport(declArgsLen int, iter unifyIterator) error {
 
 	path := e.e.namespaceRef(e.ref)
 	term := ast.NewTerm(path)
@@ -1727,7 +1746,7 @@ func (e evalFunc) partialEvalSupport(iter unifyIterator) error {
 		return nil
 	}
 
-	return e.e.saveCall(len(e.terms), append([]*ast.Term{term}, e.terms[1:]...), iter)
+	return e.e.saveCall(declArgsLen, append([]*ast.Term{term}, e.terms[1:]...), iter)
 }
 
 func (e evalFunc) partialEvalSupportRule(rule *ast.Rule, path ast.Ref) error {

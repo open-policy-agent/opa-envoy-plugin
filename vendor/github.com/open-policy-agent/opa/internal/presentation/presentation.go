@@ -198,6 +198,10 @@ func NewOutputErrors(err error) []OutputError {
 				Message: err.Error(),
 				err:     typedErr,
 			}}
+			if d, ok := err.(rego.ErrorDetails); ok {
+				details := strings.Join(d.Lines(), "\n")
+				errs[0].Details = details
+			}
 		}
 	}
 	return errs
@@ -212,16 +216,22 @@ func (e OutputErrors) Error() string {
 		return "no error(s)"
 	}
 
+	var prefix string
 	if len(e) == 1 {
-		return fmt.Sprintf("1 error occurred: %v", e[0].Error())
+		prefix = "1 error occurred: "
+	} else {
+		prefix = fmt.Sprintf("%d errors occurred:\n", len(e))
 	}
 
 	var s []string
 	for _, err := range e {
 		s = append(s, err.Error())
+		if l, ok := err.Details.(string); ok {
+			s = append(s, l)
+		}
 	}
 
-	return fmt.Sprintf("%d errors occurred:\n%s", len(e), strings.Join(s, "\n"))
+	return prefix + strings.Join(s, "\n")
 }
 
 // OutputError provides a common structure for all OPA
@@ -388,8 +398,8 @@ func Raw(w io.Writer, r Output) error {
 	return nil
 }
 
-func prettyError(w io.Writer, err error) error {
-	_, err = fmt.Fprintln(w, err)
+func prettyError(w io.Writer, errs OutputErrors) error {
+	_, err := fmt.Fprintln(w, errs)
 	return err
 }
 
