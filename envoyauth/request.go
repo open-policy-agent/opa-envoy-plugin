@@ -4,6 +4,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/url"
 	"strconv"
 	"strings"
@@ -181,6 +184,72 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 			}
 
 			data = map[string][]string(parsed)
+		} else if strings.Contains(val, "multipart/form-data") {
+			var payload string
+			switch {
+			case body != "":
+				payload = body
+			case len(rawBody) > 0:
+				payload = string(rawBody)
+			default:
+				return nil, false, nil
+			}
+
+			if val, ok := headers["content-length"]; ok {
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(payload)))
+				if err != nil {
+					return nil, false, err
+				}
+				if truncated {
+					return nil, true, nil
+				}
+			}
+
+			_, params, err := mime.ParseMediaType(headers["content-type"])
+			if err != nil {
+				return nil, false, err
+			}
+
+			boundary, ok := params["boundary"]
+			if !ok {
+				return nil, false, nil
+			}
+
+			values := map[string][]interface{}{}
+
+			mr := multipart.NewReader(strings.NewReader(payload), boundary)
+			for {
+				p, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return nil, false, err
+				}
+
+				name := p.FormName()
+				if name == "" {
+					continue
+				}
+
+				value, err := io.ReadAll(p)
+				if err != nil {
+					return nil, false, err
+				}
+
+				switch {
+				case strings.Contains(p.Header.Get("Content-Type"), "application/json"):
+					var jsonValue interface{}
+					if err := util.UnmarshalJSON(value, &jsonValue); err != nil {
+						return nil, false, err
+					}
+					values[name] = append(values[name], jsonValue)
+				default:
+					values[name] = append(values[name], string(value))
+				}
+			}
+
+			data = values
 		} else {
 			logEntry.Debugf("content-type: %s parsing not supported", val)
 		}
