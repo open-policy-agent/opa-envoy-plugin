@@ -49,9 +49,9 @@ LDFLAGS := "-X github.com/open-policy-agent/opa/version.Version=$(VERSION) \
 	-X github.com/open-policy-agent/opa/version.Timestamp=$(BUILD_TIMESTAMP) \
 	-X github.com/open-policy-agent/opa/version.Hostname=$(BUILD_HOSTNAME)"
 
-.PHONY: all build build-darwin build-linux build-windows clean check check-fmt check-vet check-lint \
-    deploy-ci docker-login generate image image-quick push push-latest tag-latest \
-    test test-cluster test-e2e version
+.PHONY: all build build-darwin build-linux build-linux-static build-windows clean check check-fmt check-vet check-lint \
+    deploy-ci docker-login generate image image-quick image-static image-quick-static push push-static push-latest \
+    push-latest-static tag-latest tag-latest-static test test-cluster test-e2e version
 
 ######################################################
 #
@@ -76,6 +76,9 @@ build-darwin:
 build-linux:
 	@$(MAKE) build GOOS=linux
 
+build-linux-static:
+	@$(MAKE) build GOOS=linux WASM_ENABLED=0 CGO_ENABLED=0
+
 build-windows:
 	@$(MAKE) build GOOS=windows
 
@@ -83,28 +86,49 @@ image:
 	@$(MAKE) ci-go-build-linux
 	@$(MAKE) image-quick
 
+image-static:
+	CGO_ENABLED=0 WASM_ENABLED=0 $(MAKE) ci-go-build-linux-static
+	@$(MAKE) image-quick-static
+
 image-quick:
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
-	docker build -t $(IMAGE):$(VERSION) -f .Dockerfile_$(GOARCH) .
+	docker build -t $(IMAGE):$(VERSION) --build-arg BASE=gcr.io/distroless/cc -f .Dockerfile_$(GOARCH) .
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):$(VERSION_ISTIO)
+
+image-quick-static:
+	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
+	docker build -t $(IMAGE):$(VERSION)-static --build-arg BASE=gcr.io/distroless/static -f .Dockerfile_$(GOARCH) .
+	docker tag $(IMAGE):$(VERSION)-static $(IMAGE):$(VERSION_ISTIO)-static
 
 push:
 	docker push $(IMAGE):$(VERSION)
 	docker push $(IMAGE):$(VERSION_ISTIO)
 
+push-static:
+	docker push $(IMAGE):$(VERSION)-static
+	docker push $(IMAGE):$(VERSION_ISTIO)-static
+
 tag-latest:
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest-envoy
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest-istio
+
+tag-latest-static:
+	docker tag $(IMAGE):$(VERSION)-static $(IMAGE):latest-envoy-static
+	docker tag $(IMAGE):$(VERSION)-static $(IMAGE):latest-istio-static
 
 push-latest:
 	docker push $(IMAGE):latest-envoy
 	docker push $(IMAGE):latest-istio
 
+push-latest-static:
+	docker push $(IMAGE):latest-envoy-static
+	docker push $(IMAGE):latest-istio-static
+
 docker-login:
 	@echo "Docker Login..."
 	@echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USER} --password-stdin
 
-deploy-ci: docker-login image push tag-latest push-latest
+deploy-ci: docker-login image image-static push tag-latest push-latest push-static tag-latest-static push-latest-static
 
 test: generate
 	$(DISABLE_CGO) $(GO) test -v -bench=. $(PACKAGES)
