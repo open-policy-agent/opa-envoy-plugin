@@ -38,7 +38,7 @@ spec:
           ports:
             - containerPort: 8080
         - name: envoy
-          image: envoyproxy/envoy:v1.17.0
+          image: envoyproxy/envoy:v1.20.0
           env:
             - name: ENVOY_UID
               value: "1111"

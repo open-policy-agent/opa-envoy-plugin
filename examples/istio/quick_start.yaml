@@ -163,7 +163,7 @@ data:
     package istio
 
     inject = {
-      "apiVersion": "admission.k8s.io/v1beta1",
+      "apiVersion": "admission.k8s.io/v1",
       "kind": "AdmissionReview",
       "response": {
         "allowed": true,
@@ -365,7 +365,7 @@ webhooks:
       matchLabels:
         opa-istio-injection: enabled
     failurePolicy: Fail
-    admissionReviewVersions: ["v1beta1"]
+    admissionReviewVersions: ["v1","v1beta1"]
     sideEffects: None
 ---
 ############################################################
