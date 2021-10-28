@@ -45,6 +45,7 @@ const defaultAddr = ":9191"
 const defaultPath = "envoy/authz/allow"
 const defaultDryRun = false
 const defaultEnableReflection = false
+const defaultGrpcServiceMaxMessageSize = 4 * 1024 * 1024
 
 // PluginName is the name to register with the OPA plugin manager
 const PluginName = "envoy_ext_authz_grpc"
@@ -58,6 +59,7 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 		Addr:             defaultAddr,
 		DryRun:           defaultDryRun,
 		EnableReflection: defaultEnableReflection,
+		GgrpServiceMaxMessageSize: defaultGrpcServiceMaxMessageSize,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -105,7 +107,7 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	plugin := &envoyExtAuthzGrpcServer{
 		manager:                m,
 		cfg:                    *cfg,
-		server:                 grpc.NewServer(),
+		server:                 grpc.NewServer(grpc.MaxMsgSize(cfg.GgrpServiceMaxMessageSize)),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
 	}
@@ -134,6 +136,7 @@ type Config struct {
 	DryRun           bool   `json:"dry-run"`
 	EnableReflection bool   `json:"enable-reflection"`
 	parsedQuery      ast.Body
+	GgrpServiceMaxMessageSize int    `json:"grpc-max-message-size"`
 	ProtoDescriptor  string `json:"proto-descriptor"`
 	protoSet         *protoregistry.Files
 }
