@@ -467,6 +467,26 @@ func Args(x ...Type) []Type {
 	return x
 }
 
+// Void returns true if the function has no return value. This function returns
+// false if x is not a function.
+func Void(x Type) bool {
+	f, ok := x.(*Function)
+	return ok && f.Result() == nil
+}
+
+// Arity returns the number of arguments in the function signature or zero if x
+// is not a function. If the type is unknown, this function returns -1.
+func Arity(x Type) int {
+	if x == nil {
+		return -1
+	}
+	f, ok := x.(*Function)
+	if !ok {
+		return 0
+	}
+	return len(f.FuncArgs().Args)
+}
+
 // NewFunction returns a new Function object where xs[:len(xs)-1] are arguments
 // and xs[len(xs)-1] is the result type.
 func NewFunction(args []Type, result Type) *Function {
