@@ -14,9 +14,9 @@ spec:
         listener:
           filterChain:
             filter:
-              name: "envoy.http_connection_manager"
+              name: "envoy.filters.network.http_connection_manager"
               subFilter:
-                name: "envoy.router"
+                name: "envoy.filters.http.router"
       patch:
         operation: INSERT_BEFORE
         value:
@@ -310,7 +310,7 @@ spec:
 ############################################################
 # OPA admission controller configuration.
 ############################################################
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   name: opa-istio-admission-controller
@@ -365,6 +365,8 @@ webhooks:
       matchLabels:
         opa-istio-injection: enabled
     failurePolicy: Fail
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: None
 ---
 ############################################################
 # Example configuration to bootstrap OPA-Istio sidecars.
