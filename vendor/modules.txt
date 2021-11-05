@@ -60,7 +60,7 @@ github.com/mattn/go-runewidth
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/olekukonko/tablewriter v0.0.5
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.33.1
+# github.com/open-policy-agent/opa v0.34.1
 ## explicit
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -76,6 +76,7 @@ github.com/open-policy-agent/opa/download
 github.com/open-policy-agent/opa/features/wasm
 github.com/open-policy-agent/opa/format
 github.com/open-policy-agent/opa/internal/bundle
+github.com/open-policy-agent/opa/internal/bundle/inspect
 github.com/open-policy-agent/opa/internal/cidr/merge
 github.com/open-policy-agent/opa/internal/compiler/wasm
 github.com/open-policy-agent/opa/internal/compiler/wasm/opa
@@ -84,6 +85,7 @@ github.com/open-policy-agent/opa/internal/debug
 github.com/open-policy-agent/opa/internal/deepcopy
 github.com/open-policy-agent/opa/internal/file/archive
 github.com/open-policy-agent/opa/internal/file/url
+github.com/open-policy-agent/opa/internal/future
 github.com/open-policy-agent/opa/internal/gojsonschema
 github.com/open-policy-agent/opa/internal/ir
 github.com/open-policy-agent/opa/internal/jwx/buffer
@@ -94,6 +96,7 @@ github.com/open-policy-agent/opa/internal/jwx/jws/sign
 github.com/open-policy-agent/opa/internal/jwx/jws/verify
 github.com/open-policy-agent/opa/internal/lcss
 github.com/open-policy-agent/opa/internal/leb128
+github.com/open-policy-agent/opa/internal/logging
 github.com/open-policy-agent/opa/internal/merge
 github.com/open-policy-agent/opa/internal/oracle
 github.com/open-policy-agent/opa/internal/planner
@@ -105,6 +108,7 @@ github.com/open-policy-agent/opa/internal/report
 github.com/open-policy-agent/opa/internal/runtime
 github.com/open-policy-agent/opa/internal/runtime/init
 github.com/open-policy-agent/opa/internal/semver
+github.com/open-policy-agent/opa/internal/strings
 github.com/open-policy-agent/opa/internal/strvals
 github.com/open-policy-agent/opa/internal/uuid
 github.com/open-policy-agent/opa/internal/version
@@ -118,6 +122,7 @@ github.com/open-policy-agent/opa/internal/wasm/sdk/opa
 github.com/open-policy-agent/opa/internal/wasm/sdk/opa/capabilities
 github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors
 github.com/open-policy-agent/opa/internal/wasm/types
+github.com/open-policy-agent/opa/internal/wasm/util
 github.com/open-policy-agent/opa/keys
 github.com/open-policy-agent/opa/loader
 github.com/open-policy-agent/opa/logging
@@ -150,6 +155,7 @@ github.com/open-policy-agent/opa/topdown/builtins
 github.com/open-policy-agent/opa/topdown/cache
 github.com/open-policy-agent/opa/topdown/copypropagation
 github.com/open-policy-agent/opa/topdown/lineage
+github.com/open-policy-agent/opa/topdown/print
 github.com/open-policy-agent/opa/types
 github.com/open-policy-agent/opa/util
 github.com/open-policy-agent/opa/version
