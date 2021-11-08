@@ -3,6 +3,7 @@
 This tutorial shows how Envoy’s External authorization filter can be used with OPA as an authorization service. The
 OPA-Envoy plugin is configured to listen on a UNIX Domain Socket.
 
+This section assumes you are testing with Kubernetes v1.20 or later.
 ## Steps
 
 ### 1. Start Minikube
