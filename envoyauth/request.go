@@ -116,7 +116,10 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 		if strings.Contains(val, "application/json") {
 
 			if body == "" {
-				return nil, false, nil
+				if len(rawBody) == 0 {
+					return nil, false, nil
+				}
+				body = string(rawBody)
 			}
 
 			if val, ok := headers["content-length"]; ok {
