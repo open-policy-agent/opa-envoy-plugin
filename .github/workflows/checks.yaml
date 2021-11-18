@@ -1,0 +1,113 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  go-build:
+    name: Go Build
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build Golang
+        run: make ci-go-build
+        timeout-minutes: 15
+
+  go-test:
+    name: Go Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Unit Test Golang
+        run: make ci-go-test
+        timeout-minutes: 15
+
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Golang Style and Lint Check
+        run: make ci-go-check
+        timeout-minutes: 15
+
+  deploy:
+    name: Push Latest Release
+    if: github.ref == 'refs/heads/main' # only true for pushes to `main`
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Build and Push
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        # Only run if required secrets are provided
+        if: ${{ env.DOCKER_USER && env.DOCKER_PASSWORD }}
+        run: make deploy-ci
+
+  e2e:
+    name: Istio End-to-End Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build docker image
+        run: make ci-go-build image-quick tag-latest
+
+      - name: Setup kind/istio
+        run: |
+          # install kind, kubectl, istio
+          make test-cluster
+
+          # Install bats
+          sudo apt-get update -y
+          sudo apt-get install -y bats
+
+          # Make docker image available to k8s
+          kind load docker-image openpolicyagent/opa:latest-istio
+
+      - name: Run e2e tests
+        run: make test-e2e
+        timeout-minutes: 10
+
+      - name: Cleanup
+        run: kind delete cluster
+
+  e2e-envoy-grpc:
+    name: Envoy gRPC End-to-End Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build docker image
+        run: make ci-go-build image-quick tag-latest
+
+      - name: Build testsrv docker image
+        run: make testsrv-image
+        working-directory: examples/grpc
+
+      - name: Run test
+        run: make test-setup test
+        working-directory: examples/grpc
+
+      - name: Run test log dump and cleanup
+        run: make test-teardown
+        if: ${{ always() }}
+        working-directory: examples/grpc

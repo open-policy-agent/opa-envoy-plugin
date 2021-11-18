@@ -1,0 +1,29 @@
+name: Post Tag
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    name: Push Latest Release Binaries
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set TAG_NAME in Environment
+        # Subsequent jobs will be have the computed tag name
+        run: echo "TAG_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      - name: Build Release Binaries
+        run: make release
+
+      - name: Create or Update Release
+        env:
+          # Required for the `hub` CLI
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./build/github-release.sh --asset-dir=./_release/${TAG_NAME#v}/ --tag=${TAG_NAME}

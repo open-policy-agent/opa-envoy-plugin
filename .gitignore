@@ -1,0 +1,20 @@
+# development environment
+.DS_Store
+.vscode
+.idea
+
+# build artifacts
+coverage
+opa_*
+.Dockerfile_*
+_release
+site.tar.gz
+*.bak
+
+# runtime artifacts
+policies
+vinh-test
+# cert files
+opa-envoy.crt
+opa-envoy.key
+root.crt
