@@ -264,6 +264,18 @@ func TestGetParsedBody(t *testing.T) {
 		  }
 		}
 	  }`
+	requestContentTypeJSONRawBody := `{
+		"attributes": {
+			"request": {
+				"http": {
+					"headers": {
+						"content-type": "application/json"
+					},
+					"raw_body": "ewogICAgImZpcnN0bmFtZSI6ICJmb28iLAogICAgImxhc3RuYW1lIjogImJhciIKfQ=="
+				}
+			}
+		}
+	}`
 	expectedNumber := json.Number("42")
 	expectedObject := map[string]interface{}{
 		"firstname": "foo",
@@ -287,6 +299,10 @@ func TestGetParsedBody(t *testing.T) {
 		"bar": {
 			map[string]interface{}{"name": "bar"},
 		},
+	}
+	expectedContentTypeJSONRawBody := map[string]interface{}{
+		"firstname": "foo",
+		"lastname":  "bar",
 	}
 
 	tests := map[string]struct {
@@ -312,6 +328,7 @@ func TestGetParsedBody(t *testing.T) {
 		"content_type_url_encoded_empty":             {input: createCheckRequest(requestContentTypeURLEncodedEmpty), want: nil, isBodyTruncated: false, err: nil},
 		"content_type_url_encoded_multiple_values":   {input: createCheckRequest(requestContentTypeURLEncodedMultipleKeys), want: expectedURLEncodedObjectMultipleValues, isBodyTruncated: false, err: nil},
 		"content_type_url_encoded_truncated":         {input: createCheckRequest(requestContentTypeURLEncodedTruncated), want: nil, isBodyTruncated: true, err: nil},
+		"content_type_json_with_raw_body":            {input: createCheckRequest(requestContentTypeJSONRawBody), want: expectedContentTypeJSONRawBody, isBodyTruncated: false, err: nil},
 	}
 
 	for name, tc := range tests {
@@ -319,9 +336,10 @@ func TestGetParsedBody(t *testing.T) {
 			logEntry := logrus.WithField("test", name)
 			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
 			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
+			rawBody := tc.input.GetAttributes().GetRequest().GetHttp().GetRawBody()
 			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
 			parsedPath, _, _ := getParsedPathAndQuery(path)
-			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, nil, parsedPath, nil)
+			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, nil)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
 			}
