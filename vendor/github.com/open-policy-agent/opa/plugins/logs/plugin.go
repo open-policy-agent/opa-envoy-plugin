@@ -376,7 +376,12 @@ type reconfigure struct {
 // ParseConfig validates the config and injects default values.
 func ParseConfig(config []byte, services []string, pluginList []string) (*Config, error) {
 	t := plugins.DefaultTriggerMode
-	return NewConfigBuilder().WithBytes(config).WithServices(services).WithPlugins(pluginList).WithTriggerMode(&t).Parse()
+	return NewConfigBuilder().
+		WithBytes(config).
+		WithServices(services).
+		WithPlugins(pluginList).
+		WithTriggerMode(&t).
+		Parse()
 }
 
 // ConfigBuilder assists in the construction of the plugin configuration.
@@ -463,6 +468,7 @@ func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
 // WithMetrics sets the global metrics provider to be used by the plugin.
 func (p *Plugin) WithMetrics(m metrics.Metrics) *Plugin {
 	p.metrics = m
+	p.enc.WithMetrics(m)
 	return p
 }
 
@@ -574,18 +580,18 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 		}
 	}
 
+	if p.config.Service != "" {
+		p.mtx.Lock()
+		p.encodeAndBufferEvent(event)
+		p.mtx.Unlock()
+	}
+
 	if p.config.Plugin != nil {
 		proxy, ok := p.manager.Plugin(*p.config.Plugin).(Logger)
 		if !ok {
 			return fmt.Errorf("plugin does not implement Logger interface")
 		}
 		return proxy.Log(ctx, event)
-	}
-
-	if p.config.Service != "" {
-		p.mtx.Lock()
-		defer p.mtx.Unlock()
-		p.encodeAndBufferEvent(event)
 	}
 
 	return nil
@@ -712,7 +718,7 @@ func (p *Plugin) oneShot(ctx context.Context) (ok bool, err error) {
 	oldChunkEnc := p.enc
 	oldBuffer := p.buffer
 	p.buffer = newLogBuffer(*p.config.Reporting.BufferSizeLimitBytes)
-	p.enc = newChunkEncoder(*p.config.Reporting.UploadSizeLimitBytes)
+	p.enc = newChunkEncoder(*p.config.Reporting.UploadSizeLimitBytes).WithMetrics(p.metrics)
 	p.mtx.Unlock()
 
 	// Along with uploading the compressed events in the buffer
@@ -721,8 +727,10 @@ func (p *Plugin) oneShot(ctx context.Context) (ok bool, err error) {
 	chunk, err := oldChunkEnc.Flush()
 	if err != nil {
 		return false, err
-	} else if chunk != nil {
-		p.bufferChunk(oldBuffer, chunk)
+	}
+
+	for _, ch := range chunk {
+		p.bufferChunk(oldBuffer, ch)
 	}
 
 	if oldBuffer.Len() == 0 {
@@ -792,8 +800,8 @@ func (p *Plugin) encodeAndBufferEvent(event EventV1) {
 		return
 	}
 
-	if result != nil {
-		p.bufferChunk(p.buffer, result)
+	for _, chunk := range result {
+		p.bufferChunk(p.buffer, chunk)
 	}
 }
 
