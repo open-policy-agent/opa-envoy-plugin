@@ -111,7 +111,6 @@ type Server struct {
 	store                  storage.Store
 	manager                *plugins.Manager
 	decisionIDFactory      func() string
-	buffer                 Buffer
 	logger                 func(context.Context, *Info) error
 	errLimit               int
 	pprofEnabled           bool
@@ -587,7 +586,9 @@ func (s *Server) initHandlerAuth(handler http.Handler) http.Handler {
 			s.getCompiler,
 			s.store,
 			authorizer.Runtime(s.runtime),
-			authorizer.Decision(s.manager.Config.DefaultAuthorizationDecisionRef))
+			authorizer.Decision(s.manager.Config.DefaultAuthorizationDecisionRef),
+			authorizer.PrintHook(s.manager.PrintHook()),
+			authorizer.EnablePrintStatements(s.manager.EnablePrintStatements()))
 	}
 
 	switch s.authentication {
@@ -2202,7 +2203,6 @@ func (s *Server) getDecisionLogger(br bundleRevisions) (logger decisionLogger) {
 		logger.revisions = br.Revisions
 	}
 	logger.logger = s.logger
-	logger.buffer = s.buffer
 	return logger
 }
 
@@ -2731,7 +2731,6 @@ type decisionLogger struct {
 	revisions map[string]string
 	revision  string // Deprecated: Use `revisions` instead.
 	logger    func(context.Context, *Info) error
-	buffer    Buffer
 }
 
 func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisionID, remoteAddr, path string, query string, goInput *interface{}, astInput ast.Value, goResults *interface{}, err error, m metrics.Metrics) error {
@@ -2761,10 +2760,6 @@ func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisi
 		if err := l.logger(ctx, info); err != nil {
 			return errors.Wrap(err, "decision_logs")
 		}
-	}
-
-	if l.buffer != nil {
-		l.buffer.Push(info)
 	}
 
 	return nil

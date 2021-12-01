@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/url"
 	"regexp"
@@ -843,7 +844,10 @@ func PtrRef(head *Term, s string) (Ref, error) {
 		return Ref{head}, nil
 	}
 	parts := strings.Split(s, "/")
-	ref := make(Ref, len(parts)+1)
+	if max := math.MaxInt32; len(parts) >= max {
+		return nil, fmt.Errorf("path too long: %s, %d > %d (max)", s, len(parts), max)
+	}
+	ref := make(Ref, uint(len(parts))+1)
 	ref[0] = head
 	for i := 0; i < len(parts); i++ {
 		var err error
@@ -1344,15 +1348,12 @@ func (s *set) String() string {
 	}
 	var b strings.Builder
 	b.WriteRune('{')
-	sorted := s.Sorted()
-	first := true
-	sorted.Foreach(func(x *Term) {
-		if !first {
+	for i := range s.keys {
+		if i > 0 {
 			b.WriteString(", ")
 		}
-		first = false
-		b.WriteString(x.Value.String())
-	})
+		b.WriteString(s.keys[i].Value.String())
+	}
 	b.WriteRune('}')
 	return b.String()
 }
@@ -1368,8 +1369,6 @@ func (s *set) Compare(other Value) int {
 		return 1
 	}
 	t := other.(*set)
-	sort.Sort(termSlice(s.keys))
-	sort.Sort(termSlice(t.keys))
 	return termSliceCompare(s.keys, t.keys)
 }
 
@@ -1619,7 +1618,16 @@ func (s *set) insert(x *Term) {
 	}
 
 	s.elems[hash] = x
-	s.keys = append(s.keys, x)
+	i := sort.Search(len(s.keys), func(i int) bool { return Compare(x, s.keys[i]) < 0 })
+	if i < len(s.keys) {
+		// insert at position `i`:
+		s.keys = append(s.keys, nil)   // add some space
+		copy(s.keys[i+1:], s.keys[i:]) // move things over
+		s.keys[i] = x                  // drop it in position
+	} else {
+		s.keys = append(s.keys, x)
+	}
+
 	s.hash = 0
 	s.ground = s.ground && x.IsGround()
 }
