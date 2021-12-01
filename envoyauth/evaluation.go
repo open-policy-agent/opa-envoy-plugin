@@ -1,6 +1,7 @@
 package envoyauth
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/sirupsen/logrus"
 )
@@ -27,7 +29,7 @@ type EvalContext interface {
 	SetPreparedQuery(*rego.PreparedEvalQuery)
 }
 
-//Eval - Evaluates an input against a provided EvalContext and yields result
+// Eval - Evaluates an input against a provided EvalContext and yields result
 func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
 	var err error
 
@@ -61,6 +63,9 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		return err
 	}
 
+	var buf bytes.Buffer
+	ph := topdown.NewPrintHook(&buf)
+
 	var rs rego.ResultSet
 	rs, err = evalContext.PreparedQuery().Eval(
 		ctx,
@@ -68,16 +73,20 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		rego.EvalTransaction(result.Txn),
 		rego.EvalMetrics(result.Metrics),
 		rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
+		rego.EvalPrintHook(ph),
 	)
 
 	if err != nil {
 		return err
-	} else if len(rs) == 0 {
+	}
+	if len(rs) == 0 {
 		return fmt.Errorf("undefined decision")
-	} else if len(rs) > 1 {
+	}
+	if len(rs) > 1 {
 		return fmt.Errorf("multiple evaluation results")
 	}
 
+	result.Output = buf.Bytes()
 	result.Decision = rs[0].Expressions[0].Value
 	return nil
 }
@@ -85,7 +94,6 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 func constructPreparedQuery(evalContext EvalContext, txn storage.Transaction, m metrics.Metrics, opts []func(*rego.Rego)) error {
 	var err error
 	var pq rego.PreparedEvalQuery
-
 	evalContext.PreparedQueryDoOnce().Do(func() {
 		opts = append(opts,
 			rego.Metrics(m),
@@ -93,11 +101,11 @@ func constructPreparedQuery(evalContext EvalContext, txn storage.Transaction, m 
 			rego.Compiler(evalContext.Compiler()),
 			rego.Store(evalContext.Store()),
 			rego.Transaction(txn),
-			rego.Runtime(evalContext.Runtime()))
+			rego.Runtime(evalContext.Runtime()),
+			rego.EnablePrintStatements(true),
+		)
 
-		r := rego.New(opts...)
-
-		pq, err = r.PrepareForEval(context.Background())
+		pq, err = rego.New(opts...).PrepareForEval(context.Background())
 		evalContext.SetPreparedQuery(&pq)
 	})
 

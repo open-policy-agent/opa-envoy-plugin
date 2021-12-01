@@ -118,21 +118,21 @@ func TestEval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	parsedBody := make(map[string]interface{})
-	parsedBody["firstname"] = "foo"
-	parsedBody["lastname"] = "bar"
+	inputValue := ast.MustInterfaceToValue(map[string]interface{}{
+		"parsed_body": map[string]interface{}{
+			"firstname": "foo",
+			"lastname":  "bar",
+		},
+	})
 
-	input := make(map[string]interface{})
-	input["parsed_body"] = parsedBody
-
-	inputValue, err := ast.InterfaceToValue(input)
-	if err != nil {
+	var res EvalResult
+	if err := Eval(ctx, server, inputValue, &res); err != nil {
 		t.Fatal(err)
 	}
 
-	err = Eval(ctx, server, inputValue, &EvalResult{})
-	if err != nil {
-		t.Fatal(err)
+	// check print() output
+	if exp, act := `{"firstname": "foo", "lastname": "bar"}`+"\n", string(res.Output); exp != act {
+		t.Errorf("Output: expected %q, got %q", exp, act)
 	}
 
 	// include transaction in the result object
@@ -164,6 +164,7 @@ func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
         allow {
 			input.parsed_body.firstname == "foo"
 			input.parsed_body.lastname == "bar"
+			print(input.parsed_body)
 		}`
 
 	ctx := context.Background()
@@ -172,7 +173,7 @@ func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
 	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
 	store.Commit(ctx, txn)
 
-	m, err := plugins.New([]byte{}, "test", store)
+	m, err := plugins.New([]byte{}, "test", store, plugins.EnablePrintStatements(true))
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +245,7 @@ func (m *mockExtAuthzGrpcServer) PreparedQueryDoOnce() *sync.Once {
 	return m.preparedQueryDoOnce
 }
 
-func (m *mockExtAuthzGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
+func (*mockExtAuthzGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
 	return nil
 }
 
@@ -260,14 +261,14 @@ type testPlugin struct {
 	events []logs.EventV1
 }
 
-func (p *testPlugin) Start(context.Context) error {
+func (*testPlugin) Start(context.Context) error {
 	return nil
 }
 
-func (p *testPlugin) Stop(context.Context) {
+func (*testPlugin) Stop(context.Context) {
 }
 
-func (p *testPlugin) Reconfigure(context.Context, interface{}) {
+func (*testPlugin) Reconfigure(context.Context, interface{}) {
 }
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {

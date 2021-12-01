@@ -316,10 +316,14 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, err
 	}
 
-	err = envoyauth.Eval(ctx, p, inputValue, result)
-	if err != nil {
+	if err := envoyauth.Eval(ctx, p, inputValue, result); err != nil {
 		evalErr = err
 		return nil, stop, err
+	}
+	lines := strings.Split(string(result.Output), "\n")
+	// last string is always "" since print lines always end in "\n"
+	for _, line := range lines[:len(lines)-1] {
+		logEntry.Info(line)
 	}
 
 	resp := &ext_authz_v3.CheckResponse{}

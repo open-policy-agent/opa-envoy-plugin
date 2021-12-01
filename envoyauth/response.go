@@ -22,6 +22,7 @@ type EvalResult struct {
 	Decision   interface{}
 	Metrics    metrics.Metrics
 	Txn        storage.Transaction
+	Output     []byte
 }
 
 // StopFunc should be called as soon as the evaluation is finished
