@@ -190,7 +190,6 @@ github.com/rcrowley/go-metrics
 # github.com/rivo/uniseg v0.2.0
 github.com/rivo/uniseg
 # github.com/sirupsen/logrus v1.8.1
-## explicit
 github.com/sirupsen/logrus
 # github.com/spf13/cobra v1.2.1
 github.com/spf13/cobra

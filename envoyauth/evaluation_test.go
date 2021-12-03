@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/plugins/logs"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -124,9 +125,10 @@ func TestEval(t *testing.T) {
 			"lastname":  "bar",
 		},
 	})
+	logger := logging.NewNoOpLogger()
 
 	res, _, _ := NewEvalResult()
-	if err := Eval(ctx, server, inputValue, res); err != nil {
+	if err := Eval(ctx, logger, server, inputValue, res); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,7 +145,7 @@ func TestEval(t *testing.T) {
 	defer txnClose(ctx, err)
 	er.Txn = txn
 
-	err = Eval(ctx, server, inputValue, er)
+	err = Eval(ctx, logger, server, inputValue, er)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,20 +13,21 @@ import (
 
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-	"github.com/open-policy-agent/opa/util"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
+
+	"github.com/open-policy-agent/opa/logging"
+	"github.com/open-policy-agent/opa/util"
 )
 
 var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
 var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 
 //RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
-func RequestToInput(req interface{}, logEntry *logrus.Entry, protoSet *protoregistry.Files) (map[string]interface{}, error) {
+func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files) (map[string]interface{}, error) {
 	var err error
 	var input map[string]interface{}
 
@@ -74,7 +75,7 @@ func RequestToInput(req interface{}, logEntry *logrus.Entry, protoSet *protoregi
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
-	parsedBody, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, protoSet)
+	parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,7 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body string, rawBody []byte, parsedPath []interface{}, protoSet *protoregistry.Files) (interface{}, bool, error) {
+func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []interface{}, protoSet *protoregistry.Files) (interface{}, bool, error) {
 	var data interface{}
 
 	if val, ok := headers["content-type"]; ok {
@@ -146,7 +147,7 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 			// but the Envoy instance requesting an authz decision didn't have
 			// pack_as_bytes set to true.
 			if len(rawBody) == 0 {
-				logEntry.Debug("no rawBody field sent")
+				logger.Debug("no rawBody field sent")
 				return nil, false, nil
 			}
 			// In gRPC, a call of method DoThing on service ThingService is a
@@ -156,7 +157,7 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 				return nil, false, fmt.Errorf("invalid parsed path")
 			}
 
-			known, truncated, err := getGRPCBody(logEntry, rawBody, parsedPath, &data, protoSet)
+			known, truncated, err := getGRPCBody(logger, rawBody, parsedPath, &data, protoSet)
 			if err != nil {
 				return nil, false, err
 			}
@@ -254,16 +255,16 @@ func getParsedBody(logEntry *logrus.Entry, headers map[string]string, body strin
 
 			data = values
 		} else {
-			logEntry.Debugf("content-type: %s parsing not supported", val)
+			logger.Debug("content-type: %s parsing not supported", val)
 		}
 	} else {
-		logEntry.Debug("no content-type header supplied, performing no body parsing")
+		logger.Debug("no content-type header supplied, performing no body parsing")
 	}
 
 	return data, false, nil
 }
 
-func getGRPCBody(logEntry *logrus.Entry, in []byte, parsedPath []interface{}, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
+func getGRPCBody(logger logging.Logger, in []byte, parsedPath []interface{}, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
 
 	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
@@ -276,7 +277,7 @@ func getGRPCBody(logEntry *logrus.Entry, in []byte, parsedPath []interface{}, da
 	// The method could be looked up in the request headers, and the
 	// request decompressed; but for now, let's skip it.
 	if in[0] != 0 {
-		logEntry.Debug("gRPC payload compression not supported")
+		logger.Debug("gRPC payload compression not supported")
 		return false, false, nil
 	}
 
@@ -290,12 +291,12 @@ func getGRPCBody(logEntry *logrus.Entry, in []byte, parsedPath []interface{}, da
 	// Note: we've already checked that len(path)>=2
 	svc, err := findService(parsedPath[0].(string), files)
 	if err != nil {
-		logEntry.WithField("err", err).Debug("could not find service")
+		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find service")
 		return false, false, nil
 	}
 	msgDesc, err := findMessageInputDesc(parsedPath[1].(string), svc)
 	if err != nil {
-		logEntry.WithField("err", err).Debug("could not find message")
+		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find message")
 		return false, false, nil
 	}
 

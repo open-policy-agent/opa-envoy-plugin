@@ -7,12 +7,12 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/topdown/print"
-	"github.com/sirupsen/logrus"
 )
 
 //EvalContext - This is an SPI that has to be provided if the envoy external authorization
@@ -29,7 +29,7 @@ type EvalContext interface {
 }
 
 // Eval - Evaluates an input against a provided EvalContext and yields result
-func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
+func Eval(ctx context.Context, logger logging.Logger, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
 	var err error
 
 	if result.Txn == nil {
@@ -37,7 +37,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		var txnClose TransactionCloser
 		txn, txnClose, err = result.GetTxn(ctx, evalContext.Store())
 		if err != nil {
-			logrus.WithField("err", err).Error("Unable to start new storage transaction.")
+			logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
 			return err
 		}
 		defer txnClose(ctx, err)
@@ -51,7 +51,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 
 	result.TxnID = result.Txn.ID()
 
-	logrus.WithFields(logrus.Fields{
+	logger.WithFields(map[string]interface{}{
 		"input": input,
 		"query": evalContext.ParsedQuery().String(),
 		"txn":   result.TxnID,
@@ -62,7 +62,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		return err
 	}
 
-	ph := hook{logEntry: logrus.WithField("decision-id", result.DecisionID)}
+	ph := hook{logger: logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})}
 
 	var rs rego.ResultSet
 	rs, err = evalContext.PreparedQuery().Eval(
@@ -136,10 +136,10 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 }
 
 type hook struct {
-	logEntry *logrus.Entry
+	logger logging.Logger
 }
 
 func (h *hook) Print(pctx print.Context, msg string) error {
-	h.logEntry.Infof("%v: %s", pctx.Location, msg)
+	h.logger.Info("%v: %s", pctx.Location, msg)
 	return nil
 }
