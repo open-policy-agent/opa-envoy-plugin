@@ -128,6 +128,7 @@ github.com/open-policy-agent/opa/internal/wasm/util
 github.com/open-policy-agent/opa/keys
 github.com/open-policy-agent/opa/loader
 github.com/open-policy-agent/opa/logging
+github.com/open-policy-agent/opa/logging/test
 github.com/open-policy-agent/opa/metrics
 github.com/open-policy-agent/opa/plugins
 github.com/open-policy-agent/opa/plugins/bundle

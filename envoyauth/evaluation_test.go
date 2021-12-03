@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/opa/logging"
+	loggingtest "github.com/open-policy-agent/opa/logging/test"
 	"github.com/open-policy-agent/opa/plugins/logs"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -125,11 +126,32 @@ func TestEval(t *testing.T) {
 			"lastname":  "bar",
 		},
 	})
-	logger := logging.NewNoOpLogger()
+
+	logger := loggingtest.New()
 
 	res, _, _ := NewEvalResult()
 	if err := Eval(ctx, logger, server, inputValue, res); err != nil {
 		t.Fatal(err)
+	}
+
+	logs := logger.Entries()
+	if exp, act := 2, len(logs); exp != act {
+		t.Fatalf("expected %d logs, got %d: %v", exp, act, logs)
+	}
+	if exp, act := logging.Debug, logs[0].Level; exp != act {
+		t.Errorf("expected log level info, got %d", act)
+	}
+	if exp, act := "Executing policy query.", logs[0].Message; exp != act {
+		t.Errorf("expected log message %q, got %q", exp, act)
+	}
+	if exp, act := logging.Info, logs[1].Level; exp != act {
+		t.Errorf("expected log level info, got %d", act)
+	}
+	if exp, act := `example.rego:9: {"firstname": "foo", "lastname": "bar"}`, logs[1].Message; exp != act {
+		t.Errorf("expected log message %q, got %q", exp, act)
+	}
+	if exp, act := res.DecisionID, logs[1].Fields["decision-id"]; exp != act {
+		t.Errorf("expected log field decision-id %q, got %q", exp, act)
 	}
 
 	// include transaction in the result object
