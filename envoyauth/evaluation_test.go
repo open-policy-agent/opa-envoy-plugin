@@ -125,18 +125,13 @@ func TestEval(t *testing.T) {
 		},
 	})
 
-	var res EvalResult
-	if err := Eval(ctx, server, inputValue, &res); err != nil {
+	res, _, _ := NewEvalResult()
+	if err := Eval(ctx, server, inputValue, res); err != nil {
 		t.Fatal(err)
 	}
 
-	// check print() output
-	if exp, act := `{"firstname": "foo", "lastname": "bar"}`+"\n", string(res.Output); exp != act {
-		t.Errorf("Output: expected %q, got %q", exp, act)
-	}
-
 	// include transaction in the result object
-	er := &EvalResult{}
+	er, _, _ := NewEvalResult()
 	var txn storage.Transaction
 	var txnClose TransactionCloser
 

@@ -1,7 +1,6 @@
 package envoyauth
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -11,8 +10,8 @@ import (
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
+	"github.com/open-policy-agent/opa/topdown/print"
 	"github.com/sirupsen/logrus"
 )
 
@@ -63,8 +62,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		return err
 	}
 
-	var buf bytes.Buffer
-	ph := topdown.NewPrintHook(&buf)
+	ph := hook{logEntry: logrus.WithField("decision-id", result.DecisionID)}
 
 	var rs rego.ResultSet
 	rs, err = evalContext.PreparedQuery().Eval(
@@ -73,20 +71,18 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		rego.EvalTransaction(result.Txn),
 		rego.EvalMetrics(result.Metrics),
 		rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
-		rego.EvalPrintHook(ph),
+		rego.EvalPrintHook(&ph),
 	)
 
-	if err != nil {
+	switch {
+	case err != nil:
 		return err
-	}
-	if len(rs) == 0 {
+	case len(rs) == 0:
 		return fmt.Errorf("undefined decision")
-	}
-	if len(rs) > 1 {
+	case len(rs) > 1:
 		return fmt.Errorf("multiple evaluation results")
 	}
 
-	result.Output = buf.Bytes()
 	result.Decision = rs[0].Expressions[0].Value
 	return nil
 }
@@ -136,5 +132,14 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 
 	result.Revisions = revisions
 	result.Revision = revision
+	return nil
+}
+
+type hook struct {
+	logEntry *logrus.Entry
+}
+
+func (h *hook) Print(pctx print.Context, msg string) error {
+	h.logEntry.Infof("%v: %s", pctx.Location, msg)
 	return nil
 }

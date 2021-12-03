@@ -320,11 +320,6 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		evalErr = err
 		return nil, stop, err
 	}
-	lines := strings.Split(string(result.Output), "\n")
-	// last string is always "" since print lines always end in "\n"
-	for _, line := range lines[:len(lines)-1] {
-		logEntry.Info(line)
-	}
 
 	resp := &ext_authz_v3.CheckResponse{}
 
