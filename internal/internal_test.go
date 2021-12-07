@@ -19,6 +19,8 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	envoy_type "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
@@ -688,12 +690,18 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
-	if err == nil {
-		t.Fatal("Expected error but got nil")
+	if output.Status.Code != int32(code.Code_INVALID_ARGUMENT) {
+		t.Fatal("Expected invalid argument")
 	}
 
-	if output != nil {
-		t.Fatalf("Expected no output but got %v", output)
+	resp := output.GetDeniedResponse()
+
+	if resp == nil || resp.Status.Code != ext_type_v3.StatusCode_BadRequest {
+		t.Fatal("Expected denied response with bad request")
+	}
+
+	if err != nil {
+		t.Fatal("Expected no error")
 	}
 
 	if len(customLogger.events) != 1 {
@@ -774,12 +782,18 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
-	if err == nil {
-		t.Fatal("Expected error but got nil")
+	if output.Status.Code != int32(code.Code_INVALID_ARGUMENT) {
+		t.Fatal("Expected bad request")
 	}
 
-	if output != nil {
-		t.Fatalf("Expected no output but got %v", output)
+	resp := output.GetDeniedResponse()
+
+	if resp == nil || resp.Status.Code != envoy_type.StatusCode_BadRequest {
+		t.Fatal("Expected denied response with bad request")
+	}
+
+	if err != nil {
+		t.Fatal("Expected no error")
 	}
 
 	if len(customLogger.events) != 1 {

@@ -317,7 +317,22 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet)
 	if err != nil {
-		return nil, stop, err
+		logger.WithFields(map[string]interface{}{"err": err}).Info("Unable to parse request.")
+
+		deniedResponse := &ext_authz_v3.DeniedHttpResponse{
+			Status: &ext_type_v3.HttpStatus{
+				Code: ext_type_v3.StatusCode(ext_type_v3.StatusCode_BadRequest),
+			},
+		}
+
+		resp := &ext_authz_v3.CheckResponse{
+			HttpResponse: &ext_authz_v3.CheckResponse_DeniedResponse{
+				DeniedResponse: deniedResponse,
+			},
+			Status: &rpc_status.Status{Code: int32(code.Code_INVALID_ARGUMENT)},
+		}
+
+		return resp, stop, nil
 	}
 
 	inputValue, err := ast.InterfaceToValue(input)
