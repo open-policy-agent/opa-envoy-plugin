@@ -109,7 +109,6 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		server:                 grpc.NewServer(),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
-		logger:                 m.Logger(),
 	}
 
 	// Register Authorization Server
@@ -147,7 +146,6 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
 	interQueryBuiltinCache iCache.InterQueryCache
-	logger                 logging.Logger
 }
 
 type envoyExtAuthzV2Wrapper struct {
@@ -186,6 +184,10 @@ func (p *envoyExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 	p.preparedQuery = pq
 }
 
+func (p *envoyExtAuthzGrpcServer) Logger() logging.Logger {
+	return p.manager.Logger()
+}
+
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 	go p.listen()
@@ -206,6 +208,7 @@ func (p *envoyExtAuthzGrpcServer) compilerUpdated(txn storage.Transaction) {
 }
 
 func (p *envoyExtAuthzGrpcServer) listen() {
+	logger := p.manager.Logger()
 	addr := p.cfg.Addr
 	if !strings.Contains(addr, "://") {
 		addr = "grpc://" + addr
@@ -213,7 +216,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 
 	parsedURL, err := url.Parse(addr)
 	if err != nil {
-		p.logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to parse url.")
+		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to parse url.")
 		return
 	}
 
@@ -238,10 +241,10 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	}
 
 	if err != nil {
-		p.logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to create listener.")
+		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to create listener.")
 	}
 
-	p.logger.WithFields(map[string]interface{}{
+	logger.WithFields(map[string]interface{}{
 		"addr":              p.cfg.Addr,
 		"query":             p.cfg.Query,
 		"path":              p.cfg.Path,
@@ -252,11 +255,11 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
 
 	if err := p.server.Serve(l); err != nil {
-		p.logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
+		logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
 		return
 	}
 
-	p.logger.Info("Listener exited.")
+	logger.Info("Listener exited.")
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
@@ -273,22 +276,23 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	var err error
 	var evalErr error
 	start := time.Now()
+	logger := p.manager.Logger()
 
 	result, stopeval, err := envoyauth.NewEvalResult()
 	if err != nil {
-		p.logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new evaluation.")
+		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new evaluation.")
 		return nil, func() *rpc_status.Status { return nil }, err
 	}
 
 	txn, txnClose, err := result.GetTxn(ctx, p.Store())
 	if err != nil {
-		p.logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
+		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
 		return nil, func() *rpc_status.Status { return nil }, err
 	}
 
 	result.Txn = txn
 
-	logger := p.logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})
+	logger = logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})
 
 	var input map[string]interface{}
 
@@ -321,7 +325,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, err
 	}
 
-	if err := envoyauth.Eval(ctx, logger, p, inputValue, result); err != nil {
+	if err := envoyauth.Eval(ctx, p, inputValue, result); err != nil {
 		evalErr = err
 		return nil, stop, err
 	}
@@ -376,7 +380,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		}
 	}
 
-	p.logger.WithFields(map[string]interface{}{
+	p.manager.Logger().WithFields(map[string]interface{}{
 		"query":               p.cfg.parsedQuery.String(),
 		"dry-run":             p.cfg.DryRun,
 		"decision":            result.Decision,

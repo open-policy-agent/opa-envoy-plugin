@@ -26,11 +26,13 @@ type EvalContext interface {
 	InterQueryBuiltinCache() iCache.InterQueryCache
 	PreparedQuery() *rego.PreparedEvalQuery
 	SetPreparedQuery(*rego.PreparedEvalQuery)
+	Logger() logging.Logger
 }
 
 // Eval - Evaluates an input against a provided EvalContext and yields result
-func Eval(ctx context.Context, logger logging.Logger, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
+func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
 	var err error
+	logger := evalContext.Logger()
 
 	if result.Txn == nil {
 		var txn storage.Transaction

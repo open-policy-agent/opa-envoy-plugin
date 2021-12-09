@@ -115,7 +115,9 @@ func TestGetRevisionMulti(t *testing.T) {
 
 func TestEval(t *testing.T) {
 	ctx := context.Background()
-	server, err := testAuthzServer()
+
+	logger := loggingtest.New()
+	server, err := testAuthzServer(logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,30 +129,34 @@ func TestEval(t *testing.T) {
 		},
 	})
 
-	logger := loggingtest.New()
-
 	res, _, _ := NewEvalResult()
-	if err := Eval(ctx, logger, server, inputValue, res); err != nil {
+	if err := Eval(ctx, server, inputValue, res); err != nil {
 		t.Fatal(err)
 	}
 
 	logs := logger.Entries()
-	if exp, act := 2, len(logs); exp != act {
+	if exp, act := 3, len(logs); exp != act {
 		t.Fatalf("expected %d logs, got %d: %v", exp, act, logs)
 	}
-	if exp, act := logging.Debug, logs[0].Level; exp != act {
+	if exp, act := logging.Info, logs[0].Level; exp != act {
 		t.Errorf("expected log level info, got %d", act)
 	}
-	if exp, act := "Executing policy query.", logs[0].Message; exp != act {
+	if exp, act := "Starting decision logger.", logs[0].Message; exp != act {
 		t.Errorf("expected log message %q, got %q", exp, act)
 	}
-	if exp, act := logging.Info, logs[1].Level; exp != act {
+	if exp, act := logging.Debug, logs[1].Level; exp != act {
+		t.Errorf("expected log level debug, got %d", act)
+	}
+	if exp, act := "Executing policy query.", logs[1].Message; exp != act {
+		t.Errorf("expected log message %q, got %q", exp, act)
+	}
+	if exp, act := logging.Info, logs[2].Level; exp != act {
 		t.Errorf("expected log level info, got %d", act)
 	}
-	if exp, act := `example.rego:9: {"firstname": "foo", "lastname": "bar"}`, logs[1].Message; exp != act {
+	if exp, act := `example.rego:9: {"firstname": "foo", "lastname": "bar"}`, logs[2].Message; exp != act {
 		t.Errorf("expected log message %q, got %q", exp, act)
 	}
-	if exp, act := res.DecisionID, logs[1].Fields["decision-id"]; exp != act {
+	if exp, act := res.DecisionID, logs[2].Fields["decision-id"]; exp != act {
 		t.Errorf("expected log field decision-id %q, got %q", exp, act)
 	}
 
@@ -167,13 +173,13 @@ func TestEval(t *testing.T) {
 	defer txnClose(ctx, err)
 	er.Txn = txn
 
-	err = Eval(ctx, logger, server, inputValue, er)
+	err = Eval(ctx, server, inputValue, er)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
+func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 
 	module := `
 		package envoy.authz
@@ -192,7 +198,10 @@ func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
 	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
 	store.Commit(ctx, txn)
 
-	m, err := plugins.New([]byte{}, "test", store, plugins.EnablePrintStatements(true))
+	m, err := plugins.New([]byte{}, "test", store,
+		plugins.EnablePrintStatements(true),
+		plugins.Logger(logger),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -274,6 +283,10 @@ func (m *mockExtAuthzGrpcServer) PreparedQuery() *rego.PreparedEvalQuery {
 
 func (m *mockExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 	m.preparedQuery = pq
+}
+
+func (m *mockExtAuthzGrpcServer) Logger() logging.Logger {
+	return m.manager.Logger()
 }
 
 type testPlugin struct {
