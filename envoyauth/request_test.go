@@ -8,8 +8,8 @@ import (
 
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	internal_util "github.com/open-policy-agent/opa-envoy-plugin/internal/util"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/util"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
@@ -334,13 +334,13 @@ func TestGetParsedBody(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			logEntry := logrus.WithField("test", name)
+			logger := logging.NewNoOpLogger()
 			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
 			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
 			rawBody := tc.input.GetAttributes().GetRequest().GetHttp().GetRawBody()
 			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
 			parsedPath, _, _ := getParsedPathAndQuery(path)
-			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, nil)
+			got, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, nil)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("expected result: %v, got: %v", tc.want, got)
 			}
@@ -368,12 +368,12 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
-	logEntry := logrus.WithField("test", "invalid json")
+	logger := logging.NewNoOpLogger()
 	req := createCheckRequest(requestContentTypeJSONInvalid)
 	path := []interface{}{}
 	protoSet := (*protoregistry.Files)(nil)
 	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody()
-	_, _, err := getParsedBody(logEntry, headers, body, nil, path, protoSet)
+	_, _, err := getParsedBody(logger, headers, body, nil, path, protoSet)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
@@ -574,7 +574,7 @@ func TestGetParsedBodygRPC(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			logEntry := logrus.WithField("test", name)
+			logger := logging.NewNoOpLogger()
 
 			headers := tc.input.GetAttributes().GetRequest().GetHttp().GetHeaders()
 			body := tc.input.GetAttributes().GetRequest().GetHttp().GetBody()
@@ -582,7 +582,7 @@ func TestGetParsedBodygRPC(t *testing.T) {
 			path := tc.input.GetAttributes().GetRequest().GetHttp().GetPath()
 
 			parsedPath, _, _ := getParsedPathAndQuery(path)
-			got, isBodyTruncated, err := getParsedBody(logEntry, headers, body, rawBody, parsedPath, protoSet)
+			got, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
 
 			if !reflect.DeepEqual(err, tc.err) {
 				t.Fatalf("expected error: %v, got: %v", tc.err, err)

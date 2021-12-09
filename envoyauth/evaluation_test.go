@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/open-policy-agent/opa/logging"
+	loggingtest "github.com/open-policy-agent/opa/logging/test"
 	"github.com/open-policy-agent/opa/plugins/logs"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -113,30 +115,53 @@ func TestGetRevisionMulti(t *testing.T) {
 
 func TestEval(t *testing.T) {
 	ctx := context.Background()
-	server, err := testAuthzServer()
+
+	logger := loggingtest.New()
+	server, err := testAuthzServer(logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	parsedBody := make(map[string]interface{})
-	parsedBody["firstname"] = "foo"
-	parsedBody["lastname"] = "bar"
+	inputValue := ast.MustInterfaceToValue(map[string]interface{}{
+		"parsed_body": map[string]interface{}{
+			"firstname": "foo",
+			"lastname":  "bar",
+		},
+	})
 
-	input := make(map[string]interface{})
-	input["parsed_body"] = parsedBody
-
-	inputValue, err := ast.InterfaceToValue(input)
-	if err != nil {
+	res, _, _ := NewEvalResult()
+	if err := Eval(ctx, server, inputValue, res); err != nil {
 		t.Fatal(err)
 	}
 
-	err = Eval(ctx, server, inputValue, &EvalResult{})
-	if err != nil {
-		t.Fatal(err)
+	logs := logger.Entries()
+	if exp, act := 3, len(logs); exp != act {
+		t.Fatalf("expected %d logs, got %d: %v", exp, act, logs)
+	}
+	if exp, act := logging.Info, logs[0].Level; exp != act {
+		t.Errorf("expected log level info, got %d", act)
+	}
+	if exp, act := "Starting decision logger.", logs[0].Message; exp != act {
+		t.Errorf("expected log message %q, got %q", exp, act)
+	}
+	if exp, act := logging.Debug, logs[1].Level; exp != act {
+		t.Errorf("expected log level debug, got %d", act)
+	}
+	if exp, act := "Executing policy query.", logs[1].Message; exp != act {
+		t.Errorf("expected log message %q, got %q", exp, act)
+	}
+	if exp, act := logging.Info, logs[2].Level; exp != act {
+		t.Errorf("expected log level info, got %d", act)
+	}
+	if exp, act := `example.rego:9: {"firstname": "foo", "lastname": "bar"}`, logs[2].Message; exp != act {
+		t.Errorf("expected log message %q, got %q", exp, act)
+	}
+	if exp, act := res.DecisionID, logs[2].Fields["decision-id"]; exp != act {
+		t.Errorf("expected log field decision-id %q, got %q", exp, act)
 	}
 
 	// include transaction in the result object
-	er := &EvalResult{}
+	er, _, _ := NewEvalResult()
 	var txn storage.Transaction
 	var txnClose TransactionCloser
 
@@ -154,7 +179,7 @@ func TestEval(t *testing.T) {
 	}
 }
 
-func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
+func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 
 	module := `
 		package envoy.authz
@@ -164,6 +189,7 @@ func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
         allow {
 			input.parsed_body.firstname == "foo"
 			input.parsed_body.lastname == "bar"
+			print(input.parsed_body)
 		}`
 
 	ctx := context.Background()
@@ -172,7 +198,10 @@ func testAuthzServer() (*mockExtAuthzGrpcServer, error) {
 	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
 	store.Commit(ctx, txn)
 
-	m, err := plugins.New([]byte{}, "test", store)
+	m, err := plugins.New([]byte{}, "test", store,
+		plugins.EnablePrintStatements(true),
+		plugins.Logger(logger),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +273,7 @@ func (m *mockExtAuthzGrpcServer) PreparedQueryDoOnce() *sync.Once {
 	return m.preparedQueryDoOnce
 }
 
-func (m *mockExtAuthzGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
+func (*mockExtAuthzGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
 	return nil
 }
 
@@ -256,18 +285,22 @@ func (m *mockExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 	m.preparedQuery = pq
 }
 
+func (m *mockExtAuthzGrpcServer) Logger() logging.Logger {
+	return m.manager.Logger()
+}
+
 type testPlugin struct {
 	events []logs.EventV1
 }
 
-func (p *testPlugin) Start(context.Context) error {
+func (*testPlugin) Start(context.Context) error {
 	return nil
 }
 
-func (p *testPlugin) Stop(context.Context) {
+func (*testPlugin) Stop(context.Context) {
 }
 
-func (p *testPlugin) Reconfigure(context.Context, interface{}) {
+func (*testPlugin) Reconfigure(context.Context, interface{}) {
 }
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
