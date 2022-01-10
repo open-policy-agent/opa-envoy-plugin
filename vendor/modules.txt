@@ -2,7 +2,7 @@
 github.com/OneOfOne/xxhash
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
-# github.com/bytecodealliance/wasmtime-go v0.31.0
+# github.com/bytecodealliance/wasmtime-go v0.32.0
 github.com/bytecodealliance/wasmtime-go
 github.com/bytecodealliance/wasmtime-go/build/include
 github.com/bytecodealliance/wasmtime-go/build/include/wasmtime
@@ -11,13 +11,15 @@ github.com/bytecodealliance/wasmtime-go/build/linux-x86_64
 github.com/bytecodealliance/wasmtime-go/build/macos-aarch64
 github.com/bytecodealliance/wasmtime-go/build/macos-x86_64
 github.com/bytecodealliance/wasmtime-go/build/windows-x86_64
+# github.com/cenkalti/backoff/v4 v4.1.2
+github.com/cenkalti/backoff/v4
 # github.com/cespare/xxhash/v2 v2.1.2
 github.com/cespare/xxhash/v2
-# github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1
+# github.com/cncf/xds/go v0.0.0-20211130200136-a8f946100490
 github.com/cncf/xds/go/udpa/annotations
 github.com/cncf/xds/go/xds/annotations/v3
 github.com/cncf/xds/go/xds/core/v3
-# github.com/envoyproxy/go-control-plane v0.9.10-0.20210907150352-cf90f659a021
+# github.com/envoyproxy/go-control-plane v0.10.1
 ## explicit
 github.com/envoyproxy/go-control-plane/envoy/annotations
 github.com/envoyproxy/go-control-plane/envoy/api/v2/core
@@ -28,12 +30,21 @@ github.com/envoyproxy/go-control-plane/envoy/type
 github.com/envoyproxy/go-control-plane/envoy/type/matcher
 github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3
 github.com/envoyproxy/go-control-plane/envoy/type/v3
-# github.com/envoyproxy/protoc-gen-validate v0.1.0
+# github.com/envoyproxy/protoc-gen-validate v0.6.2
 github.com/envoyproxy/protoc-gen-validate/validate
+# github.com/felixge/httpsnoop v1.0.2
+github.com/felixge/httpsnoop
 # github.com/fsnotify/fsnotify v1.5.1
 github.com/fsnotify/fsnotify
 # github.com/ghodss/yaml v1.0.0
 github.com/ghodss/yaml
+# github.com/go-ini/ini v1.66.2
+github.com/go-ini/ini
+# github.com/go-logr/logr v1.2.2
+github.com/go-logr/logr
+github.com/go-logr/logr/funcr
+# github.com/go-logr/stdr v1.2.0
+github.com/go-logr/stdr
 # github.com/gobwas/glob v0.2.3
 github.com/gobwas/glob
 github.com/gobwas/glob/compiler
@@ -44,6 +55,8 @@ github.com/gobwas/glob/syntax/lexer
 github.com/gobwas/glob/util/runes
 github.com/gobwas/glob/util/strings
 # github.com/golang/protobuf v1.5.2
+github.com/golang/protobuf/descriptor
+github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/protoc-gen-go/descriptor
 github.com/golang/protobuf/ptypes
@@ -54,6 +67,10 @@ github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/ptypes/wrappers
 # github.com/gorilla/mux v1.8.0
 github.com/gorilla/mux
+# github.com/grpc-ecosystem/grpc-gateway v1.16.0
+github.com/grpc-ecosystem/grpc-gateway/internal
+github.com/grpc-ecosystem/grpc-gateway/runtime
+github.com/grpc-ecosystem/grpc-gateway/utilities
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
 # github.com/mattn/go-runewidth v0.0.13
@@ -63,7 +80,7 @@ github.com/mattn/go-runewidth
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/olekukonko/tablewriter v0.0.5
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.35.0
+# github.com/open-policy-agent/opa v0.36.0
 ## explicit
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -71,11 +88,13 @@ github.com/open-policy-agent/opa/ast/internal/tokens
 github.com/open-policy-agent/opa/ast/location
 github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/cmd
+github.com/open-policy-agent/opa/cmd/internal/exec
 github.com/open-policy-agent/opa/compile
 github.com/open-policy-agent/opa/config
 github.com/open-policy-agent/opa/cover
 github.com/open-policy-agent/opa/dependencies
 github.com/open-policy-agent/opa/download
+github.com/open-policy-agent/opa/features/tracing
 github.com/open-policy-agent/opa/features/wasm
 github.com/open-policy-agent/opa/format
 github.com/open-policy-agent/opa/internal/bundle
@@ -86,6 +105,7 @@ github.com/open-policy-agent/opa/internal/compiler/wasm/opa
 github.com/open-policy-agent/opa/internal/config
 github.com/open-policy-agent/opa/internal/debug
 github.com/open-policy-agent/opa/internal/deepcopy
+github.com/open-policy-agent/opa/internal/distributedtracing
 github.com/open-policy-agent/opa/internal/file/archive
 github.com/open-policy-agent/opa/internal/file/url
 github.com/open-policy-agent/opa/internal/future
@@ -144,6 +164,7 @@ github.com/open-policy-agent/opa/repl
 github.com/open-policy-agent/opa/resolver
 github.com/open-policy-agent/opa/resolver/wasm
 github.com/open-policy-agent/opa/runtime
+github.com/open-policy-agent/opa/sdk
 github.com/open-policy-agent/opa/server
 github.com/open-policy-agent/opa/server/authorizer
 github.com/open-policy-agent/opa/server/identifier
@@ -160,6 +181,7 @@ github.com/open-policy-agent/opa/topdown/cache
 github.com/open-policy-agent/opa/topdown/copypropagation
 github.com/open-policy-agent/opa/topdown/lineage
 github.com/open-policy-agent/opa/topdown/print
+github.com/open-policy-agent/opa/tracing
 github.com/open-policy-agent/opa/types
 github.com/open-policy-agent/opa/util
 github.com/open-policy-agent/opa/version
@@ -193,7 +215,7 @@ github.com/rcrowley/go-metrics
 github.com/rivo/uniseg
 # github.com/sirupsen/logrus v1.8.1
 github.com/sirupsen/logrus
-# github.com/spf13/cobra v1.2.1
+# github.com/spf13/cobra v1.3.0
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
@@ -203,6 +225,47 @@ github.com/xeipuuv/gojsonpointer
 github.com/xeipuuv/gojsonreference
 # github.com/yashtewari/glob-intersection v0.0.0-20180916065949-5c77d914dd0b
 github.com/yashtewari/glob-intersection
+# go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.28.0
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
+# go.opentelemetry.io/otel v1.3.0
+go.opentelemetry.io/otel
+go.opentelemetry.io/otel/attribute
+go.opentelemetry.io/otel/baggage
+go.opentelemetry.io/otel/codes
+go.opentelemetry.io/otel/internal
+go.opentelemetry.io/otel/internal/baggage
+go.opentelemetry.io/otel/internal/global
+go.opentelemetry.io/otel/propagation
+go.opentelemetry.io/otel/semconv/v1.7.0
+# go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0
+go.opentelemetry.io/otel/exporters/otlp/internal/retry
+# go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0
+go.opentelemetry.io/otel/exporters/otlp/otlptrace
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/otlpconfig
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/tracetransform
+# go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.3.0
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc
+# go.opentelemetry.io/otel/internal/metric v0.26.0
+go.opentelemetry.io/otel/internal/metric/global
+go.opentelemetry.io/otel/internal/metric/registry
+# go.opentelemetry.io/otel/metric v0.26.0
+go.opentelemetry.io/otel/metric
+go.opentelemetry.io/otel/metric/global
+go.opentelemetry.io/otel/metric/number
+go.opentelemetry.io/otel/metric/sdkapi
+go.opentelemetry.io/otel/metric/unit
+# go.opentelemetry.io/otel/sdk v1.3.0
+go.opentelemetry.io/otel/sdk/instrumentation
+go.opentelemetry.io/otel/sdk/internal
+go.opentelemetry.io/otel/sdk/resource
+go.opentelemetry.io/otel/sdk/trace
+# go.opentelemetry.io/otel/trace v1.3.0
+go.opentelemetry.io/otel/trace
+# go.opentelemetry.io/proto/otlp v0.11.0
+go.opentelemetry.io/proto/otlp/collector/trace/v1
+go.opentelemetry.io/proto/otlp/common/v1
+go.opentelemetry.io/proto/otlp/resource/v1
+go.opentelemetry.io/proto/otlp/trace/v1
 # go.uber.org/automaxprocs v1.4.0
 go.uber.org/automaxprocs/internal/cgroups
 go.uber.org/automaxprocs/internal/runtime
@@ -224,12 +287,12 @@ golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/sys v0.0.0-20211124211545-fe61309f8881
-## explicit
+# golang.org/x/sys v0.0.0-20211205182925-97ca703d548d
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+golang.org/x/sys/windows/registry
 # golang.org/x/text v0.3.7
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
@@ -256,10 +319,13 @@ golang.org/x/tools/internal/typeparams
 # golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
-# google.golang.org/genproto v0.0.0-20210805201207-89edb61ffb67
+# google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa
 ## explicit
+google.golang.org/genproto/googleapis/api/httpbody
 google.golang.org/genproto/googleapis/rpc/code
+google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
+google.golang.org/genproto/protobuf/field_mask
 # google.golang.org/grpc v1.43.0
 ## explicit
 google.golang.org/grpc
@@ -275,6 +341,7 @@ google.golang.org/grpc/connectivity
 google.golang.org/grpc/credentials
 google.golang.org/grpc/credentials/insecure
 google.golang.org/grpc/encoding
+google.golang.org/grpc/encoding/gzip
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/internal
@@ -344,6 +411,7 @@ google.golang.org/protobuf/types/dynamicpb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/emptypb
+google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb

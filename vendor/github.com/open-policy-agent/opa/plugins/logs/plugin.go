@@ -56,7 +56,7 @@ type EventV1 struct {
 	Erased      []string                `json:"erased,omitempty"`
 	Masked      []string                `json:"masked,omitempty"`
 	Error       error                   `json:"error,omitempty"`
-	RequestedBy string                  `json:"requested_by"`
+	RequestedBy string                  `json:"requested_by,omitempty"`
 	Timestamp   time.Time               `json:"timestamp"`
 	Metrics     map[string]interface{}  `json:"metrics,omitempty"`
 
@@ -174,7 +174,9 @@ func (e *EventV1) AST() (ast.Value, error) {
 		event.Insert(errorKey, ast.NewTerm(evalErr))
 	}
 
-	event.Insert(requestedByKey, ast.StringTerm(e.RequestedBy))
+	if len(e.RequestedBy) > 0 {
+		event.Insert(requestedByKey, ast.StringTerm(e.RequestedBy))
+	}
 
 	// Use the timestamp JSON marshaller to ensure the format is the same as
 	// round tripping through JSON.
@@ -829,6 +831,8 @@ func (p *Plugin) maskEvent(ctx context.Context, txn storage.Transaction, event *
 				rego.Store(p.manager.Store),
 				rego.Transaction(txn),
 				rego.Runtime(p.manager.Info),
+				rego.EnablePrintStatements(p.manager.EnablePrintStatements()),
+				rego.PrintHook(p.manager.PrintHook()),
 			)
 
 			pq, err := r.PrepareForEval(context.Background())
