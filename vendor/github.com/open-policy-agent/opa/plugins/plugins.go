@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/config"
@@ -185,6 +186,7 @@ type Manager struct {
 	serverInitializedOnce        sync.Once
 	printHook                    print.Hook
 	enablePrintStatements        bool
+	router                       *mux.Router
 }
 
 type managerContextKey string
@@ -333,6 +335,12 @@ func EnablePrintStatements(yes bool) func(*Manager) {
 func PrintHook(h print.Hook) func(*Manager) {
 	return func(m *Manager) {
 		m.printHook = h
+	}
+}
+
+func WithRouter(r *mux.Router) func(*Manager) {
+	return func(m *Manager) {
+		m.router = r
 	}
 }
 
@@ -519,6 +527,13 @@ func (m *Manager) setCompiler(compiler *ast.Compiler) {
 	m.compiler = compiler
 }
 
+// GetRouter returns the managers router if set
+func (m *Manager) GetRouter() *mux.Router {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return m.router
+}
+
 // RegisterCompilerTrigger registers for change notifications when the compiler
 // is changed.
 func (m *Manager) RegisterCompilerTrigger(f func(txn storage.Transaction)) {
@@ -573,8 +588,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the manager, stopping all the plugins registered with it. Any plugin that needs to perform cleanup should
-// do so within the duration of the graceful shutdown period passed with the context as a timeout.
+// Stop stops the manager, stopping all the plugins registered with it.
+// Any plugin that needs to perform cleanup should do so within the duration
+// of the graceful shutdown period passed with the context as a timeout.
+// Note that a graceful shutdown period configured with the Manager instance
+// will override the timeout of the passed in context (if applicable).
 func (m *Manager) Stop(ctx context.Context) {
 	var toStop []Plugin
 
@@ -587,7 +605,12 @@ func (m *Manager) Stop(ctx context.Context) {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(m.gracefulShutdownPeriod)*time.Second)
+	var cancel context.CancelFunc
+	if m.gracefulShutdownPeriod > 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(m.gracefulShutdownPeriod)*time.Second)
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+	}
 	defer cancel()
 	for i := range toStop {
 		toStop[i].Stop(ctx)
