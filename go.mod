@@ -5,7 +5,7 @@ go 1.15
 require (
 	github.com/envoyproxy/go-control-plane v0.10.1
 	github.com/mattn/go-runewidth v0.0.13 // indirect
-	github.com/open-policy-agent/opa v0.36.0
+	github.com/open-policy-agent/opa v0.36.1
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/common v0.32.1 // indirect
