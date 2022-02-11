@@ -355,8 +355,8 @@ github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWb
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/olekukonko/tablewriter v0.0.5 h1:P2Ga83D34wi1o9J6Wh1mRuqd4mF/x/lgBS7N7AbDhec=
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=
-github.com/open-policy-agent/opa v0.37.1 h1:xOCmEnQAO7MZMHAQr6TWEG87YDWaeWiODrJx5tPgarI=
-github.com/open-policy-agent/opa v0.37.1/go.mod h1:9YlKCh5WIk1Pu0bpIPozaJKQWpUDTVCMVpe55FVUfik=
+github.com/open-policy-agent/opa v0.37.2 h1:pR9i4xlsnlq7b5Zgw6oj7PcFaJ9HX+sY4yfuzLI2WrA=
+github.com/open-policy-agent/opa v0.37.2/go.mod h1:9YlKCh5WIk1Pu0bpIPozaJKQWpUDTVCMVpe55FVUfik=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
