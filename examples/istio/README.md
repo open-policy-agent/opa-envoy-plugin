@@ -20,76 +20,8 @@ availability) in order to perform the authorization check.
 
 ## Quick Start
 
-This section assumes you are testing with Istio v1.8.0 or later and Kubernetes v1.20 or later.
+Follow the tutorial described [here](https://www.openpolicyagent.org/docs/latest/envoy-tutorial-istio/).
 
-This section assumes you have Istio deployed on top of Kubernetes. See Istio's [Quick Start](https://istio.io/docs/setup/kubernetes/install/kubernetes/) page to get started.
-
-1. Install OPA-Envoy.
-
-    ```bash
-    kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/opa-envoy-plugin/main/examples/istio/quick_start.yaml
-    ```
-
-    The `quick_start.yaml` manifest defines the following resources:
-
-    * External Authorization Filter to direct authorization checks to the OPA-Envoy sidecar. See `kubectl -n istio-system get envoyfilter ext-authz` for details.
-
-    * Kubernetes namespace (`opa-istio`) for OPA-Envoy control plane components.
-
-    * Kubernetes admission controller in the `opa-istio` namespace that automatically injects the OPA-Envoy sidecar into pods in namespaces labelled with `opa-istio-injection=enabled`.
-
-    * OPA configuration file and an OPA policy into ConfigMaps in the namespace where the app will be deployed, e.g., `default`.
-
-1. Enable automatic injection of the Istio Proxy and OPA-Envoy sidecars in the namespace where the app will be deployed, e.g., `default`.
-
-    ```bash
-    kubectl label namespace default opa-istio-injection="enabled"
-    kubectl label namespace default istio-injection="enabled"
-    ```
-
-1. Deploy the BookInfo application and make it accessible outside the cluster.
-
-    ```bash
-    kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/platform/kube/bookinfo.yaml
-    ```
-
-    ```bash
-    kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/networking/bookinfo-gateway.yaml
-    ```
-
-1. Set the `GATEWAY_URL` environment variable in your shell to the public
-IP/port of the Istio Ingress gateway.
-
-    **minikube**:
-
-    ```bash
-    export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
-    export INGRESS_HOST=$(minikube ip)
-    export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
-    echo $GATEWAY_URL
-    ```
-
-    **minikube (example)**:
-
-    ```bash
-    192.168.99.100:31380
-    ```
-
-    For other platforms see the [Istio documentation on determining ingress IP and ports.](https://istio.io/docs/tasks/traffic-management/ingress/#determining-the-ingress-ip-and-ports)
-
-1. Exercise the sample policy. Check that **alice** can access `/productpage` **BUT NOT** `/api/v1/products`.
-
-    ```bash
-    curl --user alice:password -i http://$GATEWAY_URL/productpage
-    curl --user alice:password -i http://$GATEWAY_URL/api/v1/products
-    ```
-
-1. Exercise the sample policy. Check that **bob** can access `/productpage` **AND** `/api/v1/products`.
-
-    ```bash
-    curl --user bob:password -i http://$GATEWAY_URL/productpage
-    curl --user bob:password -i http://$GATEWAY_URL/api/v1/products
-    ```
 ## Controlling the injection policy at the pod level
 
 If you want to control the injection policy at the pod level, set the `sidecar.opa-istio.io/inject` label to `false` on the pod.
