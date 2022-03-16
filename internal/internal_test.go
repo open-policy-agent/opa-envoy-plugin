@@ -940,6 +940,28 @@ func TestConfigValidWithPath(t *testing.T) {
 	}
 }
 
+func TestConfigValidWithGRPCMaxMessageSizes(t *testing.T) {
+
+	m, err := plugins.New([]byte{}, "test", inmem.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in := `{"grpc-max-recv-msg-size": 1000, "grpc-max-send-msg-size": 1000}`
+	config, err := Validate(m, []byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.GRPCMaxRecvMsgSize != 1000 {
+		t.Fatalf("Expected GRPC max receive message size to be 1000 but got %v", config.GRPCMaxRecvMsgSize)
+	}
+
+	if config.GRPCMaxSendMsgSize != 1000 {
+		t.Fatalf("Expected GRPC max send message size to be 1000 but got %v", config.GRPCMaxSendMsgSize)
+	}
+}
+
 func TestConfigValidDefault(t *testing.T) {
 
 	m, err := plugins.New([]byte{}, "test", inmem.New())
@@ -975,6 +997,14 @@ func TestConfigValidDefault(t *testing.T) {
 
 	if config.EnableReflection {
 		t.Fatal("Expected enable-reflection config to be disabled by default")
+	}
+
+	if config.GRPCMaxRecvMsgSize != defaultGRPCServerMaxReceiveMessageSize {
+		t.Fatalf("Expected GRPC max receive message size %d but got %d", defaultGRPCServerMaxReceiveMessageSize, config.GRPCMaxRecvMsgSize)
+	}
+
+	if config.GRPCMaxSendMsgSize != defaultGRPCServerMaxSendMessageSize {
+		t.Fatalf("Expected GRPC max send message size %d but got %d", defaultGRPCServerMaxSendMessageSize, config.GRPCMaxSendMsgSize)
 	}
 }
 
