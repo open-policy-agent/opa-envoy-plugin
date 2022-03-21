@@ -2,6 +2,7 @@ package envoyauth
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -34,6 +35,136 @@ func TestIsAllowed(t *testing.T) {
 
 	if result != true {
 		t.Fatalf("Expected value for IsAllowed %v but got %v", true, result)
+	}
+}
+
+func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
+	tests := map[string]struct {
+		decision interface{}
+		exp      []string
+		wantErr  bool
+	}{
+		"bool_eval_result": {
+			true,
+			[]string{},
+			false,
+		},
+		"invalid_eval_result": {
+			"hello",
+			[]string{},
+			true,
+		},
+		"empty_map_result": {
+			map[string]interface{}{},
+			[]string{},
+			false,
+		},
+		"bad_header_value": {
+			map[string]interface{}{"request_headers_to_remove": "test"},
+			[]string{},
+			true,
+		},
+		"string_array_header_value": {
+			map[string]interface{}{"request_headers_to_remove": []string{"foo", "bar"}},
+			[]string{"foo", "bar"},
+			false,
+		},
+		"interface_array_header_value": {
+			map[string]interface{}{"request_headers_to_remove": []interface{}{"foo", "bar", "fuz"}},
+			[]string{"foo", "bar", "fuz"},
+			false,
+		},
+		"interface_array_bad_header_value": {
+			map[string]interface{}{"request_headers_to_remove": []interface{}{1}},
+			[]string{},
+			true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			er := EvalResult{
+				Decision: tc.decision,
+			}
+
+			result, err := er.GetRequestHTTPHeadersToRemove()
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Expected error but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Unexpected error %v", err)
+				}
+
+				if !reflect.DeepEqual(tc.exp, result) {
+					t.Fatalf("Expected result %v but got %v", tc.exp, result)
+				}
+			}
+		})
+	}
+}
+
+func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
+	input := make(map[string]interface{})
+	er := EvalResult{
+		Decision: input,
+	}
+
+	result, err := er.GetResponseHTTPHeadersToAdd()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Fatal("Expected no headers")
+	}
+
+	badHeader := "test"
+	input["response_headers_to_add"] = badHeader
+
+	_, err = er.GetResponseHTTPHeadersToAdd()
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	testHeaders := make(map[string]interface{})
+	testHeaders["foo"] = "bar"
+	input["response_headers_to_add"] = testHeaders
+
+	result, err = er.GetResponseHTTPHeadersToAdd()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("Expected one header but got %v", len(result))
+	}
+
+	testHeaders["baz"] = 1
+
+	_, err = er.GetResponseHTTPHeadersToAdd()
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["response_headers_to_add"] = []interface{}{
+		map[string]interface{}{
+			"foo": "bar",
+		},
+		map[string]interface{}{
+			"foo": "baz",
+		},
+	}
+
+	result, err = er.GetResponseHTTPHeadersToAdd()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("Expected two headers but got %v", len(result))
 	}
 }
 
