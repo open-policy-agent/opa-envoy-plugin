@@ -352,9 +352,22 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		}
 
 		if status == int32(code.Code_OK) {
+
+			headersToRemove, err := result.GetRequestHTTPHeadersToRemove()
+			if err != nil {
+				return nil, stop, errors.Wrap(err, "failed to get request headers to remove")
+			}
+
+			responseHeadersToAdd, err := result.GetResponseHTTPHeadersToAdd()
+			if err != nil {
+				return nil, stop, errors.Wrap(err, "failed to get response headers to send to client")
+			}
+
 			resp.HttpResponse = &ext_authz_v3.CheckResponse_OkResponse{
 				OkResponse: &ext_authz_v3.OkHttpResponse{
-					Headers: responseHeaders,
+					Headers:              responseHeaders,
+					HeadersToRemove:      headersToRemove,
+					ResponseHeadersToAdd: responseHeadersToAdd,
 				},
 			}
 		} else {

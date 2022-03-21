@@ -1017,6 +1017,110 @@ func TestConfigWithProtoDescriptor(t *testing.T) {
 	}
 }
 
+func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+
+		default allow = false
+
+		allow {
+			input.parsed_path = ["my", "test", "path"]
+		}
+
+		headers["x"] = "hello"
+		headers["y"] = "world"
+
+		request_headers_to_remove := ["foo", "bar"]
+
+		result["allowed"] = allow
+		result["headers"] = headers
+		result["request_headers_to_remove"] = request_headers_to_remove`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", &testPlugin{}, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	headers := response.GetHeadersToRemove()
+	if len(headers) != 2 {
+		t.Fatalf("Expected two headers but got %v", len(headers))
+	}
+
+	expectedHeaders := []string{"foo", "bar"}
+
+	if !reflect.DeepEqual(expectedHeaders, headers) {
+		t.Fatalf("Expected headers %v but got %v", expectedHeaders, headers)
+	}
+}
+
+func TestCheckAllowObjectDecisionResponseHeadersToAdd(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+
+		default allow = false
+
+		allow {
+			input.parsed_path = ["my", "test", "path"]
+		}
+
+		response_headers_to_add["x"] = "hello"
+		response_headers_to_add["y"] = "world"
+
+		result["allowed"] = allow
+		result["response_headers_to_add"] = response_headers_to_add`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", &testPlugin{}, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	headers := response.GetResponseHeadersToAdd()
+	if len(headers) != 2 {
+		t.Fatalf("Expected two headers but got %v", len(headers))
+	}
+
+	keys := []string{}
+	for _, h := range headers {
+		keys = append(keys, h.Header.GetKey())
+	}
+
+	if len(keys) != 2 {
+		t.Fatalf("Expected two keys but got %v", len(keys))
+	}
+}
+
 func TestCheckAllowObjectDecision(t *testing.T) {
 
 	// Example Envoy Check Request for input:
@@ -1041,6 +1145,16 @@ func TestCheckAllowObjectDecision(t *testing.T) {
 	response := output.GetOkResponse()
 	if response == nil {
 		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	headersToRemove := response.GetHeadersToRemove()
+	if len(headersToRemove) != 0 {
+		t.Fatalf("Expected no headers to remove but got %v", headersToRemove)
+	}
+
+	headersToAdd := response.GetResponseHeadersToAdd()
+	if len(headersToAdd) != 0 {
+		t.Fatalf("Expected no headers to add but got %v", headersToAdd)
 	}
 
 	headers := response.GetHeaders()

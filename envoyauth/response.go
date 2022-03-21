@@ -103,56 +103,61 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 	return false, result.invalidDecisionErr()
 }
 
+// GetRequestHTTPHeadersToRemove - returns the http headers to remove from the original request before dispatching
+// it to the upstream
+func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
+	headersToRemove := []string{}
+
+	switch decision := result.Decision.(type) {
+	case bool:
+		return headersToRemove, nil
+	case map[string]interface{}:
+		var ok bool
+		var val interface{}
+
+		if val, ok = decision["request_headers_to_remove"]; !ok {
+			return headersToRemove, nil
+		}
+
+		switch val := val.(type) {
+		case []string:
+			return val, nil
+		case []interface{}:
+			for _, vval := range val {
+				header, ok := vval.(string)
+				if !ok {
+					return nil, fmt.Errorf("type assertion error")
+				}
+
+				headersToRemove = append(headersToRemove, header)
+			}
+			return headersToRemove, nil
+		default:
+			return nil, fmt.Errorf("type assertion error")
+		}
+	}
+
+	return nil, result.invalidDecisionErr()
+}
+
 // GetResponseHTTPHeaders - returns the http headers to return if they are part of the decision
 func (result *EvalResult) GetResponseHTTPHeaders() (http.Header, error) {
-	var ok bool
-	var val interface{}
-
 	var responseHeaders = make(http.Header)
 
 	switch decision := result.Decision.(type) {
 	case bool:
 		return responseHeaders, nil
 	case map[string]interface{}:
+		var ok bool
+		var val interface{}
+
 		if val, ok = decision["headers"]; !ok {
 			return responseHeaders, nil
 		}
 
-		takeResponseHeaders := func(headers map[string]interface{}, targetHeaders *http.Header) error {
-			for key, value := range headers {
-				var headerVal string
-				if headerVal, ok = value.(string); !ok {
-					return fmt.Errorf("type assertion error")
-				}
-
-				targetHeaders.Add(key, headerVal)
-			}
-
-			return nil
-		}
-
-		switch val := val.(type) {
-		case []interface{}:
-			for _, vval := range val {
-				headers, ok := vval.(map[string]interface{})
-				if !ok {
-					return nil, fmt.Errorf("type assertion error")
-				}
-
-				err := takeResponseHeaders(headers, &responseHeaders)
-				if err != nil {
-					return nil, err
-				}
-			}
-
-		case map[string]interface{}:
-			err := takeResponseHeaders(val, &responseHeaders)
-			if err != nil {
-				return nil, err
-			}
-
-		default:
-			return nil, fmt.Errorf("type assertion error")
+		err := transformToHTTPHeaderFormat(val, &responseHeaders)
+		if err != nil {
+			return nil, err
 		}
 
 		return responseHeaders, nil
@@ -168,22 +173,35 @@ func (result *EvalResult) GetResponseEnvoyHeaderValueOptions() ([]*ext_core_v3.H
 		return nil, err
 	}
 
-	responseHeaders := []*ext_core_v3.HeaderValueOption{}
+	return transformHTTPHeaderToEnvoyHeaderValueOption(headers)
+}
 
-	for key, values := range headers {
-		for idx := range values {
-			headerValue := &ext_core_v3.HeaderValue{
-				Key:   key,
-				Value: values[idx],
-			}
-			headerValueOption := &ext_core_v3.HeaderValueOption{
-				Header: headerValue,
-			}
-			responseHeaders = append(responseHeaders, headerValueOption)
+// GetResponseHTTPHeadersToAdd - returns the http headers to send to the downstream client
+func (result *EvalResult) GetResponseHTTPHeadersToAdd() ([]*ext_core_v3.HeaderValueOption, error) {
+	var responseHeaders = make(http.Header)
+
+	finalHeaders := []*ext_core_v3.HeaderValueOption{}
+
+	switch decision := result.Decision.(type) {
+	case bool:
+		return finalHeaders, nil
+	case map[string]interface{}:
+		var ok bool
+		var val interface{}
+
+		if val, ok = decision["response_headers_to_add"]; !ok {
+			return finalHeaders, nil
 		}
+
+		err := transformToHTTPHeaderFormat(val, &responseHeaders)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, result.invalidDecisionErr()
 	}
 
-	return responseHeaders, nil
+	return transformHTTPHeaderToEnvoyHeaderValueOption(responseHeaders)
 }
 
 // HasResponseBody returns true if the decision defines a body (only true for structured decisions)
@@ -280,4 +298,65 @@ func (result *EvalResult) GetResponseEnvoyHTTPStatus() (*ext_type_v3.HttpStatus,
 	status.Code = ext_type_v3.StatusCode(int32(httpStatusCode))
 
 	return status, nil
+}
+
+func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
+
+	takeResponseHeaders := func(headers map[string]interface{}, targetHeaders *http.Header) error {
+		for key, value := range headers {
+			var headerVal string
+			var ok bool
+			if headerVal, ok = value.(string); !ok {
+				return fmt.Errorf("type assertion error")
+			}
+
+			targetHeaders.Add(key, headerVal)
+		}
+		return nil
+	}
+
+	switch input := input.(type) {
+	case []interface{}:
+		for _, val := range input {
+			headers, ok := val.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("type assertion error")
+			}
+
+			err := takeResponseHeaders(headers, result)
+			if err != nil {
+				return err
+			}
+		}
+
+	case map[string]interface{}:
+		err := takeResponseHeaders(input, result)
+		if err != nil {
+			return err
+		}
+
+	default:
+		return fmt.Errorf("type assertion error")
+	}
+
+	return nil
+}
+
+func transformHTTPHeaderToEnvoyHeaderValueOption(headers http.Header) ([]*ext_core_v3.HeaderValueOption, error) {
+	responseHeaders := []*ext_core_v3.HeaderValueOption{}
+
+	for key, values := range headers {
+		for idx := range values {
+			headerValue := &ext_core_v3.HeaderValue{
+				Key:   key,
+				Value: values[idx],
+			}
+			headerValueOption := &ext_core_v3.HeaderValueOption{
+				Header: headerValue,
+			}
+			responseHeaders = append(responseHeaders, headerValueOption)
+		}
+	}
+
+	return responseHeaders, nil
 }
