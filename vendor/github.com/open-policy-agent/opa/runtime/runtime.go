@@ -15,6 +15,7 @@ import (
 	mr "math/rand"
 	"os"
 	"os/signal"
+	"os/user"
 	"strings"
 	"sync"
 	"syscall"
@@ -44,6 +45,7 @@ import (
 	"github.com/open-policy-agent/opa/repl"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/storage/disk"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/tracing"
 	"github.com/open-policy-agent/opa/util"
@@ -202,6 +204,11 @@ type Params struct {
 	// If it is nil, a new mux.Router will be created
 	Router *mux.Router
 
+	// DiskStorage, if set, will make the runtime instantiate a disk-backed storage
+	// implementation (instead of the default, in-memory store).
+	// It can also be enabled via config, and this runtime field takes precedence.
+	DiskStorage *disk.Options
+
 	DistributedTracingOpts tracing.Options
 }
 
@@ -299,14 +306,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, err
 	}
 
-	var consoleLogger logging.Logger
-
-	if params.ConsoleLogger == nil {
+	consoleLogger := params.ConsoleLogger
+	if consoleLogger == nil {
 		l := logging.New()
 		l.SetFormatter(internal_logging.GetFormatter(params.Logging.Format))
 		consoleLogger = l
-	} else {
-		consoleLogger = params.ConsoleLogger
 	}
 
 	if params.Router == nil {
@@ -315,9 +319,26 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 
 	metrics := prometheus.New(metrics.New(), errorLogger(logger))
 
+	var store storage.Store
+	if params.DiskStorage == nil {
+		params.DiskStorage, err = disk.OptionsFromConfig(config, params.ID)
+		if err != nil {
+			return nil, fmt.Errorf("parse disk store configuration: %w", err)
+		}
+	}
+
+	if params.DiskStorage != nil {
+		store, err = disk.New(ctx, logger, metrics, *params.DiskStorage)
+		if err != nil {
+			return nil, fmt.Errorf("initialize disk store: %w", err)
+		}
+	} else {
+		store = inmem.New()
+	}
+
 	manager, err := plugins.New(config,
 		params.ID,
-		inmem.New(),
+		store,
 		plugins.Info(info),
 		plugins.InitBundles(loaded.Bundles),
 		plugins.InitFiles(loaded.Files),
@@ -395,6 +416,17 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 
 	if rt.Params.Authorization == server.AuthorizationOff && rt.Params.Authentication == server.AuthenticationToken {
 		rt.logger.Error("Token authentication enabled without authorization. Authentication will be ineffective. See https://www.openpolicyagent.org/docs/latest/security/#authentication-and-authorization for more information.")
+	}
+
+	usr, err := user.Current()
+	if err != nil {
+		rt.logger.Debug("Failed to determine uid/gid of process owner")
+	} else if usr.Uid == "0" || usr.Gid == "0" {
+		message := "OPA running with uid or gid 0. Running OPA with root privileges is not recommended."
+		if os.Getenv("OPA_DOCKER_IMAGE") == "official" {
+			message += " Use the -rootless image to avoid running with root privileges. This will be made the default in later OPA releases."
+		}
+		rt.logger.Warn(message)
 	}
 
 	// NOTE(tsandall): at some point, hopefully we can remove this because the
@@ -789,7 +821,7 @@ func (rt *Runtime) onReloadLogger(d time.Duration, err error) {
 	rt.logger.WithFields(map[string]interface{}{
 		"duration": d,
 		"err":      err,
-	}).Warn("Processed file watch event.")
+	}).Info("Processed file watch event.")
 }
 
 func (rt *Runtime) getWatcher(rootPaths []string) (*fsnotify.Watcher, error) {
