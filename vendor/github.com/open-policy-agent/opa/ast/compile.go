@@ -1332,6 +1332,7 @@ func (c *Compiler) checkDuplicateImports() {
 
 		for _, imp := range mod.Imports {
 			name := imp.Name()
+
 			if processed, conflict := processedImports[name]; conflict {
 				c.err(NewError(CompileErr, imp.Location, "import must not shadow %v", processed))
 			} else {
@@ -1410,6 +1411,21 @@ func (c *Compiler) resolveAllRefs() {
 			return false
 		})
 
+		if c.strict { // check for unused imports
+			for _, imp := range mod.Imports {
+				path := imp.Path.Value.(Ref)
+				if FutureRootDocument.Equal(path[0]) {
+					continue // ignore future imports
+				}
+
+				for v, u := range globals {
+					if v.Equal(imp.Name()) && !u.used {
+						c.err(NewError(CompileErr, imp.Location, "%s unused", imp.String()))
+					}
+				}
+			}
+		}
+
 		// Once imports have been resolved, they are no longer needed.
 		mod.Imports = nil
 	}
@@ -1480,12 +1496,14 @@ func (c *Compiler) rewritePrintCalls() {
 		WalkRules(mod, func(r *Rule) bool {
 			safe := r.Head.Args.Vars()
 			safe.Update(ReservedVars)
-			WalkBodies(r, func(b Body) bool {
+			vis := func(b Body) bool {
 				for _, err := range rewritePrintCalls(c.localvargen, c.GetArity, safe, b) {
 					c.err(err)
 				}
 				return false
-			})
+			}
+			WalkBodies(r.Head, vis)
+			WalkBodies(r.Body, vis)
 			return false
 		})
 	}
@@ -2095,7 +2113,7 @@ func (qc *queryCompiler) checkKeywordOverrides(_ *QueryContext, body Body) (Body
 
 func (qc *queryCompiler) resolveRefs(qctx *QueryContext, body Body) (Body, error) {
 
-	var globals map[Var]Ref
+	var globals map[Var]*usedRef
 
 	if qctx != nil {
 		pkg := qctx.Package
@@ -3257,31 +3275,20 @@ func (l *localVarGenerator) Generate() Var {
 	}
 }
 
-func getGlobals(pkg *Package, rules []Var, imports []*Import) map[Var]Ref {
+func getGlobals(pkg *Package, rules []Var, imports []*Import) map[Var]*usedRef {
 
-	globals := map[Var]Ref{}
+	globals := map[Var]*usedRef{}
 
 	// Populate globals with exports within the package.
 	for _, v := range rules {
 		global := append(Ref{}, pkg.Path...)
 		global = append(global, &Term{Value: String(v)})
-		globals[v] = global
+		globals[v] = &usedRef{ref: global}
 	}
 
 	// Populate globals with imports.
 	for _, i := range imports {
-		if len(i.Alias) > 0 {
-			path := i.Path.Value.(Ref)
-			globals[i.Alias] = path
-		} else {
-			path := i.Path.Value.(Ref)
-			if len(path) == 1 {
-				globals[path[0].Value.(Var)] = path
-			} else {
-				v := path[len(path)-1].Value.(String)
-				globals[Var(v)] = path
-			}
-		}
+		globals[i.Name()] = &usedRef{ref: i.Path.Value.(Ref)}
 	}
 
 	return globals
@@ -3294,14 +3301,14 @@ func requiresEval(x *Term) bool {
 	return ContainsRefs(x) || ContainsComprehensions(x)
 }
 
-func resolveRef(globals map[Var]Ref, ignore *declaredVarStack, ref Ref) Ref {
+func resolveRef(globals map[Var]*usedRef, ignore *declaredVarStack, ref Ref) Ref {
 
 	r := Ref{}
 	for i, x := range ref {
 		switch v := x.Value.(type) {
 		case Var:
 			if g, ok := globals[v]; ok && !ignore.Contains(v) {
-				cpy := g.Copy()
+				cpy := g.ref.Copy()
 				for i := range cpy {
 					cpy[i].SetLocation(x.Location)
 				}
@@ -3310,6 +3317,7 @@ func resolveRef(globals map[Var]Ref, ignore *declaredVarStack, ref Ref) Ref {
 				} else {
 					r = append(r, NewTerm(cpy).SetLocation(x.Location))
 				}
+				g.used = true
 			} else {
 				r = append(r, x)
 			}
@@ -3323,7 +3331,12 @@ func resolveRef(globals map[Var]Ref, ignore *declaredVarStack, ref Ref) Ref {
 	return r
 }
 
-func resolveRefsInRule(globals map[Var]Ref, rule *Rule) error {
+type usedRef struct {
+	ref  Ref
+	used bool
+}
+
+func resolveRefsInRule(globals map[Var]*usedRef, rule *Rule) error {
 	ignore := &declaredVarStack{}
 
 	vars := NewVarSet()
@@ -3386,7 +3399,7 @@ func resolveRefsInRule(globals map[Var]Ref, rule *Rule) error {
 	return nil
 }
 
-func resolveRefsInBody(globals map[Var]Ref, ignore *declaredVarStack, body Body) Body {
+func resolveRefsInBody(globals map[Var]*usedRef, ignore *declaredVarStack, body Body) Body {
 	r := make([]*Expr, 0, len(body))
 	for _, expr := range body {
 		r = append(r, resolveRefsInExpr(globals, ignore, expr))
@@ -3394,7 +3407,7 @@ func resolveRefsInBody(globals map[Var]Ref, ignore *declaredVarStack, body Body)
 	return r
 }
 
-func resolveRefsInExpr(globals map[Var]Ref, ignore *declaredVarStack, expr *Expr) *Expr {
+func resolveRefsInExpr(globals map[Var]*usedRef, ignore *declaredVarStack, expr *Expr) *Expr {
 	cpy := *expr
 	switch ts := expr.Terms.(type) {
 	case *Term:
@@ -3431,14 +3444,15 @@ func resolveRefsInExpr(globals map[Var]Ref, ignore *declaredVarStack, expr *Expr
 	return &cpy
 }
 
-func resolveRefsInTerm(globals map[Var]Ref, ignore *declaredVarStack, term *Term) *Term {
+func resolveRefsInTerm(globals map[Var]*usedRef, ignore *declaredVarStack, term *Term) *Term {
 	switch v := term.Value.(type) {
 	case Var:
 		if g, ok := globals[v]; ok && !ignore.Contains(v) {
-			cpy := g.Copy()
+			cpy := g.ref.Copy()
 			for i := range cpy {
 				cpy[i].SetLocation(term.Location)
 			}
+			g.used = true
 			return NewTerm(cpy).SetLocation(term.Location)
 		}
 		return term
@@ -3503,7 +3517,7 @@ func resolveRefsInTerm(globals map[Var]Ref, ignore *declaredVarStack, term *Term
 	}
 }
 
-func resolveRefsInTermArray(globals map[Var]Ref, ignore *declaredVarStack, terms *Array) []*Term {
+func resolveRefsInTermArray(globals map[Var]*usedRef, ignore *declaredVarStack, terms *Array) []*Term {
 	cpy := make([]*Term, terms.Len())
 	for i := 0; i < terms.Len(); i++ {
 		cpy[i] = resolveRefsInTerm(globals, ignore, terms.Elem(i))
@@ -3511,7 +3525,7 @@ func resolveRefsInTermArray(globals map[Var]Ref, ignore *declaredVarStack, terms
 	return cpy
 }
 
-func resolveRefsInTermSlice(globals map[Var]Ref, ignore *declaredVarStack, terms []*Term) []*Term {
+func resolveRefsInTermSlice(globals map[Var]*usedRef, ignore *declaredVarStack, terms []*Term) []*Term {
 	cpy := make([]*Term, len(terms))
 	for i := 0; i < len(terms); i++ {
 		cpy[i] = resolveRefsInTerm(globals, ignore, terms[i])
@@ -4557,7 +4571,7 @@ func rewriteWithModifier(c *Compiler, f *equalityFactory, expr *Expr) ([]*Expr, 
 
 func validateTarget(c *Compiler, term *Term) *Error {
 	if !isInputRef(term) && !isDataRef(term) {
-		return NewError(TypeErr, term.Location, "with keyword target must start with %v or %v", InputRootDocument, DefaultRootDocument)
+		return NewError(TypeErr, term.Location, "with keyword target must reference existing %v or %v", InputRootDocument, DefaultRootDocument)
 	}
 
 	if isDataRef(term) {
