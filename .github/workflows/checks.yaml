@@ -111,3 +111,17 @@ jobs:
         run: make test-teardown
         if: ${{ always() }}
         working-directory: examples/grpc
+
+  proxy-init-build:
+    # Make sure that the proxy_init container is able to build successfully.
+    name: Build proxy_init container
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Build proxy_init
+      run: make -C proxy_init build
