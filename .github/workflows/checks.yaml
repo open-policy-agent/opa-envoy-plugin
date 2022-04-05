@@ -123,5 +123,8 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
 
+    - name: Workaround Buildx Errors
+      run: build/buildx_workaround.sh
+
     - name: Build proxy_init
       run: make -C proxy_init build
