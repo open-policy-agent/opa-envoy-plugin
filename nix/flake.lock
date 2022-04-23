@@ -1,0 +1,100 @@
+{
+  "nodes": {
+    "gomod2nix": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "utils": "utils"
+      },
+      "locked": {
+        "lastModified": 1641803356,
+        "narHash": "sha256-ZjF43cckJLJCV9I+SXwTGNQGI52KrYwUhLt/R83TyKk=",
+        "owner": "tweag",
+        "repo": "gomod2nix",
+        "rev": "fc5adcc53031c5a3934500a57896a840a2bd073d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tweag",
+        "repo": "gomod2nix",
+        "type": "github"
+      }
+    },
+    "nixie": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1644173759,
+        "narHash": "sha256-7vkSov2eTuIGClTvuPfvuaPxCniTjX3IZLuGgr6qECs=",
+        "owner": "c0c0n3",
+        "repo": "nixie",
+        "rev": "72fb0297776c7fd8b551f8fdcc6bbc038a57c62f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "c0c0n3",
+        "repo": "nixie",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1625191069,
+        "narHash": "sha256-M8/UH9pMgQEtuzY9bFwklYw8hx0pOKtUTyQC8E2UTHY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "d8079260a3028ae3221d7a5467443ee3a9edd2b8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1640531271,
+        "narHash": "sha256-WsUVTlPu1k3rXg3dyA0KMNvM9rnCEU0Fx4W0QI4rsXE=",
+        "owner": "NixOs",
+        "repo": "nixpkgs",
+        "rev": "04bd2d1a4700907997be007a2a8f39edd59dac24",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOs",
+        "ref": "nixos-21.11",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "gomod2nix": "gomod2nix",
+        "nixie": "nixie",
+        "nixpkgs": [
+          "nixie",
+          "nixpkgs"
+        ]
+      }
+    },
+    "utils": {
+      "locked": {
+        "lastModified": 1623875721,
+        "narHash": "sha256-A8BU7bjS5GirpAUv4QA+QnJ4CceLHkcXdRp4xITDB0s=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "f7e004a55b120c02ecb6219596820fcd32ca8772",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
