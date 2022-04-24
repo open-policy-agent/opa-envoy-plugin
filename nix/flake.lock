@@ -1,6 +1,6 @@
 {
   "nodes": {
-    "gomod2nix": {
+    "gomod-2-nix": {
       "inputs": {
         "nixpkgs": "nixpkgs",
         "utils": "utils"
@@ -86,7 +86,7 @@
     },
     "root": {
       "inputs": {
-        "gomod2nix": "gomod2nix",
+        "gomod-2-nix": "gomod-2-nix",
         "nixie": "nixie",
         "nixpkgs": "nixpkgs_3"
       }
