@@ -69,14 +69,26 @@
         "type": "github"
       }
     },
+    "nixpkgs_3": {
+      "locked": {
+        "lastModified": 1650792148,
+        "narHash": "sha256-n1MZSZIzvP70BJ56tV8GwQ5L0wHt/nTH9UkF5HTGB/4=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ab83c5d70528f1edc7080dead3a5dee61797b3ff",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "gomod2nix": "gomod2nix",
         "nixie": "nixie",
-        "nixpkgs": [
-          "nixie",
-          "nixpkgs"
-        ]
+        "nixpkgs": "nixpkgs_3"
       }
     },
     "utils": {
