@@ -3,7 +3,7 @@ name: Post Tag
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
 
 jobs:
   build:
