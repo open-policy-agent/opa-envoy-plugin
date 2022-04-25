@@ -1,5 +1,7 @@
 REPOSITORY := openpolicyagent/proxy_init
-VERSION := v6
+
+# In CI, this gets overridden by  proxy_init-tag.yaml
+VERSION := latest
 
 .PHONY: all
 all: image
