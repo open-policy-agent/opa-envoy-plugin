@@ -34,4 +34,4 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and Push proxy_init
-        run: make VERSION=${TAG_NAME#v} -C proxy_init push
+        run: make VERSION=v${TAG_NAME#*v} -C proxy_init push
