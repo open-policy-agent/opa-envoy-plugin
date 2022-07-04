@@ -158,8 +158,6 @@ func New() *Server {
 // from s.Listeners().
 func (s *Server) Init(ctx context.Context) (*Server, error) {
 	s.initRouters()
-	s.Handler = s.initHandlerAuth(s.Handler)
-	s.DiagnosticHandler = s.initHandlerAuth(s.DiagnosticHandler)
 
 	txn, err := s.store.NewTransaction(ctx, storage.WriteParams)
 	if err != nil {
@@ -181,6 +179,10 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 	s.defaultDecisionPath = s.generateDefaultDecisionPath()
 	s.interQueryBuiltinCache = iCache.NewInterQueryCache(s.manager.InterQueryBuiltinCacheConfig())
 	s.manager.RegisterCacheTrigger(s.updateCacheConfig)
+
+	// authorizer, if configured, needs the iCache to be set up already
+	s.Handler = s.initHandlerAuth(s.Handler)
+	s.DiagnosticHandler = s.initHandlerAuth(s.DiagnosticHandler)
 
 	return s, s.store.Commit(ctx, txn)
 }
@@ -1559,9 +1561,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 
 	m.Timer(metrics.RegoInputParse).Stop()
 
-	params := storage.WriteParams
-	params.Context = storage.NewContext().WithMetrics(m)
-	txn, err := s.store.NewTransaction(ctx, params)
+	txn, err := s.store.NewTransaction(ctx, storage.TransactionParams{Context: storage.NewContext().WithMetrics(m)})
 	if err != nil {
 		writer.ErrorAuto(w, err)
 		return
@@ -2158,6 +2158,7 @@ func (s *Server) v1QueryGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
 	m := metrics.New()
+	m.Timer(metrics.ServerHandler).Start()
 
 	decisionID := s.generateDecisionID()
 	ctx := r.Context()
@@ -2221,6 +2222,12 @@ func (s *Server) v1QueryPost(w http.ResponseWriter, r *http.Request) {
 			writer.ErrorAuto(w, err)
 		}
 		return
+	}
+
+	m.Timer(metrics.ServerHandler).Stop()
+
+	if includeMetrics || includeInstrumentation {
+		results.Metrics = m.All()
 	}
 
 	writer.JSON(w, http.StatusOK, results, pretty)
