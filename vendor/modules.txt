@@ -26,7 +26,7 @@ github.com/cespare/xxhash/v2
 github.com/cncf/xds/go/udpa/annotations
 github.com/cncf/xds/go/xds/annotations/v3
 github.com/cncf/xds/go/xds/core/v3
-# github.com/containerd/containerd v1.6.4
+# github.com/containerd/containerd v1.6.6
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
 github.com/containerd/containerd/content/local
@@ -56,7 +56,7 @@ github.com/dgraph-io/badger/v3/y
 github.com/dgraph-io/ristretto
 github.com/dgraph-io/ristretto/z
 github.com/dgraph-io/ristretto/z/simd
-# github.com/docker/cli v20.10.11+incompatible
+# github.com/docker/cli v20.10.17+incompatible
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
@@ -74,7 +74,7 @@ github.com/docker/distribution/registry/client/auth/challenge
 github.com/docker/distribution/registry/client/transport
 github.com/docker/distribution/registry/storage/cache
 github.com/docker/distribution/registry/storage/cache/memory
-# github.com/docker/docker v20.10.11+incompatible
+# github.com/docker/docker v20.10.17+incompatible
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
 github.com/docker/docker/api/types/container
@@ -190,7 +190,7 @@ github.com/moby/term/windows
 github.com/morikuni/aec
 # github.com/olekukonko/tablewriter v0.0.5
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.41.0
+# github.com/open-policy-agent/opa v0.42.0
 ## explicit
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -309,7 +309,7 @@ github.com/peterh/liner
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/prometheus/client_golang v1.12.1
+# github.com/prometheus/client_golang v1.12.2
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/collectors
 github.com/prometheus/client_golang/prometheus/internal
@@ -331,11 +331,11 @@ github.com/rcrowley/go-metrics
 github.com/rivo/uniseg
 # github.com/sirupsen/logrus v1.8.1
 github.com/sirupsen/logrus
-# github.com/spf13/cobra v1.4.0
+# github.com/spf13/cobra v1.5.0
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
-# github.com/vektah/gqlparser/v2 v2.4.4
+# github.com/vektah/gqlparser/v2 v2.4.5
 github.com/vektah/gqlparser/v2
 github.com/vektah/gqlparser/v2/ast
 github.com/vektah/gqlparser/v2/gqlerror
@@ -414,7 +414,7 @@ golang.org/x/lint/golint
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.0.0-20220107192237-5cfca573fb4d
+# golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
@@ -423,7 +423,7 @@ golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+# golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 # golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
@@ -556,7 +556,7 @@ google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/yaml.v2 v2.4.0
 gopkg.in/yaml.v2
-# oras.land/oras-go v1.1.1
+# oras.land/oras-go v1.2.0
 oras.land/oras-go/pkg/artifact
 oras.land/oras-go/pkg/auth
 oras.land/oras-go/pkg/auth/docker
