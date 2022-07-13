@@ -190,7 +190,7 @@ github.com/moby/term/windows
 github.com/morikuni/aec
 # github.com/olekukonko/tablewriter v0.0.5
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.42.1
+# github.com/open-policy-agent/opa v0.42.2
 ## explicit
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
