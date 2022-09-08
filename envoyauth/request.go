@@ -26,7 +26,7 @@ import (
 var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
 var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 
-//RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
+// RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
 func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files) (map[string]interface{}, error) {
 	var err error
 	var input map[string]interface{}

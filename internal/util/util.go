@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-//ReadProtoSet - Reads protobuf files from disk
+// ReadProtoSet - Reads protobuf files from disk
 func ReadProtoSet(path string) (*protoregistry.Files, error) {
 	protoSet, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -25,7 +25,7 @@ func ReadProtoSet(path string) (*protoregistry.Files, error) {
 	return protodesc.NewFiles(&fileSet)
 }
 
-//UUID4 Generates a new universally unique identifier
+// UUID4 Generates a new universally unique identifier
 func UUID4() (string, error) {
 	bs := make([]byte, 16)
 	n, err := io.ReadFull(rand.Reader, bs)
