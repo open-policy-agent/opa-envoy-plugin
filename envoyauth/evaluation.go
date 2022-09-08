@@ -15,7 +15,7 @@ import (
 	"github.com/open-policy-agent/opa/topdown/print"
 )
 
-//EvalContext - This is an SPI that has to be provided if the envoy external authorization
+// EvalContext - This is an SPI that has to be provided if the envoy external authorization
 // is used from outside the plugin, i.e. as a Go module
 type EvalContext interface {
 	ParsedQuery() ast.Body
