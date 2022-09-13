@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/plugin"
@@ -18,7 +17,6 @@ func main() {
 	runtime.RegisterPlugin(plugin.PluginName, plugin.Factory{})
 
 	if err := cmd.RootCommand.Execute(); err != nil {
-		fmt.Println(err)
 		os.Exit(1)
 	}
 }
