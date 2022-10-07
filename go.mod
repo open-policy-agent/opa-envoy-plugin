@@ -13,6 +13,6 @@ require (
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
 	golang.org/x/tools v0.1.12
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368
-	google.golang.org/grpc v1.49.0
+	google.golang.org/grpc v1.50.0
 	google.golang.org/protobuf v1.28.1
 )
