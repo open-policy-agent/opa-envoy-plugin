@@ -46,6 +46,7 @@ type testCommandParams struct {
 	count        int
 	target       *util.EnumFlag
 	skipExitZero bool
+	capabilities *capabilitiesFlag
 }
 
 func newTestCommandParams() *testCommandParams {
@@ -53,6 +54,7 @@ func newTestCommandParams() *testCommandParams {
 		outputFormat: util.NewEnumFlag(testPrettyOutput, []string{testPrettyOutput, testJSONOutput, benchmarkGoBenchOutput}),
 		explain:      newExplainFlag([]string{explainModeFails, explainModeFull, explainModeNotes}),
 		target:       util.NewEnumFlag(compile.TargetRego, []string{compile.TargetRego, compile.TargetWasm}),
+		capabilities: newcapabilitiesFlag(),
 	}
 }
 
@@ -78,20 +80,23 @@ Example policy (example/authz.rego):
 
 	package authz
 
-	allow {
-		input.path = ["users"]
-		input.method = "POST"
+	import future.keywords.if
+
+	allow if {
+		input.path == ["users"]
+		input.method == "POST"
 	}
 
-	allow {
-		input.path = ["users", profile_id]
-		input.method = "GET"
-		profile_id = input.user_id
+	allow if {
+		input.path == ["users", input.user_id]
+		input.method == "GET"
 	}
 
 Example test (example/authz_test.rego):
 
-	package authz
+	package authz_test
+
+	import data.authz.allow
 
 	test_post_allowed {
 		allow with input as {"path": ["users"], "method": "POST"}
@@ -181,10 +186,21 @@ func opaTest(args []string) int {
 
 	defer store.Abort(ctx, txn)
 
+	var capabilities *ast.Capabilities
+	// if capabilities are not provided as a cmd flag,
+	// then ast.CapabilitiesForThisVersion must be called
+	// within checkModules to ensure custom builtins are properly captured
+	if testParams.capabilities.C != nil {
+		capabilities = testParams.capabilities.C
+	} else {
+		capabilities = ast.CapabilitiesForThisVersion()
+	}
+
 	compiler := ast.NewCompiler().
 		SetErrorLimit(testParams.errLimit).
 		WithPathConflictsCheck(storage.NonEmpty(ctx, store, txn)).
-		WithEnablePrintStatements(!testParams.benchmark)
+		WithEnablePrintStatements(!testParams.benchmark).
+		WithCapabilities(capabilities)
 
 	info, err := runtime.Term(runtime.Params{})
 	if err != nil {
@@ -362,5 +378,6 @@ func init() {
 	addIgnoreFlag(testCommand.Flags(), &testParams.ignore)
 	setExplainFlag(testCommand.Flags(), testParams.explain)
 	addTargetFlag(testCommand.Flags(), testParams.target)
+	addCapabilitiesFlag(testCommand.Flags(), testParams.capabilities)
 	RootCommand.AddCommand(testCommand)
 }
