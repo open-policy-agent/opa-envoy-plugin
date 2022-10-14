@@ -318,7 +318,13 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	}
 
 	metrics := prometheus.New(metrics.New(), errorLogger(logger))
-
+	traceExporter, distributedTracingOpts, err := internal_tracing.Init(ctx, config, params.ID)
+	if err != nil {
+		return nil, fmt.Errorf("config error: %w", err)
+	}
+	if distributedTracingOpts != nil {
+		params.DistributedTracingOpts = distributedTracingOpts
+	}
 	var store storage.Store
 	if params.DiskStorage == nil {
 		params.DiskStorage, err = disk.OptionsFromConfig(config, params.ID)
@@ -349,21 +355,14 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		plugins.EnablePrintStatements(logger.GetLevel() >= logging.Info),
 		plugins.PrintHook(loggingPrintHook{logger: logger}),
 		plugins.WithRouter(params.Router),
-		plugins.WithPrometheusRegister(metrics))
+		plugins.WithPrometheusRegister(metrics),
+		plugins.WithDistributedTracing(distributedTracingOpts))
 	if err != nil {
 		return nil, fmt.Errorf("config error: %w", err)
 	}
 
 	if err := manager.Init(ctx); err != nil {
 		return nil, fmt.Errorf("initialization error: %w", err)
-	}
-
-	traceExporter, distributedTracingOpts, err := internal_tracing.Init(ctx, config, params.ID)
-	if err != nil {
-		return nil, fmt.Errorf("config error: %w", err)
-	}
-	if distributedTracingOpts != nil {
-		params.DistributedTracingOpts = distributedTracingOpts
 	}
 
 	disco, err := discovery.New(manager, discovery.Factories(registeredPlugins), discovery.Metrics(metrics))

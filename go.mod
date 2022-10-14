@@ -6,6 +6,7 @@ require (
 	github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1
 	github.com/open-policy-agent/opa v0.45.0
 	github.com/pkg/errors v0.9.1
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.28.0
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/tools v0.1.12
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368

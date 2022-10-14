@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/topdown/print"
+	"github.com/open-policy-agent/opa/tracing"
 )
 
 // Factory defines the interface OPA uses to instantiate your plugin.
@@ -190,6 +191,7 @@ type Manager struct {
 	enablePrintStatements        bool
 	router                       *mux.Router
 	prometheusRegister           prometheus.Registerer
+	distributedTracing           tracing.Options
 }
 
 type managerContextKey string
@@ -351,6 +353,11 @@ func WithRouter(r *mux.Router) func(*Manager) {
 func WithPrometheusRegister(prometheusRegister prometheus.Registerer) func(*Manager) {
 	return func(m *Manager) {
 		m.prometheusRegister = prometheusRegister
+	}
+}
+func WithDistributedTracing(opts tracing.Options) func(*Manager) {
+	return func(m *Manager) {
+		m.distributedTracing = opts
 	}
 }
 
@@ -908,4 +915,9 @@ func (m *Manager) RegisterCacheTrigger(trigger func(*cache.Config)) {
 // PrometheusRegister gets the prometheus.Registerer for this plugin manager.
 func (m *Manager) PrometheusRegister() prometheus.Registerer {
 	return m.prometheusRegister
+}
+
+// Logger gets the standard logger for this plugin manager.
+func (m *Manager) DistributedTracing() tracing.Options {
+	return m.distributedTracing
 }
