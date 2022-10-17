@@ -23,6 +23,7 @@ import (
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -36,6 +37,7 @@ import (
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
+	"github.com/open-policy-agent/opa/tracing"
 	"github.com/open-policy-agent/opa/util"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
@@ -117,6 +119,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		server: grpc.NewServer(
 			grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
 			grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 		),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
@@ -199,6 +203,9 @@ func (p *envoyExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 
 func (p *envoyExtAuthzGrpcServer) Logger() logging.Logger {
 	return p.manager.Logger()
+}
+func (p *envoyExtAuthzGrpcServer) DistributedTracing() tracing.Options {
+	return p.manager.DistributedTracing()
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {

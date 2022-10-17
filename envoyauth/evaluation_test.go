@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/opa/logging"
 	loggingtest "github.com/open-policy-agent/opa/logging/test"
 	"github.com/open-policy-agent/opa/plugins/logs"
+	"github.com/open-policy-agent/opa/tracing"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
@@ -287,6 +288,9 @@ func (m *mockExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 
 func (m *mockExtAuthzGrpcServer) Logger() logging.Logger {
 	return m.manager.Logger()
+}
+func (*mockExtAuthzGrpcServer) DistributedTracing() tracing.Options {
+	return nil
 }
 
 type testPlugin struct {
