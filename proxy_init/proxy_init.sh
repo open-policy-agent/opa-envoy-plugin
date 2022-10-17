@@ -55,8 +55,13 @@ if [[ -z "${ENVOY_IN_PORT-}" ]] || [[ -z "${ENVOY_UID-}" ]]; then
   exit 1
 fi
 
-# Create a new chain for redirecting inbound traffic to Envoy port
-iptables -t nat -N ENVOY_IN_REDIRECT                                                    -m comment --comment "envoy/redirect-inbound-chain"
+if iptables -t nat -L ENVOY_IN_REDIRECT; then
+  exit 0
+else
+  echo "ENVOY_IN_REDIRECT chain doesn't exist. Create a new one."
+  # Create a new chain for redirecting inbound traffic to Envoy port
+  iptables -t nat -N ENVOY_IN_REDIRECT                                                    -m comment --comment "envoy/redirect-inbound-chain"
+fi 
 
 # Skip Envoy for whitelisted ports
 if [[ WHITELIST_PORTS != "" ]]; then
