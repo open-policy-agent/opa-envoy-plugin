@@ -1,4 +1,4 @@
-FROM ubuntu:xenial
+FROM ubuntu:focal
 
 ADD ./proxy_init.sh /proxy_init.sh
 RUN chmod 755 /proxy_init.sh
