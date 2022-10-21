@@ -7,7 +7,7 @@ require (
 	github.com/open-policy-agent/opa v0.45.0
 	github.com/pkg/errors v0.9.1
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/tools v0.1.12
+	golang.org/x/tools v0.2.0
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
@@ -85,11 +85,11 @@ require (
 	go.opentelemetry.io/otel/trace v1.7.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.16.0 // indirect
 	go.uber.org/automaxprocs v1.5.1 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect
+	golang.org/x/mod v0.6.0 // indirect
+	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
-	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	oras.land/oras-go v1.2.0 // indirect
