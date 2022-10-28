@@ -481,7 +481,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 		default allow = 1
 		`
-	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
@@ -535,7 +535,7 @@ func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServerWithTruncatedBody(customLogger, false)
+	server := testAuthzServerWithTruncatedBody(customLogger, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -563,6 +563,50 @@ func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
 
 	if !isTruncated {
 		t.Fatal("Expected truncated request body")
+	}
+}
+
+func TestCheckAllowDecisionWithSkipRequestBodyParse(t *testing.T) {
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleInvalidRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServerWithTruncatedBody(customLogger, false, true)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Path != "envoy/authz/allow" || *event.Result == false ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	input := *event.Input
+	inputMap, _ := input.(map[string]interface{})
+
+	if _, ok := inputMap["truncated_body"]; ok {
+		t.Fatal("Unexpected key \"truncated_body\" in input")
+	}
+
+	if _, ok := inputMap["parsed_body"]; ok {
+		t.Fatal("Unexpected key \"parsed_body\" in input")
 	}
 }
 
@@ -608,7 +652,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServerWithTruncatedBody(customLogger, false)
+	server := testAuthzServerWithTruncatedBody(customLogger, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -855,7 +899,7 @@ func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
 		}
 	`
 	module := fmt.Sprintf(moduleFmt, ts.URL)
-	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -1071,7 +1115,7 @@ func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
 		result["headers"] = headers
 		result["request_headers_to_remove"] = request_headers_to_remove`
 
-	server := testAuthzServerWithModule(module, "envoy/authz/result", &testPlugin{}, false)
+	server := testAuthzServerWithModule(module, "envoy/authz/result", &testPlugin{}, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -1120,7 +1164,7 @@ func TestCheckAllowObjectDecisionResponseHeadersToAdd(t *testing.T) {
 		result["allowed"] = allow
 		result["response_headers_to_add"] = response_headers_to_add`
 
-	server := testAuthzServerWithModule(module, "envoy/authz/result", &testPlugin{}, false)
+	server := testAuthzServerWithModule(module, "envoy/authz/result", &testPlugin{}, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -1426,10 +1470,10 @@ func testAuthzServer(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrp
 			],
 		}`
 
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun, false)
 }
 
-func testAuthzServerWithModule(module string, path string, customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+func testAuthzServerWithModule(module string, path string, customLogger plugins.Plugin, dryRun bool, skipRequestBodyParse bool) *envoyExtAuthzGrpcServer {
 
 	m, err := getPluginManager(module, customLogger)
 	if err != nil {
@@ -1443,10 +1487,11 @@ func testAuthzServerWithModule(module string, path string, customLogger plugins.
 	}
 
 	cfg := Config{
-		Addr:        ":0",
-		Path:        path,
-		DryRun:      dryRun,
-		parsedQuery: parsedQuery,
+		Addr:                 ":0",
+		Path:                 path,
+		DryRun:               dryRun,
+		SkipRequestBodyParse: skipRequestBodyParse,
+		parsedQuery:          parsedQuery,
 	}
 	s := New(m, &cfg)
 	return s.(*envoyExtAuthzGrpcServer)
@@ -1472,10 +1517,10 @@ func testAuthzServerWithObjectDecision(customLogger plugins.Plugin, dryRun bool)
 		    }
 		}`
 
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun, false)
 }
 
-func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) *envoyExtAuthzGrpcServer {
+func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun, skipRequestBodyParse bool) *envoyExtAuthzGrpcServer {
 
 	module := `
 		package envoy.authz
@@ -1486,7 +1531,7 @@ func testAuthzServerWithTruncatedBody(customLogger plugins.Plugin, dryRun bool) 
 			not input.truncated_body
 		}
 		`
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun)
+	return testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, dryRun, skipRequestBodyParse)
 }
 
 func TestLogWithASTError(t *testing.T) {
@@ -1541,7 +1586,7 @@ func TestVersionInfoInputV3(t *testing.T) {
 			input.version.encoding == "protojson"
 		}
 		`
-	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -1568,7 +1613,7 @@ func TestVersionInfoInputV2(t *testing.T) {
 			input.version.encoding == "encoding/json"
 		}
 		`
-	serverV3 := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false)
+	serverV3 := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false, false)
 	server := &envoyExtAuthzV2Wrapper{serverV3}
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
