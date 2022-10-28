@@ -43,18 +43,21 @@ import (
 	"github.com/open-policy-agent/opa-envoy-plugin/opa/decisionlog"
 )
 
-const defaultAddr = ":9191"
-const defaultPath = "envoy/authz/allow"
-const defaultDryRun = false
-const defaultEnableReflection = false
+const (
+	defaultAddr                 = ":9191"
+	defaultPath                 = "envoy/authz/allow"
+	defaultDryRun               = false
+	defaultEnableReflection     = false
+	defaultSkipRequestBodyParse = false
 
-// Those are the defaults from grpc-go.
-// See https://github.com/grpc/grpc-go/blob/master/server.go#L58 for more details.
-const defaultGRPCServerMaxReceiveMessageSize = 1024 * 1024 * 4
-const defaultGRPCServerMaxSendMessageSize = math.MaxInt32
+	// Those are the defaults from grpc-go.
+	// See https://github.com/grpc/grpc-go/blob/master/server.go#L58 for more details.
+	defaultGRPCServerMaxReceiveMessageSize = 1024 * 1024 * 4
+	defaultGRPCServerMaxSendMessageSize    = math.MaxInt32
 
-// PluginName is the name to register with the OPA plugin manager
-const PluginName = "envoy_ext_authz_grpc"
+	// PluginName is the name to register with the OPA plugin manager
+	PluginName = "envoy_ext_authz_grpc"
+)
 
 // Validate receives a slice of bytes representing the plugin's
 // configuration and returns a configuration value that can be used to
@@ -62,11 +65,12 @@ const PluginName = "envoy_ext_authz_grpc"
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 	cfg := Config{
-		Addr:               defaultAddr,
-		DryRun:             defaultDryRun,
-		EnableReflection:   defaultEnableReflection,
-		GRPCMaxRecvMsgSize: defaultGRPCServerMaxReceiveMessageSize,
-		GRPCMaxSendMsgSize: defaultGRPCServerMaxSendMessageSize,
+		Addr:                 defaultAddr,
+		DryRun:               defaultDryRun,
+		EnableReflection:     defaultEnableReflection,
+		GRPCMaxRecvMsgSize:   defaultGRPCServerMaxReceiveMessageSize,
+		GRPCMaxSendMsgSize:   defaultGRPCServerMaxSendMessageSize,
+		SkipRequestBodyParse: defaultSkipRequestBodyParse,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -140,16 +144,17 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 // Config represents the plugin configuration.
 type Config struct {
-	Addr               string `json:"addr"`
-	Query              string `json:"query"` // Deprecated: Use Path instead
-	Path               string `json:"path"`
-	DryRun             bool   `json:"dry-run"`
-	EnableReflection   bool   `json:"enable-reflection"`
-	parsedQuery        ast.Body
-	ProtoDescriptor    string `json:"proto-descriptor"`
-	protoSet           *protoregistry.Files
-	GRPCMaxRecvMsgSize int `json:"grpc-max-recv-msg-size"`
-	GRPCMaxSendMsgSize int `json:"grpc-max-send-msg-size"`
+	Addr                 string `json:"addr"`
+	Query                string `json:"query"` // Deprecated: Use Path instead
+	Path                 string `json:"path"`
+	DryRun               bool   `json:"dry-run"`
+	EnableReflection     bool   `json:"enable-reflection"`
+	parsedQuery          ast.Body
+	ProtoDescriptor      string `json:"proto-descriptor"`
+	protoSet             *protoregistry.Files
+	GRPCMaxRecvMsgSize   int  `json:"grpc-max-recv-msg-size"`
+	GRPCMaxSendMsgSize   int  `json:"grpc-max-send-msg-size"`
+	SkipRequestBodyParse bool `json:"skip-request-body-parse"`
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -328,7 +333,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, err
 	}
 
-	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet)
+	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
 	if err != nil {
 		return nil, stop, err
 	}

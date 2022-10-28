@@ -27,7 +27,7 @@ var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
 var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 
 // RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
-func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files) (map[string]interface{}, error) {
+func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]interface{}, error) {
 	var err error
 	var input map[string]interface{}
 
@@ -75,13 +75,15 @@ func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregis
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
-	parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
-	if err != nil {
-		return nil, err
-	}
+	if !skipRequestBodyParse {
+		parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
+		if err != nil {
+			return nil, err
+		}
 
-	input["parsed_body"] = parsedBody
-	input["truncated_body"] = isBodyTruncated
+		input["parsed_body"] = parsedBody
+		input["truncated_body"] = isBodyTruncated
+	}
 
 	return input, nil
 }
