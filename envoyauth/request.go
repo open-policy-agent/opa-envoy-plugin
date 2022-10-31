@@ -170,12 +170,18 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 				return nil, false, nil
 			}
 		} else if strings.Contains(val, "application/x-www-form-urlencoded") {
-			if body == "" {
+			var payload string
+			switch {
+			case body != "":
+				payload = body
+			case len(rawBody) > 0:
+				payload = string(rawBody)
+			default:
 				return nil, false, nil
 			}
 
 			if val, ok := headers["content-length"]; ok {
-				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(body)))
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(payload)))
 				if err != nil {
 					return nil, false, err
 				}
@@ -184,7 +190,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 				}
 			}
 
-			parsed, err := url.ParseQuery(body)
+			parsed, err := url.ParseQuery(payload)
 			if err != nil {
 				return nil, false, err
 			}

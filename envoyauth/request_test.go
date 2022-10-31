@@ -212,6 +212,19 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	  }`
 
+	requestContentTypeURLEncodedRaw := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/x-www-form-urlencoded"
+			  },
+			  "raw_body": "Zmlyc3RuYW1lPWZvbyZsYXN0bmFtZT1iYXI="
+			}
+		  }
+		}
+	  }`
+
 	requestContentTypeURLEncoded := `{
 		"attributes": {
 		  "request": {
@@ -325,6 +338,7 @@ func TestGetParsedBody(t *testing.T) {
 		"content_type_multipart_form_data_with_json": {input: createCheckRequest(requestContentTypeMultipartFormDataWithJSON), want: expectedMultipartFormDataWithJSON, isBodyTruncated: false, err: nil},
 		"empty_content":                              {input: createCheckRequest(requestEmptyContent), want: nil, isBodyTruncated: false, err: nil},
 		"body_truncated":                             {input: createCheckRequest(requestBodyTruncated), want: nil, isBodyTruncated: true, err: nil},
+		"content_type_url_encoded_raw":               {input: createCheckRequest(requestContentTypeURLEncodedRaw), want: expectedURLEncodedObject, isBodyTruncated: false, err: nil},
 		"content_type_url_encoded":                   {input: createCheckRequest(requestContentTypeURLEncoded), want: expectedURLEncodedObject, isBodyTruncated: false, err: nil},
 		"content_type_url_encoded_empty":             {input: createCheckRequest(requestContentTypeURLEncodedEmpty), want: nil, isBodyTruncated: false, err: nil},
 		"content_type_url_encoded_multiple_values":   {input: createCheckRequest(requestContentTypeURLEncodedMultipleKeys), want: expectedURLEncodedObjectMultipleValues, isBodyTruncated: false, err: nil},
