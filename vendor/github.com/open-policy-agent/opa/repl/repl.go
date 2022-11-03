@@ -79,7 +79,26 @@ const (
 	explainFull  explainMode = "full"
 	explainNotes explainMode = "notes"
 	explainFails explainMode = "fails"
+	explainDebug explainMode = "debug"
 )
+
+func parseExplainMode(str string) (explainMode, error) {
+	validExplainModes := []string{
+		string(explainOff),
+		string(explainFull),
+		string(explainNotes),
+		string(explainFails),
+		string(explainDebug),
+	}
+
+	for _, mode := range validExplainModes {
+		if mode == str {
+			return explainMode(mode), nil
+		}
+	}
+
+	return "", fmt.Errorf("invalid explain mode, expected one of: %s", strings.Join(validExplainModes, ", "))
+}
 
 const defaultPrettyLimit = 80
 
@@ -256,6 +275,17 @@ func (r *REPL) OneShot(ctx context.Context, line string) error {
 			case "pretty-limit":
 				return r.cmdPrettyLimit(cmd.args)
 			case "trace":
+				// If an argument is specified, e.g. `trace notes`, parse that
+				// argument and toggle that specific mode.  If no argument is
+				// specified, toggle full explain mode since that is backwards-
+				// compatible.
+				if len(cmd.args) == 1 {
+					explainMode, err := parseExplainMode(cmd.args[0])
+					if err != nil {
+						return err
+					}
+					return r.cmdTrace(explainMode)
+				}
 				return r.cmdTrace(explainFull)
 			case "notes":
 				return r.cmdTrace(explainNotes)
@@ -781,11 +811,9 @@ func (r *REPL) compileRule(ctx context.Context, rule *ast.Rule) error {
 	switch r.outputFormat {
 	case "json":
 	default:
-		var msg string
+		msg := "defined"
 		if unset {
 			msg = "re-defined"
-		} else {
-			msg = "defined"
 		}
 		fmt.Fprintf(r.output, "Rule '%v' %v in %v. Type 'show' to see rules.\n", rule.Head.Name, msg, mod.Package)
 	}
@@ -1011,8 +1039,10 @@ func (r *REPL) evalBody(ctx context.Context, compiler *ast.Compiler, input ast.V
 	output = output.WithLimit(r.prettyLimit)
 
 	switch r.explain {
+	case explainDebug:
+		output.Explanation = lineage.Debug(*tracebuf)
 	case explainFull:
-		output.Explanation = *tracebuf
+		output.Explanation = lineage.Full(*tracebuf)
 	case explainNotes:
 		output.Explanation = lineage.Notes(*tracebuf)
 	case explainFails:
@@ -1062,8 +1092,10 @@ func (r *REPL) evalPartial(ctx context.Context, compiler *ast.Compiler, input as
 	}
 
 	switch r.explain {
+	case explainDebug:
+		output.Explanation = lineage.Debug(*buf)
 	case explainFull:
-		output.Explanation = *buf
+		output.Explanation = lineage.Full(*buf)
 	case explainNotes:
 		output.Explanation = lineage.Notes(*buf)
 	case explainFails:
@@ -1119,16 +1151,16 @@ func (r *REPL) evalPackage(p *ast.Package) error {
 // converted into a rule and compiled, then it will be interpreted as such. This
 // allows users to define constants in the REPL. For example:
 //
-//	> a = 1
-//  > a
-//  1
+//		> a = 1
+//	 > a
+//	 1
 //
 // If the expression is a = statement, then an additional check on the left
 // hand side occurs. For example:
 //
-//	> b = 2
-//  > b = 2
-//  true      # not redefined!
+//		> b = 2
+//	 > b = 2
+//	 true      # not redefined!
 func (r *REPL) interpretAsRule(ctx context.Context, compiler *ast.Compiler, body ast.Body) (bool, error) {
 
 	if len(body) != 1 {
@@ -1143,10 +1175,16 @@ func (r *REPL) interpretAsRule(ctx context.Context, compiler *ast.Compiler, body
 
 	if expr.IsAssignment() {
 		rule, err := ast.ParseCompleteDocRuleFromAssignmentExpr(r.getCurrentOrDefaultModule(), expr.Operand(0), expr.Operand(1))
-		if err == nil {
-			if err := r.compileRule(ctx, rule); err != nil {
-				return false, err
-			}
+		if err != nil {
+			return false, nil
+		}
+		// TODO(sr): support interactive ref head rule definitions
+		if len(rule.Head.Ref()) > 1 {
+			return false, nil
+		}
+
+		if err := r.compileRule(ctx, rule); err != nil {
+			return false, err
 		}
 		return rule != nil, nil
 	}
@@ -1160,12 +1198,17 @@ func (r *REPL) interpretAsRule(ctx context.Context, compiler *ast.Compiler, body
 	}
 
 	rule, err := ast.ParseCompleteDocRuleFromEqExpr(r.getCurrentOrDefaultModule(), expr.Operand(0), expr.Operand(1))
-	if err == nil {
-		if err := r.compileRule(ctx, rule); err != nil {
-			return false, err
-		}
+	if err != nil {
+		return false, nil
+	}
+	// TODO(sr): support interactive ref head rule definitions
+	if len(rule.Head.Ref()) > 1 {
+		return false, nil
 	}
 
+	if err := r.compileRule(ctx, rule); err != nil {
+		return false, err
+	}
 	return rule != nil, nil
 }
 
@@ -1279,7 +1322,7 @@ var builtin = [...]commandDesc{
 	{"json", []string{}, "set output format to JSON"},
 	{"pretty", []string{}, "set output format to pretty"},
 	{"pretty-limit", []string{}, "set pretty value output limit"},
-	{"trace", []string{}, "toggle full trace"},
+	{"trace", []string{"[mode]"}, "toggle full trace or specific mode"},
 	{"notes", []string{}, "toggle notes trace"},
 	{"fails", []string{}, "toggle fails trace"},
 	{"metrics", []string{}, "toggle metrics"},

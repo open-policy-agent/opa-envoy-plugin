@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/util"
 )
 
@@ -60,6 +61,7 @@ type EventV1 struct {
 	RequestedBy    string                  `json:"requested_by,omitempty"`
 	Timestamp      time.Time               `json:"timestamp"`
 	Metrics        map[string]interface{}  `json:"metrics,omitempty"`
+	RequestID      uint64                  `json:"req_id,omitempty"`
 
 	inputAST ast.Value
 }
@@ -95,6 +97,7 @@ var errorKey = ast.StringTerm("error")
 var requestedByKey = ast.StringTerm("requested_by")
 var timestampKey = ast.StringTerm("timestamp")
 var metricsKey = ast.StringTerm("metrics")
+var requestIDKey = ast.StringTerm("req_id")
 
 // AST returns the Rego AST representation for a given EventV1 object.
 // This avoids having to round trip through JSON while applying a decision log
@@ -213,6 +216,10 @@ func (e *EventV1) AST() (ast.Value, error) {
 		event.Insert(metricsKey, ast.NewTerm(m))
 	}
 
+	if e.RequestID > 0 {
+		event.Insert(requestIDKey, ast.UIntNumberTerm(e.RequestID))
+	}
+
 	return event, nil
 }
 
@@ -235,6 +242,7 @@ const (
 	defaultUploadSizeLimitBytes = int64(32768) // 32KB limit
 	defaultBufferSizeLimitBytes = int64(0)     // unlimited
 	defaultMaskDecisionPath     = "/system/log/mask"
+	defaultDropDecisionPath     = "/system/log/drop"
 	logDropCounterName          = "decision_logs_dropped"
 	logNDBDropCounterName       = "decision_logs_nd_builtin_cache_dropped"
 	defaultResourcePath         = "/logs"
@@ -257,10 +265,12 @@ type Config struct {
 	PartitionName   string          `json:"partition_name,omitempty"`
 	Reporting       ReportingConfig `json:"reporting"`
 	MaskDecision    *string         `json:"mask_decision"`
+	DropDecision    *string         `json:"drop_decision"`
 	ConsoleLogs     bool            `json:"console"`
 	Resource        *string         `json:"resource"`
 	NDBuiltinCache  bool            `json:"nd_builtin_cache,omitempty"`
 	maskDecisionRef ast.Ref
+	dropDecisionRef ast.Ref
 }
 
 func (c *Config) validateAndInjectDefaults(services []string, pluginsList []string, trigger *plugins.TriggerMode) error {
@@ -356,6 +366,16 @@ func (c *Config) validateAndInjectDefaults(services []string, pluginsList []stri
 		return fmt.Errorf("invalid mask_decision in decision_logs: %w", err)
 	}
 
+	if c.DropDecision == nil {
+		dropDecision := defaultDropDecisionPath
+		c.DropDecision = &dropDecision
+	}
+
+	c.dropDecisionRef, err = ref.ParseDataPath(*c.DropDecision)
+	if err != nil {
+		return fmt.Errorf("invalid drop_decision in decision_logs: %w", err)
+	}
+
 	if c.PartitionName != "" {
 		resourcePath := fmt.Sprintf("/logs/%v", c.PartitionName)
 		c.Resource = &resourcePath
@@ -382,6 +402,8 @@ type Plugin struct {
 	reconfig  chan reconfigure
 	mask      *rego.PreparedEvalQuery
 	maskMutex sync.Mutex
+	drop      *rego.PreparedEvalQuery
+	dropMutex sync.Mutex
 	limiter   *rate.Limiter
 	metrics   metrics.Metrics
 	logger    logging.Logger
@@ -581,7 +603,19 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 		NDBuiltinCache: decision.NDBuiltinCache,
 		RequestedBy:    decision.RemoteAddr,
 		Timestamp:      decision.Timestamp,
+		RequestID:      decision.RequestID,
 		inputAST:       decision.InputAST,
+	}
+
+	drop, err := p.dropEvent(ctx, decision.Txn, &event)
+	if err != nil {
+		p.logger.Error("Log drop decision failed: %v.", err)
+		return nil
+	}
+
+	if drop {
+		p.logger.Debug("Decision log event to path %v dropped", event.Path)
+		return nil
 	}
 
 	if decision.Metrics != nil {
@@ -592,7 +626,7 @@ func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 		event.Error = decision.Error
 	}
 
-	err := p.maskEvent(ctx, decision.Txn, &event)
+	err = p.maskEvent(ctx, decision.Txn, &event)
 	if err != nil {
 		// TODO(tsandall): see note below about error handling.
 		p.logger.Error("Log event masking failed: %v.", err)
@@ -633,6 +667,10 @@ func (p *Plugin) Reconfigure(_ context.Context, config interface{}) {
 	defer p.maskMutex.Unlock()
 	p.mask = nil
 
+	p.dropMutex.Lock()
+	defer p.dropMutex.Unlock()
+	p.drop = nil
+
 	<-done
 }
 
@@ -668,6 +706,10 @@ func (p *Plugin) compilerUpdated(storage.Transaction) {
 	p.maskMutex.Lock()
 	defer p.maskMutex.Unlock()
 	p.mask = nil
+
+	p.dropMutex.Lock()
+	defer p.dropMutex.Unlock()
+	p.drop = nil
 }
 
 func (p *Plugin) loop() {
@@ -926,6 +968,60 @@ func (p *Plugin) maskEvent(ctx context.Context, txn storage.Transaction, event *
 	mRuleSet.Mask(event)
 
 	return nil
+}
+
+func (p *Plugin) dropEvent(ctx context.Context, txn storage.Transaction, event *EventV1) (bool, error) {
+
+	drop, err := func() (rego.PreparedEvalQuery, error) {
+
+		p.dropMutex.Lock()
+		defer p.dropMutex.Unlock()
+
+		if p.drop == nil {
+			query := ast.NewBody(ast.NewExpr(ast.NewTerm(p.config.dropDecisionRef)))
+			interQueryCache := cache.NewInterQueryCache(p.manager.InterQueryBuiltinCacheConfig())
+			r := rego.New(
+				rego.ParsedQuery(query),
+				rego.Compiler(p.manager.GetCompiler()),
+				rego.Store(p.manager.Store),
+				rego.Transaction(txn),
+				rego.Runtime(p.manager.Info),
+				rego.EnablePrintStatements(p.manager.EnablePrintStatements()),
+				rego.PrintHook(p.manager.PrintHook()),
+				rego.InterQueryBuiltinCache(interQueryCache),
+			)
+
+			pq, err := r.PrepareForEval(context.Background())
+			if err != nil {
+				return rego.PreparedEvalQuery{}, err
+			}
+
+			p.drop = &pq
+		}
+
+		return *p.drop, nil
+	}()
+
+	if err != nil {
+		return false, err
+	}
+
+	input, err := event.AST()
+	if err != nil {
+		return false, err
+	}
+
+	rs, err := drop.Eval(
+		ctx,
+		rego.EvalParsedInput(input),
+		rego.EvalTransaction(txn),
+	)
+
+	if err != nil {
+		return false, err
+	}
+
+	return rs.Allowed(), nil
 }
 
 func uploadChunk(ctx context.Context, client rest.Client, uploadPath string, data []byte) error {

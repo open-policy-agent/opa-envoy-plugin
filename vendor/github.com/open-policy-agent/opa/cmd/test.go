@@ -52,7 +52,7 @@ type testCommandParams struct {
 func newTestCommandParams() *testCommandParams {
 	return &testCommandParams{
 		outputFormat: util.NewEnumFlag(testPrettyOutput, []string{testPrettyOutput, testJSONOutput, benchmarkGoBenchOutput}),
-		explain:      newExplainFlag([]string{explainModeFails, explainModeFull, explainModeNotes}),
+		explain:      newExplainFlag([]string{explainModeFails, explainModeFull, explainModeNotes, explainModeDebug}),
 		target:       util.NewEnumFlag(compile.TargetRego, []string{compile.TargetRego, compile.TargetWasm}),
 		capabilities: newcapabilitiesFlag(),
 	}
@@ -157,6 +157,11 @@ func opaTest(args []string) int {
 		return 0
 	}
 
+	if !isThresholdValid(testParams.threshold) {
+		fmt.Fprintln(os.Stderr, "Code coverage threshold must be between 0 and 100")
+		return 1
+	}
+
 	filter := loaderFilter{
 		Ignore: testParams.ignore,
 	}
@@ -226,9 +231,9 @@ func opaTest(args []string) int {
 
 	timeout := testParams.timeout
 	if timeout == 0 { // unset
-		timeout = time.Duration(5 * time.Second)
+		timeout = 5 * time.Second
 		if testParams.benchmark {
-			timeout = time.Duration(30 * time.Second)
+			timeout = 30 * time.Second
 		}
 	}
 
@@ -335,31 +340,33 @@ func runTests(ctx context.Context, txn storage.Transaction, runner *tester.Runne
 }
 
 func filterTrace(params *testCommandParams, trace []*topdown.Event) []*topdown.Event {
-	ops := map[topdown.Op]struct{}{}
-	mode := params.explain.String()
-
-	if mode == explainModeFull {
-		// Don't bother filtering anything
-		return trace
-	}
-
 	// If an explain mode was specified, filter based
 	// on the mode. If no explain mode was specified,
 	// default to show both notes and fail events
 	showDefault := !params.explain.IsSet() && params.verbose
-
-	if mode == explainModeNotes || showDefault {
-		ops[topdown.NoteOp] = struct{}{}
+	if showDefault {
+		return lineage.Filter(trace, func(event *topdown.Event) bool {
+			return event.Op == topdown.NoteOp || event.Op == topdown.FailOp
+		})
 	}
 
-	if mode == explainModeFails || showDefault {
-		ops[topdown.FailOp] = struct{}{}
+	mode := params.explain.String()
+	switch mode {
+	case explainModeNotes:
+		return lineage.Notes(trace)
+	case explainModeFull:
+		return lineage.Full(trace)
+	case explainModeFails:
+		return lineage.Fails(trace)
+	case explainModeDebug:
+		return lineage.Debug(trace)
+	default:
+		return nil
 	}
+}
 
-	return lineage.Filter(trace, func(event *topdown.Event) bool {
-		_, relevant := ops[event.Op]
-		return relevant
-	})
+func isThresholdValid(t float64) bool {
+	return 0 <= t && t <= 100
 }
 
 func init() {

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -82,7 +81,7 @@ func newEvalCommandParams() evalCommandParams {
 			evalSourceOutput,
 			evalRawOutput,
 		}),
-		explain:         newExplainFlag([]string{explainModeOff, explainModeFull, explainModeNotes, explainModeFails}),
+		explain:         newExplainFlag([]string{explainModeOff, explainModeFull, explainModeNotes, explainModeFails, explainModeDebug}),
 		target:          util.NewEnumFlag(compile.TargetRego, []string{compile.TargetRego, compile.TargetWasm}),
 		count:           1,
 		profileCriteria: newrepeatedStringFlag([]string{}),
@@ -216,8 +215,9 @@ The -O flag controls the optimization level. By default, optimization is disable
 When optimization is enabled the 'eval' command generates a bundle from the files provided
 with either the --bundle or --data flag. This bundle is semantically equivalent to the input
 files however the structure of the files in the bundle may have been changed by rewriting, inlining,
-pruning, etc. This resulting optimized bundle is used to evaluate the query. If optimization is enabled
-at least one entrypoint (-e) must be supplied.
+pruning, etc. This resulting optimized bundle is used to evaluate the query. If optimization is
+enabled at least one entrypoint must be supplied, either via the -e option, or via entrypoint
+metadata annotations.
 
 Output Formats
 --------------
@@ -437,8 +437,10 @@ func evalOnce(ctx context.Context, ectx *evalContext) pr.Output {
 
 	if ectx.params.explain != nil {
 		switch ectx.params.explain.String() {
+		case explainModeDebug:
+			result.Explanation = lineage.Debug(*(ectx.tracer))
 		case explainModeFull:
-			result.Explanation = *(ectx.tracer)
+			result.Explanation = lineage.Full(*(ectx.tracer))
 		case explainModeNotes:
 			result.Explanation = lineage.Notes(*(ectx.tracer))
 		case explainModeFails:
@@ -482,7 +484,7 @@ func setupEval(args []string, params evalCommandParams) (*evalContext, error) {
 	var query string
 
 	if params.stdin {
-		bs, err := ioutil.ReadAll(os.Stdin)
+		bs, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return nil, err
 		}
@@ -668,13 +670,13 @@ func getProfileSortOrder(sortOrder []string) []string {
 
 func readInputBytes(params evalCommandParams) ([]byte, error) {
 	if params.stdinInput {
-		return ioutil.ReadAll(os.Stdin)
+		return io.ReadAll(os.Stdin)
 	} else if params.inputPath != "" {
 		path, err := fileurl.Clean(params.inputPath)
 		if err != nil {
 			return nil, err
 		}
-		return ioutil.ReadFile(path)
+		return os.ReadFile(path)
 	}
 	return nil, nil
 }
@@ -798,6 +800,7 @@ func generateOptimizedBundle(params evalCommandParams, asBundle bool, filter loa
 		WithOptimizationLevel(params.optimizationLevel).
 		WithOutput(buf).
 		WithEntrypoints(params.entrypoints.v...).
+		WithRegoAnnotationEntrypoints(true).
 		WithPaths(paths...).
 		WithFilter(filter)
 

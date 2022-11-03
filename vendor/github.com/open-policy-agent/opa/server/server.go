@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -35,6 +34,7 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/internal/json/patch"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
 	bundlePlugin "github.com/open-policy-agent/opa/plugins/bundle"
@@ -1455,7 +1455,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 	if len(rs) == 0 {
 		if explainMode == types.ExplainFullV1 {
-			result.Explanation, err = types.NewTraceV1(*buf, pretty)
+			result.Explanation, err = types.NewTraceV1(lineage.Full(*buf), pretty)
 			if err != nil {
 				writer.ErrorAuto(w, err)
 				return
@@ -1696,7 +1696,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 
 	if len(rs) == 0 {
 		if explainMode == types.ExplainFullV1 {
-			result.Explanation, err = types.NewTraceV1(*buf, pretty)
+			result.Explanation, err = types.NewTraceV1(lineage.Full(*buf), pretty)
 			if err != nil {
 				writer.ErrorAuto(w, err)
 				return
@@ -2026,7 +2026,7 @@ func (s *Server) v1PoliciesPut(w http.ResponseWriter, r *http.Request) {
 
 	m.Timer("server_read_bytes").Start()
 
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
 		return
@@ -2401,7 +2401,13 @@ func (s *Server) getExplainResponse(explainMode types.ExplainModeV1, trace []*to
 		}
 	case types.ExplainFullV1:
 		var err error
-		explanation, err = types.NewTraceV1(trace, pretty)
+		explanation, err = types.NewTraceV1(lineage.Full(trace), pretty)
+		if err != nil {
+			break
+		}
+	case types.ExplainDebugV1:
+		var err error
+		explanation, err = types.NewTraceV1(lineage.Debug(trace), pretty)
 		if err != nil {
 			break
 		}
@@ -2632,13 +2638,7 @@ func stringPathToRef(s string) (r ast.Ref) {
 }
 
 func validateQuery(query string) (ast.Body, error) {
-
-	var body ast.Body
-	body, err := ast.ParseBody(query)
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
+	return ast.ParseBody(query)
 }
 
 func getBoolParam(url *url.URL, name string, ifEmpty bool) bool {
@@ -2686,6 +2686,8 @@ func getExplain(p []string, zero types.ExplainModeV1) types.ExplainModeV1 {
 			return types.ExplainNotesV1
 		case string(types.ExplainFullV1):
 			return types.ExplainFullV1
+		case string(types.ExplainDebugV1):
+			return types.ExplainDebugV1
 		}
 	}
 	return zero
@@ -2698,7 +2700,7 @@ func readInputV0(r *http.Request) (ast.Value, error) {
 		return ast.InterfaceToValue(parsed)
 	}
 
-	bs, err := ioutil.ReadAll(r.Body)
+	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -2741,7 +2743,7 @@ func readInputPostV1(r *http.Request) (ast.Value, error) {
 		return nil, nil
 	}
 
-	bs, err := ioutil.ReadAll(r.Body)
+	bs, err := io.ReadAll(r.Body)
 
 	if err != nil {
 		return nil, err
@@ -2906,6 +2908,11 @@ func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisi
 		bundles[name] = BundleInfo{Revision: rev}
 	}
 
+	var reqID uint64
+	if rctx, ok := logging.FromContext(ctx); ok {
+		reqID = rctx.ReqID
+	}
+
 	info := &Info{
 		Txn:        txn,
 		Revision:   l.revision,
@@ -2920,6 +2927,7 @@ func (l decisionLogger) Log(ctx context.Context, txn storage.Transaction, decisi
 		Results:    goResults,
 		Error:      err,
 		Metrics:    m,
+		RequestID:  reqID,
 	}
 
 	if ndbCache != nil {
