@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +35,8 @@ const (
 	defaultHashingAlg      = "SHA-256"
 	signaturesFile         = ".signatures.json"
 )
+
+var errSigningConfigIncomplete = fmt.Errorf("specify the secret (HMAC) or path of the PEM file containing the private key (RSA and ECDSA)")
 
 func newSignCmdParams() signCmdParams {
 	return signCmdParams{}
@@ -170,7 +171,10 @@ func doSign(args []string, params signCmdParams) error {
 		return err
 	}
 
-	signingConfig := buildSigningConfig(params.key, params.algorithm, params.claimsFile, params.plugin)
+	signingConfig, err := buildSigningConfig(params.key, params.algorithm, params.claimsFile, params.plugin)
+	if err != nil {
+		return err
+	}
 
 	token, err := bundle.GenerateSignedToken(files, signingConfig, "")
 	if err != nil {
@@ -260,7 +264,7 @@ func writeTokenToFile(token, fileLoc string) error {
 	if fileLoc != "" {
 		path = filepath.Join(fileLoc, path)
 	}
-	return ioutil.WriteFile(path, bs, 0644)
+	return os.WriteFile(path, bs, 0644)
 }
 
 func validateSignParams(args []string, params signCmdParams) error {
@@ -269,7 +273,7 @@ func validateSignParams(args []string, params signCmdParams) error {
 	}
 
 	if params.key == "" {
-		return fmt.Errorf("specify the secret (HMAC) or path of the PEM file containing the private key (RSA and ECDSA)")
+		return errSigningConfigIncomplete
 	}
 
 	if !params.bundleMode {

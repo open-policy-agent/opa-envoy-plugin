@@ -109,7 +109,8 @@ The 'build' command supports targets (specified by -t):
     rego    The default target emits a bundle containing a set of policy and data files
             that are semantically equivalent to the input files. If optimizations are
             disabled the output may simply contain a copy of the input policy and data
-            files. If optimization is enabled at least one entrypoint (-e) must be supplied.
+            files. If optimization is enabled at least one entrypoint must be supplied,
+            either via the -e option, or via entrypoint metadata annotations.
 
     wasm    The wasm target emits a bundle containing a WebAssembly module compiled from
             the input files for each specified entrypoint. The bundle may contain the
@@ -260,13 +261,15 @@ func dobuild(params buildParams, args []string) error {
 		return err
 	}
 
-	bsc := buildSigningConfig(params.key, params.algorithm, params.claimsFile, params.plugin)
-
-	if bvc != nil || bsc != nil {
-		if !params.bundleMode {
-			return fmt.Errorf("enable bundle mode (ie. --bundle) to verify or sign bundle files or directories")
-		}
+	bsc, err := buildSigningConfig(params.key, params.algorithm, params.claimsFile, params.plugin)
+	if err != nil {
+		return err
 	}
+
+	if (bvc != nil || bsc != nil) && !params.bundleMode {
+		return fmt.Errorf("enable bundle mode (ie. --bundle) to verify or sign bundle files or directories")
+	}
+
 	var capabilities *ast.Capabilities
 	// if capabilities are not provided as a cmd flag,
 	// then ast.CapabilitiesForThisVersion must be called
@@ -276,6 +279,7 @@ func dobuild(params buildParams, args []string) error {
 	} else {
 		capabilities = ast.CapabilitiesForThisVersion()
 	}
+
 	compiler := compile.New().
 		WithCapabilities(capabilities).
 		WithTarget(params.target.String()).
@@ -284,6 +288,7 @@ func dobuild(params buildParams, args []string) error {
 		WithOptimizationLevel(params.optimizationLevel).
 		WithOutput(buf).
 		WithEntrypoints(params.entrypoints.v...).
+		WithRegoAnnotationEntrypoints(true).
 		WithPaths(args...).
 		WithFilter(buildCommandLoaderFilter(params.bundleMode, params.ignore)).
 		WithBundleVerificationConfig(bvc).
@@ -342,10 +347,12 @@ func buildVerificationConfig(pubKey, pubKeyID, alg, scope string, excludeFiles [
 	return bundle.NewVerificationConfig(map[string]*keys.Config{pubKeyID: keyConfig}, pubKeyID, scope, excludeFiles), nil
 }
 
-func buildSigningConfig(key, alg, claimsFile, plugin string) *bundle.SigningConfig {
-	if key == "" {
-		return nil
+func buildSigningConfig(key, alg, claimsFile, plugin string) (*bundle.SigningConfig, error) {
+	if key == "" && (plugin != "" || claimsFile != "") {
+		return nil, errSigningConfigIncomplete
 	}
-
-	return bundle.NewSigningConfig(key, alg, claimsFile).WithPlugin(plugin)
+	if key == "" {
+		return nil, nil
+	}
+	return bundle.NewSigningConfig(key, alg, claimsFile).WithPlugin(plugin), nil
 }
