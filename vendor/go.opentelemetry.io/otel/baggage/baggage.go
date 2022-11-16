@@ -68,9 +68,6 @@ type Property struct {
 	hasData bool
 }
 
-// NewKeyProperty returns a new Property for key.
-//
-// If key is invalid, an error will be returned.
 func NewKeyProperty(key string) (Property, error) {
 	if !keyRe.MatchString(key) {
 		return newInvalidProperty(), fmt.Errorf("%w: %q", errInvalidKey, key)
@@ -80,9 +77,6 @@ func NewKeyProperty(key string) (Property, error) {
 	return p, nil
 }
 
-// NewKeyValueProperty returns a new Property for key with value.
-//
-// If key or value are invalid, an error will be returned.
 func NewKeyValueProperty(key, value string) (Property, error) {
 	if !keyRe.MatchString(key) {
 		return newInvalidProperty(), fmt.Errorf("%w: %q", errInvalidKey, key)
@@ -157,7 +151,7 @@ func (p Property) Key() string {
 	return p.key
 }
 
-// Value returns the Property value. Additionally, a boolean value is returned
+// Value returns the Property value. Additionally a boolean value is returned
 // indicating if the returned value is the empty if the Property has a value
 // that is empty or if the value is not set.
 func (p Property) Value() (string, bool) {
@@ -250,9 +244,8 @@ type Member struct {
 	hasData bool
 }
 
-// NewMember returns a new Member from the passed arguments. The key will be
-// used directly while the value will be url decoded after validation. An error
-// is returned if the created Member would be invalid according to the W3C
+// NewMember returns a new Member from the passed arguments. An error is
+// returned if the created Member would be invalid according to the W3C
 // Baggage specification.
 func NewMember(key, value string, props ...Property) (Member, error) {
 	m := Member{
@@ -264,11 +257,7 @@ func NewMember(key, value string, props ...Property) (Member, error) {
 	if err := m.validate(); err != nil {
 		return newInvalidMember(), err
 	}
-	decodedValue, err := url.QueryUnescape(value)
-	if err != nil {
-		return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
-	}
-	m.value = decodedValue
+
 	return m, nil
 }
 
@@ -333,9 +322,8 @@ func parseMember(member string) (Member, error) {
 	return Member{key: key, value: value, properties: props, hasData: true}, nil
 }
 
-// validate ensures m conforms to the W3C Baggage specification.
-// A key is just an ASCII string, but a value must be URL encoded UTF-8,
-// returning an error otherwise.
+// validate ensures m conforms to the W3C Baggage specification, returning an
+// error otherwise.
 func (m Member) validate() error {
 	if !m.hasData {
 		return fmt.Errorf("%w: %q", errInvalidMember, m)
@@ -398,7 +386,7 @@ func New(members ...Member) (Baggage, error) {
 		}
 	}
 
-	// Check member numbers after deduplication.
+	// Check member numbers after deduplicating.
 	if len(b) > maxMembers {
 		return Baggage{}, errMemberNumber
 	}
@@ -460,7 +448,7 @@ func Parse(bStr string) (Baggage, error) {
 func (b Baggage) Member(key string) Member {
 	v, ok := b.list[key]
 	if !ok {
-		// We do not need to worry about distinguishing between the situation
+		// We do not need to worry about distiguising between the situation
 		// where a zero-valued Member is included in the Baggage because a
 		// zero-valued Member is invalid according to the W3C Baggage
 		// specification (it has an empty key).
@@ -471,7 +459,6 @@ func (b Baggage) Member(key string) Member {
 		key:        key,
 		value:      v.Value,
 		properties: fromInternalProperties(v.Properties),
-		hasData:    true,
 	}
 }
 
@@ -491,7 +478,6 @@ func (b Baggage) Members() []Member {
 			key:        k,
 			value:      v.Value,
 			properties: fromInternalProperties(v.Properties),
-			hasData:    true,
 		})
 	}
 	return members
