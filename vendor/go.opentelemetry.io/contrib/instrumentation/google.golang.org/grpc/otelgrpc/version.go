@@ -12,9 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package otel // import "go.opentelemetry.io/otel"
+package otelgrpc // import "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
-// Version is the current release version of OpenTelemetry in use.
+// Version is the current release version of the gRPC instrumentation.
 func Version() string {
-	return "1.11.1"
+	return "0.36.4"
+	// This string is updated by the pre_release.sh script during release
+}
+
+// SemVersion is the semantic version to be supplied to tracer/meter creation.
+func SemVersion() string {
+	return "semver:" + Version()
 }
