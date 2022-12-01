@@ -16,6 +16,9 @@ import (
 	"github.com/open-policy-agent/opa/storage/inmem"
 )
 
+// TestAuthzServerWithWithOpts creates a new AuthzServer
+// that implements the Envoy ext_authz API. Options for
+// plugins.Manager can/should be customized for the test case.
 func TestAuthzServerWithWithOpts(module string, path string, addr string, opts ...func(*plugins.Manager)) (*plugins.Manager, error) {
 	ctx := context.Background()
 	store := inmem.New()
@@ -28,12 +31,12 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 	}
 	query := "data." + strings.Replace(path, "/", ".", -1)
 
-	cfgJson := fmt.Sprintf(`{
+	cfgJSON := fmt.Sprintf(`{
 		addr: "%s",
 		path:"%s",
 		enable-reflection: true
 	}`, addr, query)
-	cfg, err := internal.Validate(m, []byte(cfgJson))
+	cfg, err := internal.Validate(m, []byte(cfgJSON))
 	if err != nil {
 		return nil, err
 	}
