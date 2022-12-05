@@ -11,16 +11,16 @@ github.com/agnivade/levenshtein
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
-# github.com/bytecodealliance/wasmtime-go v1.0.0
+# github.com/bytecodealliance/wasmtime-go/v3 v3.0.2
 ## explicit; go 1.18
-github.com/bytecodealliance/wasmtime-go
-github.com/bytecodealliance/wasmtime-go/build/include
-github.com/bytecodealliance/wasmtime-go/build/include/wasmtime
-github.com/bytecodealliance/wasmtime-go/build/linux-aarch64
-github.com/bytecodealliance/wasmtime-go/build/linux-x86_64
-github.com/bytecodealliance/wasmtime-go/build/macos-aarch64
-github.com/bytecodealliance/wasmtime-go/build/macos-x86_64
-github.com/bytecodealliance/wasmtime-go/build/windows-x86_64
+github.com/bytecodealliance/wasmtime-go/v3
+github.com/bytecodealliance/wasmtime-go/v3/build/include
+github.com/bytecodealliance/wasmtime-go/v3/build/include/wasmtime
+github.com/bytecodealliance/wasmtime-go/v3/build/linux-aarch64
+github.com/bytecodealliance/wasmtime-go/v3/build/linux-x86_64
+github.com/bytecodealliance/wasmtime-go/v3/build/macos-aarch64
+github.com/bytecodealliance/wasmtime-go/v3/build/macos-x86_64
+github.com/bytecodealliance/wasmtime-go/v3/build/windows-x86_64
 # github.com/cenkalti/backoff/v4 v4.1.3
 ## explicit; go 1.13
 github.com/cenkalti/backoff/v4
@@ -35,7 +35,7 @@ github.com/cespare/xxhash/v2
 github.com/cncf/xds/go/udpa/annotations
 github.com/cncf/xds/go/xds/annotations/v3
 github.com/cncf/xds/go/xds/core/v3
-# github.com/containerd/containerd v1.6.9
+# github.com/containerd/containerd v1.6.10
 ## explicit; go 1.17
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
@@ -53,7 +53,7 @@ github.com/containerd/containerd/remotes/docker/auth
 github.com/containerd/containerd/remotes/docker/schema1
 github.com/containerd/containerd/remotes/errors
 github.com/containerd/containerd/version
-# github.com/dgraph-io/badger/v3 v3.2103.3
+# github.com/dgraph-io/badger/v3 v3.2103.4
 ## explicit; go 1.12
 github.com/dgraph-io/badger/v3
 github.com/dgraph-io/badger/v3/fb
@@ -233,7 +233,7 @@ github.com/morikuni/aec
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.46.1
+# github.com/open-policy-agent/opa v0.47.0
 ## explicit; go 1.17
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -285,6 +285,7 @@ github.com/open-policy-agent/opa/internal/oracle
 github.com/open-policy-agent/opa/internal/planner
 github.com/open-policy-agent/opa/internal/presentation
 github.com/open-policy-agent/opa/internal/prometheus
+github.com/open-policy-agent/opa/internal/providers
 github.com/open-policy-agent/opa/internal/ref
 github.com/open-policy-agent/opa/internal/rego/opa
 github.com/open-policy-agent/opa/internal/report
@@ -361,13 +362,13 @@ github.com/peterh/liner
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/prometheus/client_golang v1.13.1
+# github.com/prometheus/client_golang v1.14.0
 ## explicit; go 1.17
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/collectors
 github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
-# github.com/prometheus/client_model v0.2.0
+# github.com/prometheus/client_model v0.3.0
 ## explicit; go 1.9
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.37.0
