@@ -11,17 +11,19 @@ import (
 	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown/builtins"
 )
 
 // EvalResult - Captures the result from evaluating a query against an input
 type EvalResult struct {
-	Revision   string // Deprecated: Use `revisions` instead.
-	Revisions  map[string]string
-	DecisionID string
-	TxnID      uint64
-	Decision   interface{}
-	Metrics    metrics.Metrics
-	Txn        storage.Transaction
+	Revision       string // Deprecated: Use `revisions` instead.
+	Revisions      map[string]string
+	DecisionID     string
+	TxnID          uint64
+	Decision       interface{}
+	Metrics        metrics.Metrics
+	Txn            storage.Transaction
+	NDBuiltinCache builtins.NDBCache
 }
 
 // StopFunc should be called as soon as the evaluation is finished
