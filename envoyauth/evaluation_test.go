@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/open-policy-agent/opa/config"
+
 	"github.com/open-policy-agent/opa/logging"
 	loggingtest "github.com/open-policy-agent/opa/logging/test"
 	"github.com/open-policy-agent/opa/plugins/logs"
@@ -267,6 +269,10 @@ func (m *mockExtAuthzGrpcServer) Compiler() *ast.Compiler {
 
 func (m *mockExtAuthzGrpcServer) Runtime() *ast.Term {
 	return m.manager.Info
+}
+
+func (m *mockExtAuthzGrpcServer) Config() *config.Config {
+	return m.manager.Config
 }
 
 func (m *mockExtAuthzGrpcServer) PreparedQueryDoOnce() *sync.Once {

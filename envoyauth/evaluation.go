@@ -7,10 +7,12 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
+	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown/builtins"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/topdown/print"
 )
@@ -27,6 +29,7 @@ type EvalContext interface {
 	PreparedQuery() *rego.PreparedEvalQuery
 	SetPreparedQuery(*rego.PreparedEvalQuery)
 	Logger() logging.Logger
+	Config() *config.Config
 }
 
 // Eval - Evaluates an input against a provided EvalContext and yields result
@@ -66,6 +69,11 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 
 	ph := hook{logger: logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})}
 
+	var ndbCache builtins.NDBCache
+	if evalContext.Config().NDBuiltinCacheEnabled() {
+		ndbCache = builtins.NDBCache{}
+	}
+
 	var rs rego.ResultSet
 	rs, err = evalContext.PreparedQuery().Eval(
 		ctx,
@@ -74,6 +82,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		rego.EvalMetrics(result.Metrics),
 		rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
 		rego.EvalPrintHook(&ph),
+		rego.EvalNDBuiltinCache(ndbCache),
 	)
 
 	switch {
@@ -85,6 +94,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		return fmt.Errorf("multiple evaluation results")
 	}
 
+	result.NDBuiltinCache = ndbCache
 	result.Decision = rs[0].Expressions[0].Value
 	return nil
 }

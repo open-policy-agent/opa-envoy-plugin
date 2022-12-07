@@ -421,6 +421,69 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	}
 }
 
+func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
+
+	exampleRequest := `{
+	"attributes": {
+	  "request": {
+		"http": {
+		  "method": "GET",
+		}
+	  }
+	}
+  }`
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	module := `
+		package envoy.authz
+
+		default allow = false
+
+		allow {
+          res := http.send({"url": "http://httpbin.org", "method": "GET"})
+          res.status_code == 200
+		}
+`
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false, false)
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error != nil || event.Path != "envoy/authz/allow" || *event.Result == false ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	cache := *event.NDBuiltinCache
+	nd, ok := cache.(map[string]interface{})
+	if !ok {
+		t.Errorf("bad type assertion")
+	}
+
+	_, ok = nd["http.send"]
+	if !ok {
+		t.Errorf("expected http.send cache entry")
+	}
+}
+
 func TestCheckContextTimeout(t *testing.T) {
 
 	var req ext_authz.CheckRequest
@@ -1479,6 +1542,8 @@ func testAuthzServerWithModule(module string, path string, customLogger plugins.
 	if err != nil {
 		panic(err)
 	}
+
+	m.Config.NDBuiltinCache = true
 
 	query := "data." + strings.Replace(path, "/", ".", -1)
 	parsedQuery, err := ast.ParseBody(query)

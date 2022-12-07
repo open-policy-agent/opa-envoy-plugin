@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/rego"
@@ -180,6 +181,10 @@ func (p *envoyExtAuthzGrpcServer) Store() storage.Store {
 
 func (p *envoyExtAuthzGrpcServer) Compiler() *ast.Compiler {
 	return p.manager.GetCompiler()
+}
+
+func (p *envoyExtAuthzGrpcServer) Config() *config.Config {
+	return p.manager.Config
 }
 
 func (p *envoyExtAuthzGrpcServer) Runtime() *ast.Term {
@@ -447,6 +452,14 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 
 	if p.cfg.Path != "" {
 		info.Path = p.cfg.Path
+	}
+
+	if result.NDBuiltinCache != nil {
+		x, err := ast.JSON(result.NDBuiltinCache.AsValue())
+		if err != nil {
+			return err
+		}
+		info.NDBuiltinCache = &x
 	}
 
 	return decisionlog.LogDecision(ctx, p.manager, info, result, err)
