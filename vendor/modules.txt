@@ -233,7 +233,7 @@ github.com/morikuni/aec
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.47.2
+# github.com/open-policy-agent/opa v0.47.3
 ## explicit; go 1.17
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
