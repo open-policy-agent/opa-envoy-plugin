@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1
-	github.com/open-policy-agent/opa v0.47.3
+	github.com/open-policy-agent/opa v0.47.4
 	github.com/pkg/errors v0.9.1
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/tools v0.4.0
