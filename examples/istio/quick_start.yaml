@@ -162,11 +162,14 @@ data:
   inject.rego: |
     package istio
 
+    uid := input.request.uid
+
     inject = {
-      "apiVersion": "admission.k8s.io/v1beta1",
+      "apiVersion": "admission.k8s.io/v1",
       "kind": "AdmissionReview",
       "response": {
         "allowed": true,
+        "uid": uid,
         "patchType": "JSONPatch",
         "patch": base64.encode(json.marshal(patch)),
       },
@@ -365,7 +368,7 @@ webhooks:
       matchLabels:
         opa-istio-injection: enabled
     failurePolicy: Fail
-    admissionReviewVersions: ["v1beta1"]
+    admissionReviewVersions: ["v1", "v1beta1"]
     sideEffects: None
 ---
 ############################################################
