@@ -35,7 +35,7 @@ github.com/cespare/xxhash/v2
 github.com/cncf/xds/go/udpa/annotations
 github.com/cncf/xds/go/xds/annotations/v3
 github.com/cncf/xds/go/xds/core/v3
-# github.com/containerd/containerd v1.6.16
+# github.com/containerd/containerd v1.6.18
 ## explicit; go 1.17
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
@@ -213,6 +213,8 @@ github.com/klauspost/compress/huff0
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
+# github.com/kr/pretty v0.2.1
+## explicit; go 1.12
 # github.com/mattn/go-runewidth v0.0.13
 ## explicit; go 1.9
 github.com/mattn/go-runewidth
