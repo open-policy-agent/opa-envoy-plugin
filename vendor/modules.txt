@@ -488,7 +488,7 @@ golang.org/x/lint/golint
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.6.0
+# golang.org/x/net v0.7.0
 ## explicit; go 1.17
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
