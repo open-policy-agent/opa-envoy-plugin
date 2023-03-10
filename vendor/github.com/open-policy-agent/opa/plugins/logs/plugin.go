@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
@@ -25,11 +24,12 @@ import (
 	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/plugins"
+	lstat "github.com/open-policy-agent/opa/plugins/logs/status"
 	"github.com/open-policy-agent/opa/plugins/rest"
+	"github.com/open-policy-agent/opa/plugins/status"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/util"
 )
 
@@ -407,6 +407,7 @@ type Plugin struct {
 	limiter   *rate.Limiter
 	metrics   metrics.Metrics
 	logger    logging.Logger
+	status    *lstat.Status
 }
 
 type reconfigure struct {
@@ -497,6 +498,7 @@ func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
 		enc:      newChunkEncoder(*parsedConfig.Reporting.UploadSizeLimitBytes),
 		reconfig: make(chan reconfigure),
 		logger:   manager.Logger().WithFields(map[string]interface{}{"plugin": Name}),
+		status:   &lstat.Status{},
 	}
 
 	if parsedConfig.Reporting.MaxDecisionsPerSecond != nil {
@@ -768,6 +770,19 @@ func (p *Plugin) loop() {
 func (p *Plugin) doOneShot(ctx context.Context) error {
 	uploaded, err := p.oneShot(ctx)
 
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	p.status.SetError(err)
+
+	if p.metrics != nil {
+		p.status.Metrics = p.metrics
+	}
+
+	if s := status.Lookup(p.manager); s != nil {
+		s.UpdateDecisionLogsStatus(*p.status)
+	}
+
 	if err != nil {
 		p.logger.Error("%v.", err)
 	} else if uploaded {
@@ -979,7 +994,6 @@ func (p *Plugin) dropEvent(ctx context.Context, txn storage.Transaction, event *
 
 		if p.drop == nil {
 			query := ast.NewBody(ast.NewExpr(ast.NewTerm(p.config.dropDecisionRef)))
-			interQueryCache := cache.NewInterQueryCache(p.manager.InterQueryBuiltinCacheConfig())
 			r := rego.New(
 				rego.ParsedQuery(query),
 				rego.Compiler(p.manager.GetCompiler()),
@@ -988,7 +1002,6 @@ func (p *Plugin) dropEvent(ctx context.Context, txn storage.Transaction, event *
 				rego.Runtime(p.manager.Info),
 				rego.EnablePrintStatements(p.manager.EnablePrintStatements()),
 				rego.PrintHook(p.manager.PrintHook()),
-				rego.InterQueryBuiltinCache(interQueryCache),
 			)
 
 			pq, err := r.PrepareForEval(context.Background())
@@ -1039,7 +1052,7 @@ func uploadChunk(ctx context.Context, client rest.Client, uploadPath string, dat
 	defer util.Close(resp)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("log upload failed, server replied with HTTP %v %v", resp.StatusCode, http.StatusText(resp.StatusCode))
+		return lstat.HTTPError{StatusCode: resp.StatusCode}
 	}
 
 	return nil
