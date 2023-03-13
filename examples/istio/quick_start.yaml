@@ -243,8 +243,10 @@ metadata:
     app: admission-controller
 spec:
   ports:
-    - port: 443
-      name: https
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 8443
   selector:
     app: admission-controller
 ---
@@ -273,26 +275,26 @@ spec:
         - image: openpolicyagent/opa:latest
           name: opa
           ports:
-          - containerPort: 443
+          - containerPort: 8443
           args:
           - "run"
           - "--server"
           - "--tls-cert-file=/certs/tls.crt"
           - "--tls-private-key-file=/certs/tls.key"
-          - "--addr=0.0.0.0:443"
+          - "--addr=0.0.0.0:8443"
           - "/policies/inject.rego"
           livenessProbe:
             httpGet:
               path: /health?plugins
               scheme: HTTPS
-              port: 443
+              port: 8443
             initialDelaySeconds: 5
             periodSeconds: 5
           readinessProbe:
             httpGet:
               path: /health?plugins
               scheme: HTTPS
-              port: 443
+              port: 8443
             initialDelaySeconds: 5
             periodSeconds: 5
           volumeMounts:
