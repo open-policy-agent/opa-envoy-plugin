@@ -11,7 +11,7 @@ on:
 jobs:
   go-build:
     name: Go Build
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -22,7 +22,7 @@ jobs:
 
   go-test:
     name: Go Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -33,7 +33,7 @@ jobs:
 
   go-lint:
     name: Go Lint
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -45,7 +45,7 @@ jobs:
   deploy:
     name: Push Latest Release
     if: github.ref == 'refs/heads/main' # only true for pushes to `main`
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -62,7 +62,7 @@ jobs:
 
   e2e:
     name: Istio End-to-End Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -91,7 +91,7 @@ jobs:
 
   e2e-envoy-grpc:
     name: Envoy gRPC End-to-End Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v3
