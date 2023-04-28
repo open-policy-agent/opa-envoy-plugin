@@ -163,10 +163,14 @@ bundles:
     service: controller
 plugins:
   envoy_ext_authz_grpc:
-    addr: :9191
-    path: envoy/authz/allow
-    dry-run: false
-    enable-reflection: false
+    addr: :9191 # default `:9191`
+    path: envoy/authz/allow # default: `envoy/authz/allow`
+    dry-run: false # default: false
+    enable-reflection: false # default: false
+    grpc-max-recv-msg-size: 40194304 # default: 1024 * 1024 * 4
+    grpc-max-send-msg-size: 2147483647 # default: max Int
+    skip-request-body-parse: false # default: false
+    enable-performance-metrics: false # default: false. Adds `grpc_request_duration_seconds` prometheus histogram metric 
 ```
 
 You can download the bundle and inspect it yourself:

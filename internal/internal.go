@@ -23,6 +23,7 @@ import (
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -49,11 +50,12 @@ import (
 )
 
 const (
-	defaultAddr                 = ":9191"
-	defaultPath                 = "envoy/authz/allow"
-	defaultDryRun               = false
-	defaultEnableReflection     = false
-	defaultSkipRequestBodyParse = false
+	defaultAddr                     = ":9191"
+	defaultPath                     = "envoy/authz/allow"
+	defaultDryRun                   = false
+	defaultEnableReflection         = false
+	defaultSkipRequestBodyParse     = false
+	defaultEnablePerformanceMetrics = false
 
 	// Those are the defaults from grpc-go.
 	// See https://github.com/grpc/grpc-go/blob/master/server.go#L58 for more details.
@@ -68,14 +70,14 @@ const (
 // configuration and returns a configuration value that can be used to
 // instantiate the plugin.
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
-
 	cfg := Config{
-		Addr:                 defaultAddr,
-		DryRun:               defaultDryRun,
-		EnableReflection:     defaultEnableReflection,
-		GRPCMaxRecvMsgSize:   defaultGRPCServerMaxReceiveMessageSize,
-		GRPCMaxSendMsgSize:   defaultGRPCServerMaxSendMessageSize,
-		SkipRequestBodyParse: defaultSkipRequestBodyParse,
+		Addr:                     defaultAddr,
+		DryRun:                   defaultDryRun,
+		EnableReflection:         defaultEnableReflection,
+		GRPCMaxRecvMsgSize:       defaultGRPCServerMaxReceiveMessageSize,
+		GRPCMaxSendMsgSize:       defaultGRPCServerMaxSendMessageSize,
+		SkipRequestBodyParse:     defaultSkipRequestBodyParse,
+		EnablePerformanceMetrics: defaultEnablePerformanceMetrics,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -127,7 +129,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	if m.TracerProvider() != nil {
 		grpcTracingOption := []otelgrpc.Option{
 			otelgrpc.WithTracerProvider(m.TracerProvider()),
-			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))}
+			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})),
+		}
 		distributedTracingOpts = tracing.NewOptions(
 			otelhttp.WithTracerProvider(m.TracerProvider()),
 			otelhttp.WithPropagators(propagation.TraceContext{}),
@@ -157,6 +160,27 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	if cfg.EnableReflection {
 		reflection.Register(plugin.server)
 	}
+	if cfg.EnablePerformanceMetrics {
+		histogramAuthzDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "grpc_request_duration_seconds",
+			Help: "A histogram of duration for grpc authz requests.",
+			Buckets: []float64{
+				1e-6,
+				5e-6,
+				1e-5,
+				5e-5,
+				1e-4,
+				5e-4,
+				1e-3,
+				3e-3,
+				5e-3,
+				0.1,
+				1,
+			},
+		}, []string{"handler"})
+		plugin.metricAuthzDuration = *histogramAuthzDuration
+		plugin.manager.PrometheusRegister().MustRegister(histogramAuthzDuration)
+	}
 
 	m.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 
@@ -165,17 +189,18 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 // Config represents the plugin configuration.
 type Config struct {
-	Addr                 string `json:"addr"`
-	Query                string `json:"query"` // Deprecated: Use Path instead
-	Path                 string `json:"path"`
-	DryRun               bool   `json:"dry-run"`
-	EnableReflection     bool   `json:"enable-reflection"`
-	parsedQuery          ast.Body
-	ProtoDescriptor      string `json:"proto-descriptor"`
-	protoSet             *protoregistry.Files
-	GRPCMaxRecvMsgSize   int  `json:"grpc-max-recv-msg-size"`
-	GRPCMaxSendMsgSize   int  `json:"grpc-max-send-msg-size"`
-	SkipRequestBodyParse bool `json:"skip-request-body-parse"`
+	Addr                     string `json:"addr"`
+	Query                    string `json:"query"` // Deprecated: Use Path instead
+	Path                     string `json:"path"`
+	DryRun                   bool   `json:"dry-run"`
+	EnableReflection         bool   `json:"enable-reflection"`
+	parsedQuery              ast.Body
+	ProtoDescriptor          string `json:"proto-descriptor"`
+	protoSet                 *protoregistry.Files
+	GRPCMaxRecvMsgSize       int  `json:"grpc-max-recv-msg-size"`
+	GRPCMaxSendMsgSize       int  `json:"grpc-max-send-msg-size"`
+	SkipRequestBodyParse     bool `json:"skip-request-body-parse"`
+	EnablePerformanceMetrics bool `json:"enable-performance-metrics"`
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -186,6 +211,7 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQueryDoOnce    *sync.Once
 	interQueryBuiltinCache iCache.InterQueryCache
 	distributedTracingOpts tracing.Options
+	metricAuthzDuration    prometheus.HistogramVec
 }
 
 type envoyExtAuthzV2Wrapper struct {
@@ -381,7 +407,6 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	resp := &ext_authz_v3.CheckResponse{}
 
 	allowed, err := result.IsAllowed()
-
 	if err != nil {
 		return nil, stop, errors.Wrap(err, "failed to get response status")
 	}
@@ -441,6 +466,14 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		}
 	}
 
+	totalDecisionTime := time.Since(start)
+
+	if p.cfg.EnablePerformanceMetrics {
+		p.metricAuthzDuration.
+			With(prometheus.Labels{"handler": "check"}).
+			Observe(float64(totalDecisionTime.Seconds()))
+	}
+
 	p.manager.Logger().WithFields(map[string]interface{}{
 		"query":               p.cfg.parsedQuery.String(),
 		"dry-run":             p.cfg.DryRun,
@@ -448,7 +481,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		"err":                 err,
 		"txn":                 result.TxnID,
 		"metrics":             result.Metrics.All(),
-		"total_decision_time": time.Since(start),
+		"total_decision_time": totalDecisionTime,
 	}).Debug("Returning policy decision.")
 
 	// If dry-run mode, override the Status code to unconditionally Allow the request
@@ -545,7 +578,8 @@ func v2Response(respV3 *ext_authz_v3.CheckResponse) *ext_authz_v2.CheckResponse 
 		respV2.HttpResponse = &ext_authz_v2.CheckResponse_OkResponse{
 			OkResponse: &ext_authz_v2.OkHttpResponse{
 				Headers: v2Headers(hdrs),
-			}}
+			},
+		}
 	case *ext_authz_v3.CheckResponse_DeniedResponse:
 		hdrs := http3.DeniedResponse.GetHeaders()
 		respV2.HttpResponse = &ext_authz_v2.CheckResponse_DeniedResponse{
@@ -553,7 +587,8 @@ func v2Response(respV3 *ext_authz_v3.CheckResponse) *ext_authz_v2.CheckResponse 
 				Headers: v2Headers(hdrs),
 				Status:  v2Status(http3.DeniedResponse.Status),
 				Body:    http3.DeniedResponse.Body,
-			}}
+			},
+		}
 	}
 	return &respV2
 }

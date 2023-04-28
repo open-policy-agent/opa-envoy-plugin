@@ -15,13 +15,12 @@ import (
 )
 
 func BenchmarkCheck(b *testing.B) {
-
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
 		panic(err)
 	}
 
-	server := testAuthzServer(&testPlugin{}, false)
+	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
 	ctx := context.Background()
 
 	b.ResetTimer()
