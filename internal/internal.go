@@ -23,6 +23,7 @@ import (
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -45,11 +46,12 @@ import (
 )
 
 const (
-	defaultAddr                 = ":9191"
-	defaultPath                 = "envoy/authz/allow"
-	defaultDryRun               = false
-	defaultEnableReflection     = false
-	defaultSkipRequestBodyParse = false
+	defaultAddr                    = ":9191"
+	defaultPath                    = "envoy/authz/allow"
+	defaultDryRun                  = false
+	defaultEnableReflection        = false
+	defaultSkipRequestBodyParse    = false
+	defaultEnablePrometheusMetrics = false
 
 	// Those are the defaults from grpc-go.
 	// See https://github.com/grpc/grpc-go/blob/master/server.go#L58 for more details.
@@ -64,14 +66,14 @@ const (
 // configuration and returns a configuration value that can be used to
 // instantiate the plugin.
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
-
 	cfg := Config{
-		Addr:                 defaultAddr,
-		DryRun:               defaultDryRun,
-		EnableReflection:     defaultEnableReflection,
-		GRPCMaxRecvMsgSize:   defaultGRPCServerMaxReceiveMessageSize,
-		GRPCMaxSendMsgSize:   defaultGRPCServerMaxSendMessageSize,
-		SkipRequestBodyParse: defaultSkipRequestBodyParse,
+		Addr:                    defaultAddr,
+		DryRun:                  defaultDryRun,
+		EnableReflection:        defaultEnableReflection,
+		GRPCMaxRecvMsgSize:      defaultGRPCServerMaxReceiveMessageSize,
+		GRPCMaxSendMsgSize:      defaultGRPCServerMaxSendMessageSize,
+		SkipRequestBodyParse:    defaultSkipRequestBodyParse,
+		EnablePrometheusMetrics: defaultEnablePrometheusMetrics,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -115,7 +117,6 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 // New returns a Plugin that implements the Envoy ext_authz API.
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
-
 	plugin := &envoyExtAuthzGrpcServer{
 		manager: m,
 		cfg:     *cfg,
@@ -145,17 +146,18 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 // Config represents the plugin configuration.
 type Config struct {
-	Addr                 string `json:"addr"`
-	Query                string `json:"query"` // Deprecated: Use Path instead
-	Path                 string `json:"path"`
-	DryRun               bool   `json:"dry-run"`
-	EnableReflection     bool   `json:"enable-reflection"`
-	parsedQuery          ast.Body
-	ProtoDescriptor      string `json:"proto-descriptor"`
-	protoSet             *protoregistry.Files
-	GRPCMaxRecvMsgSize   int  `json:"grpc-max-recv-msg-size"`
-	GRPCMaxSendMsgSize   int  `json:"grpc-max-send-msg-size"`
-	SkipRequestBodyParse bool `json:"skip-request-body-parse"`
+	Addr                    string `json:"addr"`
+	Query                   string `json:"query"` // Deprecated: Use Path instead
+	Path                    string `json:"path"`
+	DryRun                  bool   `json:"dry-run"`
+	EnableReflection        bool   `json:"enable-reflection"`
+	parsedQuery             ast.Body
+	ProtoDescriptor         string `json:"proto-descriptor"`
+	protoSet                *protoregistry.Files
+	GRPCMaxRecvMsgSize      int  `json:"grpc-max-recv-msg-size"`
+	GRPCMaxSendMsgSize      int  `json:"grpc-max-send-msg-size"`
+	SkipRequestBodyParse    bool `json:"skip-request-body-parse"`
+	EnablePrometheusMetrics bool `json:"enable-prometheus-metrics"`
 }
 
 type envoyExtAuthzGrpcServer struct {
@@ -165,6 +167,7 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
 	interQueryBuiltinCache iCache.InterQueryCache
+	metricAuthzDuration    prometheus.Summary
 }
 
 type envoyExtAuthzV2Wrapper struct {
@@ -235,6 +238,15 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	addr := p.cfg.Addr
 	if !strings.Contains(addr, "://") {
 		addr = "grpc://" + addr
+	}
+
+	if p.cfg.EnablePrometheusMetrics {
+		summaryAuthzDuration := prometheus.NewSummary(prometheus.SummaryOpts{
+			Name: "grpc_authz_request_duration_ms",
+			Help: "A histogram of duration for grpc authz requests.",
+		})
+		p.metricAuthzDuration = summaryAuthzDuration
+		p.manager.PrometheusRegister().MustRegister(summaryAuthzDuration)
 	}
 
 	parsedURL, err := url.Parse(addr)
@@ -356,7 +368,6 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	resp := &ext_authz_v3.CheckResponse{}
 
 	allowed, err := result.IsAllowed()
-
 	if err != nil {
 		return nil, stop, errors.Wrap(err, "failed to get response status")
 	}
@@ -416,6 +427,12 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		}
 	}
 
+	totalDesicionTime := time.Since(start)
+
+	if p.metricAuthzDuration != nil {
+		p.metricAuthzDuration.Observe(float64(totalDesicionTime.Milliseconds()))
+	}
+
 	p.manager.Logger().WithFields(map[string]interface{}{
 		"query":               p.cfg.parsedQuery.String(),
 		"dry-run":             p.cfg.DryRun,
@@ -423,7 +440,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		"err":                 err,
 		"txn":                 result.TxnID,
 		"metrics":             result.Metrics.All(),
-		"total_decision_time": time.Since(start),
+		"total_decision_time": totalDesicionTime,
 	}).Debug("Returning policy decision.")
 
 	// If dry-run mode, override the Status code to unconditionally Allow the request
@@ -520,7 +537,8 @@ func v2Response(respV3 *ext_authz_v3.CheckResponse) *ext_authz_v2.CheckResponse 
 		respV2.HttpResponse = &ext_authz_v2.CheckResponse_OkResponse{
 			OkResponse: &ext_authz_v2.OkHttpResponse{
 				Headers: v2Headers(hdrs),
-			}}
+			},
+		}
 	case *ext_authz_v3.CheckResponse_DeniedResponse:
 		hdrs := http3.DeniedResponse.GetHeaders()
 		respV2.HttpResponse = &ext_authz_v2.CheckResponse_DeniedResponse{
@@ -528,7 +546,8 @@ func v2Response(respV3 *ext_authz_v3.CheckResponse) *ext_authz_v2.CheckResponse 
 				Headers: v2Headers(hdrs),
 				Status:  v2Status(http3.DeniedResponse.Status),
 				Body:    http3.DeniedResponse.Body,
-			}}
+			},
+		}
 	}
 	return &respV2
 }
