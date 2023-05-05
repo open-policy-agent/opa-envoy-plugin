@@ -120,15 +120,21 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
-	plugin := &envoyExtAuthzGrpcServer{
-		manager: m,
-		cfg:     *cfg,
-		server: grpc.NewServer(
-			grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
-			grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
+	serverOpts := []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
+		grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
+	}
+	if m.TracerProvider() != nil {
+		serverOpts = append(serverOpts,
 			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
 			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
-		),
+		)
+	}
+
+	plugin := &envoyExtAuthzGrpcServer{
+		manager:                m,
+		cfg:                    *cfg,
+		server:                 grpc.NewServer(serverOpts...),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
 	}
