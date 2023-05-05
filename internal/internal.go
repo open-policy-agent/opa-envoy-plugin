@@ -118,16 +118,16 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 // New returns a Plugin that implements the Envoy ext_authz API.
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
 	serverOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
 		grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
 	}
-	if m.TracerProvider() != nil {
+
+	if tp := m.TracerProvider(); tp != nil {
+		otel.SetTextMapPropagator(propagation.TraceContext{})
 		serverOpts = append(serverOpts,
-			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(tp))),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp))),
 		)
 	}
 
