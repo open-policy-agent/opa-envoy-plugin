@@ -23,6 +23,9 @@ import (
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -115,6 +118,7 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 // New returns a Plugin that implements the Envoy ext_authz API.
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	plugin := &envoyExtAuthzGrpcServer{
 		manager: m,
@@ -122,6 +126,8 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		server: grpc.NewServer(
 			grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
 			grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 		),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
