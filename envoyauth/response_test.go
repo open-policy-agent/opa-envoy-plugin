@@ -166,6 +166,20 @@ func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("Expected two headers but got %v", len(result))
 	}
+
+	testAddHeaders := make(map[string]interface{})
+	testAddHeaders["foo"] = []string{"bar", "baz"}
+	input["response_headers_to_add"] = testAddHeaders
+
+	result, err = er.GetResponseHTTPHeadersToAdd()
+
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("Expected two header but got %v", len(result))
+	}
 }
 
 func TestGetResponseHeaders(t *testing.T) {
@@ -235,6 +249,20 @@ func TestGetResponseHeaders(t *testing.T) {
 	}
 	if seen["bar"] != 1 || seen["baz"] != 1 {
 		t.Errorf("expected 'bar' and 'baz', got %v", seen)
+	}
+
+	testAddHeaders := make(map[string]interface{})
+	testAddHeaders["foo"] = []string{"bar", "baz"}
+	input["headers"] = testAddHeaders
+
+	result, err = er.GetResponseEnvoyHeaderValueOptions()
+
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("Expected two header but got %v", len(result))
 	}
 }
 

@@ -306,13 +306,24 @@ func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
 
 	takeResponseHeaders := func(headers map[string]interface{}, targetHeaders *http.Header) error {
 		for key, value := range headers {
-			var headerVal string
-			var ok bool
-			if headerVal, ok = value.(string); !ok {
-				return fmt.Errorf("type assertion error")
+			switch values := value.(type) {
+			case string:
+				targetHeaders.Add(key, values)
+			case []string:
+				for _, v := range values {
+					targetHeaders.Add(key, v)
+				}
+			case []interface{}:
+				for _, value := range values {
+					if headerVal, ok := value.(string); ok {
+						targetHeaders.Add(key, headerVal)
+					} else {
+						return fmt.Errorf("invalid value type for header '%s'", key)
+					}
+				}
+			default:
+				return fmt.Errorf("type assertion error for header '%s'", key)
 			}
-
-			targetHeaders.Add(key, headerVal)
 		}
 		return nil
 	}
