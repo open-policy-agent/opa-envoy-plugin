@@ -1,10 +1,18 @@
 package status
 
 import (
+	"github.com/open-policy-agent/opa/version"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
+	opaInfo = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name:        "opa_info",
+			Help:        "Information about the OPA environment.",
+			ConstLabels: map[string]string{"version": version.Version},
+		},
+	)
 	pluginStatus = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "plugin_status_gauge",
@@ -52,4 +60,23 @@ var (
 		Help:    "Histogram for the bundle loading duration by stage.",
 		Buckets: prometheus.ExponentialBuckets(1000, 2, 20),
 	}, []string{"name", "stage"})
+
+	// allCollectors is a list of all collectors maintained by the status plugin.
+	// Note: when adding a new collector, make sure to also add it to this list,
+	// or it won't survive status plugin reconfigure events.
+	allCollectors = []prometheus.Collector{
+		opaInfo,
+		pluginStatus,
+		loaded,
+		failLoad,
+		lastRequest,
+		lastSuccessfulActivation,
+		lastSuccessfulDownload,
+		lastSuccessfulRequest,
+		bundleLoadDuration,
+	}
 )
+
+func init() {
+	opaInfo.Set(1)
+}
