@@ -423,6 +423,13 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 
+	// test server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	defer ts.Close()
+
 	exampleRequest := `{
 	"attributes": {
 	  "request": {
@@ -441,16 +448,17 @@ func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	module := `
+	module := fmt.Sprintf(`
 		package envoy.authz
 
 		default allow = false
 
 		allow {
-          res := http.send({"url": "http://httpbin.org", "method": "GET"})
+          res := http.send({"url": "%s", "method": "GET"})
           res.status_code == 200
 		}
-`
+`, ts.URL)
+
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", customLogger, false, false)
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
