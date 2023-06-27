@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/opa/topdown/builtins"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/topdown/print"
+	"github.com/open-policy-agent/opa/tracing"
 )
 
 // EvalContext - This is an SPI that has to be provided if the envoy external authorization
@@ -30,6 +31,7 @@ type EvalContext interface {
 	SetPreparedQuery(*rego.PreparedEvalQuery)
 	Logger() logging.Logger
 	Config() *config.Config
+	DistributedTracing() tracing.Options
 }
 
 // Eval - Evaluates an input against a provided EvalContext and yields result
@@ -111,6 +113,7 @@ func constructPreparedQuery(evalContext EvalContext, txn storage.Transaction, m 
 			rego.Transaction(txn),
 			rego.Runtime(evalContext.Runtime()),
 			rego.EnablePrintStatements(true),
+			rego.DistributedTracingOpts(evalContext.DistributedTracing()),
 		)
 
 		pq, err = rego.New(opts...).PrepareForEval(context.Background())
