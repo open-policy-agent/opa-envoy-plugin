@@ -5,12 +5,16 @@
 package sdk
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/open-policy-agent/opa/hooks"
 	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/plugins"
+	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/storage/inmem"
 )
 
 // Options contains parameters to setup and configure OPA.
@@ -44,6 +48,13 @@ type Options struct {
 	// is recommended, as it makes it easier to track the system over time.
 	ID string
 
+	// Store sets the store to be used by the SDK instance. If nil, it'll use OPA's
+	// inmem store.
+	Store storage.Store
+
+	// Hooks allows hooking into the internals of SDK operations (TODO(sr): find better words)
+	Hooks hooks.Hooks
+
 	config []byte
 	block  bool
 }
@@ -73,6 +84,14 @@ func (o *Options) init() error {
 			return err
 		}
 		o.config = bs
+	}
+
+	if o.Store == nil {
+		o.Store = inmem.New()
+	}
+
+	if err := o.Hooks.Validate(); err != nil {
+		return fmt.Errorf("hooks: %w", err)
 	}
 
 	return nil
