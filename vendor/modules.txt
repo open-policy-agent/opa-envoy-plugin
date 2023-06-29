@@ -167,7 +167,7 @@ github.com/moby/locker
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.53.1
+# github.com/open-policy-agent/opa v0.54.0
 ## explicit; go 1.18
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -185,6 +185,7 @@ github.com/open-policy-agent/opa/download
 github.com/open-policy-agent/opa/features/tracing
 github.com/open-policy-agent/opa/features/wasm
 github.com/open-policy-agent/opa/format
+github.com/open-policy-agent/opa/hooks
 github.com/open-policy-agent/opa/internal/bundle
 github.com/open-policy-agent/opa/internal/bundle/inspect
 github.com/open-policy-agent/opa/internal/cidr/merge
@@ -196,6 +197,7 @@ github.com/open-policy-agent/opa/internal/deepcopy
 github.com/open-policy-agent/opa/internal/distributedtracing
 github.com/open-policy-agent/opa/internal/edittree
 github.com/open-policy-agent/opa/internal/edittree/bitvector
+github.com/open-policy-agent/opa/internal/errors
 github.com/open-policy-agent/opa/internal/file/archive
 github.com/open-policy-agent/opa/internal/file/url
 github.com/open-policy-agent/opa/internal/future
@@ -218,6 +220,7 @@ github.com/open-policy-agent/opa/internal/leb128
 github.com/open-policy-agent/opa/internal/logging
 github.com/open-policy-agent/opa/internal/merge
 github.com/open-policy-agent/opa/internal/oracle
+github.com/open-policy-agent/opa/internal/pathwatcher
 github.com/open-policy-agent/opa/internal/planner
 github.com/open-policy-agent/opa/internal/presentation
 github.com/open-policy-agent/opa/internal/prometheus
@@ -304,7 +307,7 @@ github.com/peterh/liner
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/prometheus/client_golang v1.15.1
+# github.com/prometheus/client_golang v1.16.0
 ## explicit; go 1.17
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/collectors
@@ -318,8 +321,8 @@ github.com/prometheus/client_model/go
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.9.0
-## explicit; go 1.18
+# github.com/prometheus/procfs v0.10.1
+## explicit; go 1.19
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
@@ -329,7 +332,7 @@ github.com/rcrowley/go-metrics
 # github.com/rivo/uniseg v0.2.0
 ## explicit; go 1.12
 github.com/rivo/uniseg
-# github.com/sirupsen/logrus v1.9.2
+# github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 # github.com/spf13/cobra v1.7.0
@@ -347,7 +350,7 @@ github.com/xeipuuv/gojsonpointer
 # github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415
 ## explicit
 github.com/xeipuuv/gojsonreference
-# github.com/yashtewari/glob-intersection v0.1.0
+# github.com/yashtewari/glob-intersection v0.2.0
 ## explicit; go 1.17
 github.com/yashtewari/glob-intersection
 # go.opencensus.io v0.23.0
@@ -429,7 +432,7 @@ golang.org/x/lint/golint
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.10.0
+# golang.org/x/net v0.11.0
 ## explicit; go 1.17
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
@@ -443,14 +446,14 @@ golang.org/x/net/trace
 ## explicit
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.8.0
+# golang.org/x/sys v0.9.0
 ## explicit; go 1.17
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/text v0.9.0
+# golang.org/x/text v0.10.0
 ## explicit; go 1.17
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform

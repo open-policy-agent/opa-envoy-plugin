@@ -15,6 +15,7 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
+	"github.com/open-policy-agent/opa/hooks"
 	"github.com/open-policy-agent/opa/internal/ref"
 	"github.com/open-policy-agent/opa/internal/runtime"
 	"github.com/open-policy-agent/opa/internal/uuid"
@@ -27,7 +28,6 @@ import (
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/topdown/builtins"
 	"github.com/open-policy-agent/opa/topdown/cache"
@@ -44,6 +44,8 @@ type OPA struct {
 	logger  logging.Logger
 	console logging.Logger
 	plugins map[string]plugins.Factory
+	store   storage.Store
+	hooks   hooks.Hooks
 	config  []byte
 }
 
@@ -72,7 +74,9 @@ func New(ctx context.Context, opts Options) (*OPA, error) {
 	}
 
 	opa := &OPA{
-		id: id,
+		id:    id,
+		store: opts.Store,
+		hooks: opts.Hooks,
 		state: &state{
 			queryCache: newQueryCache(),
 		},
@@ -127,12 +131,14 @@ func (opa *OPA) configure(ctx context.Context, bs []byte, ready chan struct{}, b
 	manager, err := plugins.New(
 		bs,
 		opa.id,
-		inmem.New(),
+		opa.store,
 		plugins.Info(info),
 		plugins.Logger(opa.logger),
 		plugins.ConsoleLogger(opa.console),
 		plugins.EnablePrintStatements(opa.logger.GetLevel() >= logging.Info),
-		plugins.PrintHook(loggingPrintHook{logger: opa.logger}))
+		plugins.PrintHook(loggingPrintHook{logger: opa.logger}),
+		plugins.WithHooks(opa.hooks),
+	)
 	if err != nil {
 		return err
 	}
@@ -166,7 +172,10 @@ func (opa *OPA) configure(ctx context.Context, bs []byte, ready chan struct{}, b
 		close(ready)
 	})
 
-	d, err := discovery.New(manager, discovery.Factories(opa.plugins))
+	d, err := discovery.New(manager,
+		discovery.Factories(opa.plugins),
+		discovery.Hooks(opa.hooks),
+	)
 	if err != nil {
 		return err
 	}
