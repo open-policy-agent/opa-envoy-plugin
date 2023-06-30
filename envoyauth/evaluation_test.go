@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/opa/config"
+	"github.com/open-policy-agent/opa/tracing"
 
 	"github.com/open-policy-agent/opa/logging"
 	loggingtest "github.com/open-policy-agent/opa/logging/test"
@@ -249,10 +250,11 @@ type Config struct {
 }
 
 type mockExtAuthzGrpcServer struct {
-	cfg                 Config
-	manager             *plugins.Manager
-	preparedQuery       *rego.PreparedEvalQuery
-	preparedQueryDoOnce *sync.Once
+	cfg                    Config
+	manager                *plugins.Manager
+	preparedQuery          *rego.PreparedEvalQuery
+	preparedQueryDoOnce    *sync.Once
+	distributedTracingOpts tracing.Options
 }
 
 func (m *mockExtAuthzGrpcServer) ParsedQuery() ast.Body {
@@ -293,6 +295,10 @@ func (m *mockExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 
 func (m *mockExtAuthzGrpcServer) Logger() logging.Logger {
 	return m.manager.Logger()
+}
+
+func (m *mockExtAuthzGrpcServer) DistributedTracing() tracing.Options {
+	return m.distributedTracingOpts
 }
 
 type testPlugin struct {

@@ -23,6 +23,9 @@ import (
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -37,6 +40,7 @@ import (
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
+	"github.com/open-policy-agent/opa/tracing"
 	"github.com/open-policy-agent/opa/util"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
@@ -115,16 +119,32 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 
 // New returns a Plugin that implements the Envoy ext_authz API.
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
+	grpcOpts := []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
+		grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
+	}
+	var distributedTracingOpts tracing.Options = nil
+	if m.TracerProvider() != nil {
+		grpcTracingOption := []otelgrpc.Option{
+			otelgrpc.WithTracerProvider(m.TracerProvider()),
+			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))}
+		distributedTracingOpts = tracing.NewOptions(
+			otelhttp.WithTracerProvider(m.TracerProvider()),
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		)
+		grpcOpts = append(grpcOpts,
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(grpcTracingOption...)),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor(grpcTracingOption...)),
+		)
+	}
 
 	plugin := &envoyExtAuthzGrpcServer{
-		manager: m,
-		cfg:     *cfg,
-		server: grpc.NewServer(
-			grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
-			grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
-		),
+		manager:                m,
+		cfg:                    *cfg,
+		server:                 grpc.NewServer(grpcOpts...),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
+		distributedTracingOpts: distributedTracingOpts,
 	}
 
 	// Register Authorization Server
@@ -165,6 +185,7 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
 	interQueryBuiltinCache iCache.InterQueryCache
+	distributedTracingOpts tracing.Options
 }
 
 type envoyExtAuthzV2Wrapper struct {
@@ -209,6 +230,10 @@ func (p *envoyExtAuthzGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
 
 func (p *envoyExtAuthzGrpcServer) Logger() logging.Logger {
 	return p.manager.Logger()
+}
+
+func (p *envoyExtAuthzGrpcServer) DistributedTracing() tracing.Options {
+	return p.distributedTracingOpts
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
