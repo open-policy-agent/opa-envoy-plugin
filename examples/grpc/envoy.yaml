@@ -37,6 +37,8 @@ static_resources:
                 max_request_bytes: 1024
                 pack_as_bytes: true
           - name: envoy.filters.http.router
+            typed_config:
+              '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
   clusters:
   - name: testsrv
