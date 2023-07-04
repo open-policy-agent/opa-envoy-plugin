@@ -1,5 +1,5 @@
 SHELL:=bash
-GRPCURL_IMAGE:=fullstorydev/grpcurl:v1.7.0
+GRPCURL_IMAGE:=fullstorydev/grpcurl:v1.8.7
 GRPCURL=docker run --network=host -i --rm -v $$(pwd)/testsrv.pb:/testsrv.pb $(GRPCURL_IMAGE) \
   -d @ -plaintext -protoset /testsrv.pb 127.0.0.1:51051
 

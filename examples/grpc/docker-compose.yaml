@@ -1,12 +1,13 @@
 version: '3'
 services:
   envoy:
-    image: envoyproxy/envoy:v1.16-latest
+    image: envoyproxy/envoy:v1.26-latest
     ports:
       - "9901:9901"
       - "51051:51051"
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml
+    command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--component-log-level", "ext_authz:trace"]
   opa-envoy:
     image: openpolicyagent/opa:latest-envoy
     ports:
