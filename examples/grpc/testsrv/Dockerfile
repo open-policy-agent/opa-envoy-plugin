@@ -1,4 +1,4 @@
-FROM golang:1.15
+FROM golang:1.18
 WORKDIR /src
 COPY . /src
 RUN go build .
