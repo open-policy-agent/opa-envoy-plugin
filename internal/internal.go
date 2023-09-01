@@ -394,19 +394,21 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, err
 	}
 
-	inputValue, err := ast.InterfaceToValue(input)
+	var inputValue ast.Value
+	inputValue, err = ast.InterfaceToValue(input)
 	if err != nil {
 		return nil, stop, err
 	}
 
-	if err := envoyauth.Eval(ctx, p, inputValue, result); err != nil {
+	if err = envoyauth.Eval(ctx, p, inputValue, result); err != nil {
 		evalErr = err
 		return nil, stop, err
 	}
 
 	resp := &ext_authz_v3.CheckResponse{}
 
-	allowed, err := result.IsAllowed()
+	var allowed bool
+	allowed, err = result.IsAllowed()
 	if err != nil {
 		return nil, stop, errors.Wrap(err, "failed to get response status")
 	}
@@ -419,19 +421,22 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	switch result.Decision.(type) {
 	case map[string]interface{}:
-		responseHeaders, err := result.GetResponseEnvoyHeaderValueOptions()
+		var responseHeaders []*ext_core_v3.HeaderValueOption
+		responseHeaders, err = result.GetResponseEnvoyHeaderValueOptions()
 		if err != nil {
 			return nil, stop, errors.Wrap(err, "failed to get response headers")
 		}
 
 		if status == int32(code.Code_OK) {
 
-			headersToRemove, err := result.GetRequestHTTPHeadersToRemove()
+			var headersToRemove []string
+			headersToRemove, err = result.GetRequestHTTPHeadersToRemove()
 			if err != nil {
 				return nil, stop, errors.Wrap(err, "failed to get request headers to remove")
 			}
 
-			responseHeadersToAdd, err := result.GetResponseHTTPHeadersToAdd()
+			var responseHeadersToAdd []*ext_core_v3.HeaderValueOption
+			responseHeadersToAdd, err = result.GetResponseHTTPHeadersToAdd()
 			if err != nil {
 				return nil, stop, errors.Wrap(err, "failed to get response headers to send to client")
 			}
@@ -444,12 +449,14 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 				},
 			}
 		} else {
-			body, err := result.GetResponseBody()
+			var body string
+			body, err = result.GetResponseBody()
 			if err != nil {
 				return nil, stop, errors.Wrap(err, "failed to get response body")
 			}
 
-			httpStatus, err := result.GetResponseEnvoyHTTPStatus()
+			var httpStatus *ext_type_v3.HttpStatus
+			httpStatus, err = result.GetResponseEnvoyHTTPStatus()
 			if err != nil {
 				return nil, stop, errors.Wrap(err, "failed to get response http status")
 			}
