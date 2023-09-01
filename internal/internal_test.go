@@ -806,6 +806,105 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 	}
 }
 
+func TestCheckEvalErrorWithLogger(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	module := `
+		package envoy.authz
+
+		allow := false
+
+        allow:= true`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if output != nil {
+		t.Fatalf("Expected no output but got %v", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	expectedMsg := "eval_conflict_error: complete rules must not produce multiple outputs"
+	if !strings.Contains(event.Error.Error(), expectedMsg) {
+		t.Fatalf("Expected error message %v, but got %v", expectedMsg, event.Error.Error())
+	}
+}
+
+func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+
+		default allow = false
+
+		allow {
+			input.parsed_path = ["my", "test", "path"]
+		}
+
+		headers["x"] = "hello"
+		headers["y"] = "world"
+
+		request_headers_to_remove := "foo"
+
+		result["allowed"] = allow
+		result["headers"] = headers
+		result["request_headers_to_remove"] = request_headers_to_remove`
+
+	customLogger := &testPlugin{}
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(customLogger))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if output != nil {
+		t.Fatalf("Expected no output but got %v", output)
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil || event.Path != "envoy/authz/result" || event.Revision != "" || event.Result != nil ||
+		event.DecisionID == "" || event.Metrics == nil {
+		t.Fatalf("Unexpected events: %+v", customLogger.events)
+	}
+
+	expectedMsg := "type assertion error"
+	if !strings.Contains(event.Error.Error(), expectedMsg) {
+		t.Fatalf("Expected error message %v, but got %v", expectedMsg, event.Error.Error())
+	}
+}
+
 func TestCheckWithLoggerError(t *testing.T) {
 	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
