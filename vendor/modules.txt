@@ -439,7 +439,7 @@ golang.org/x/lint/golint
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.14.0
+# golang.org/x/net v0.15.0
 ## explicit; go 1.17
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
@@ -452,14 +452,14 @@ golang.org/x/net/trace
 ## explicit; go 1.17
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.11.0
+# golang.org/x/sys v0.12.0
 ## explicit; go 1.17
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/text v0.12.0
+# golang.org/x/text v0.13.0
 ## explicit; go 1.17
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
@@ -468,7 +468,7 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.3.0
 ## explicit
 golang.org/x/time/rate
-# golang.org/x/tools v0.12.0
+# golang.org/x/tools v0.13.0
 ## explicit; go 1.18
 golang.org/x/tools/cmd/goimports
 golang.org/x/tools/go/ast/astutil
@@ -487,6 +487,7 @@ golang.org/x/tools/internal/imports
 golang.org/x/tools/internal/pkgbits
 golang.org/x/tools/internal/tokeninternal
 golang.org/x/tools/internal/typeparams
+golang.org/x/tools/internal/typesinternal
 # google.golang.org/genproto v0.0.0-20230526203410-71b5a4ffd15e
 ## explicit; go 1.19
 google.golang.org/genproto/protobuf/field_mask
