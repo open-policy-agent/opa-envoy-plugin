@@ -44,6 +44,8 @@ import (
 	"github.com/open-policy-agent/opa/tracing"
 	"github.com/open-policy-agent/opa/util"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	internal_util "github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 	"github.com/open-policy-agent/opa-envoy-plugin/opa/decisionlog"
@@ -517,6 +519,12 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 
 	if p.cfg.Path != "" {
 		info.Path = p.cfg.Path
+	}
+
+	sctx := trace.SpanFromContext(ctx).SpanContext()
+	if sctx.IsValid() {
+		info.TraceID = sctx.TraceID().String()
+		info.SpanID = sctx.SpanID().String()
 	}
 
 	if result.NDBuiltinCache != nil {
