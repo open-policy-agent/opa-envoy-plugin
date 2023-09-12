@@ -49,6 +49,8 @@ const exampleAllowedRequest = `{
 			"x-b3-sampled": "1",
 			"x-b3-spanid": "537f473f27475073",
 			"x-b3-traceid": "537f473f27475073",
+			"traceparent" : "00-0000000000000000f7bea0490c3cb268-b9543a567b0289f8-01",
+			"tracestate" : "rojo=00f067aa0ba902b7",
 			"x-envoy-internal": "true",
 			"x-forwarded-for": "172.17.0.1",
 			"x-forwarded-proto": "http",
@@ -163,6 +165,38 @@ func TestCheckAllow(t *testing.T) {
 	if output.Status.Code != int32(code.Code_OK) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
+}
+
+func TestCheckTraceIDInAllowedRequest(t *testing.T) {
+	// Example Envoy Check Request for input:
+	// curl --user  bob:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(nil, withCustomLogger(customLogger))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := customLogger.events[0]
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	t.Log("Printing decision log event looking for traceid: ", event.TraceID)
+	t.Log("Printing decision log event looking for decisionid: ", event.DecisionID)
+
+	if event.TraceID == "" {
+		t.Fatal("Expected TraceID to be present but got empty")
+	}
+
 }
 
 func TestCheckTrigger(t *testing.T) {
