@@ -535,7 +535,7 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 		"txn":      result.TxnID,
 		"metrics":  result.Metrics.All(),
 		"traceid":  info.TraceID,
-	}).Error(" traceid should not work population in opa envoy.")
+	}).Error("Testing traceid population in decision log in opa envoy.")
 
 	if result.NDBuiltinCache != nil {
 		x, err := ast.JSON(result.NDBuiltinCache.AsValue())
