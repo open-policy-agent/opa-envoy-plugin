@@ -49,6 +49,8 @@ const exampleAllowedRequest = `{
 			"x-b3-sampled": "1",
 			"x-b3-spanid": "537f473f27475073",
 			"x-b3-traceid": "537f473f27475073",
+			"traceparent" : "00-0000000000000000f7bea0490c3cb268-b9543a567b0289f8-01",
+			"tracestate" : "rojo=00f067aa0ba902b7",
 			"x-envoy-internal": "true",
 			"x-forwarded-for": "172.17.0.1",
 			"x-forwarded-proto": "http",
