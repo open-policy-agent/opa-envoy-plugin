@@ -102,8 +102,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-
-
 func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 	spanExporter.Reset()
 
