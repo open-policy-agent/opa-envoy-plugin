@@ -8,9 +8,29 @@ import (
 	"github.com/open-policy-agent/opa-envoy-plugin/internal"
 	"github.com/open-policy-agent/opa-envoy-plugin/plugin"
 	"github.com/open-policy-agent/opa/plugins"
+	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 )
+
+type testPlugin struct {
+	events []logs.EventV1
+}
+
+func (*testPlugin) Start(context.Context) error {
+	return nil
+}
+
+func (*testPlugin) Stop(context.Context) {
+}
+
+func (*testPlugin) Reconfigure(context.Context, interface{}) {
+}
+
+func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
+	p.events = append(p.events, event)
+	return nil
+}
 
 // TestAuthzServerWithWithOpts creates a new AuthzServer
 // that implements the Envoy ext_authz API. Options for
@@ -21,7 +41,7 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
 	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
 	store.Commit(ctx, txn)
-	m, err := plugins.New([]byte{}, "test", store, opts...)
+	m, err := plugins.New([]byte(`{"decision_logs": {"console": "true"}}`), "test", store, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -37,6 +57,22 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 		return nil, err
 	}
 	m.Register(plugin.PluginName, internal.New(m, cfg))
+
+	//services := []string{"s1", "s3"}
+
+	m.Register("test_plugin", &testPlugin{})
+	config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin"}`), nil, []string{"test_plugin"})
+	//config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin", "console": "true",
+	//"decision_logs": {"console": "true",   "service": "s1"}}`), services, []string{"test_plugin"})
+
+	if err != nil {
+		return nil, err
+	}
+	config.ConsoleLogs = true
+
+	logPlugin := logs.New(config, m)
+	m.Register(logs.Name, logPlugin)
+
 	if err := m.Start(ctx); err != nil {
 		return nil, err
 	}

@@ -527,16 +527,6 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 		info.SpanID = sctx.SpanID().String()
 	}
 
-	p.manager.Logger().WithFields(map[string]interface{}{
-		"query":    p.cfg.parsedQuery.String(),
-		"dry-run":  p.cfg.DryRun,
-		"decision": result.Decision,
-		"err":      err,
-		"txn":      result.TxnID,
-		"metrics":  result.Metrics.All(),
-		"traceid":  info.TraceID,
-	}).Error("Testing traceid population in decision log in opa envoy.")
-
 	if result.NDBuiltinCache != nil {
 		x, err := ast.JSON(result.NDBuiltinCache.AsValue())
 		if err != nil {
