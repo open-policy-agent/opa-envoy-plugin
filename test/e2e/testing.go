@@ -41,7 +41,7 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
 	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
 	store.Commit(ctx, txn)
-	m, err := plugins.New([]byte(`{"decision_logs": {"console": "true"}}`), "test", store, opts...)
+	m, err := plugins.New([]byte{}, "test", store, opts...)
 	if err != nil {
 		return nil, err
 	}

@@ -102,10 +102,9 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// TestServerSpan exemplarily asserts that the server handlers emit OpenTelemetry spans
-// with the correct attributes. It does NOT exercise all handlers, but contains one test
-// with a GET and one with a POST.
-func TestServerSpan(t *testing.T) {
+
+
+func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 	spanExporter.Reset()
 
 	t.Run("envoy.service.auth.v3.Authorization Check", func(t *testing.T) {
