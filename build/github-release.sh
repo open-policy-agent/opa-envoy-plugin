@@ -31,7 +31,7 @@ done
 # Collect a list of opa-envoy binaries
 ASSETS=()
 for asset in "${ASSET_DIR}"/opa_envoy_*_*; do
-    ASSETS+=("-a" "$asset")
+    ASSETS+=("$asset")
 done
 
 # Prepare the release notes
@@ -45,11 +45,10 @@ LINE="See the OPA ${TAG_NAME} release notes."
 echo -e "${LINE}" >> "${RELEASE_NOTES}"
 
 # Update or create a release on github
-if hub release show "${TAG_NAME}" > /dev/null; then
+if gh release view "${TAG_NAME}" --repo open-policy-agent/opa-envoy-plugin > /dev/null; then
     # Occurs when the tag is created via GitHub UI w/ a release
-    # Use -m "" to preserve the existing text.
-    hub release edit "${ASSETS[@]}" -m "" "${TAG_NAME}"
+    gh release upload "${TAG_NAME}" "${ASSETS[@]}" --repo open-policy-agent/opa-envoy-plugin
 else
     # Create a draft release
-    hub release create "${ASSETS[@]}" -F ${RELEASE_NOTES} --draft "${TAG_NAME}"
+    gh release create "${TAG_NAME}" "${ASSETS[@]}" -F ${RELEASE_NOTES} --draft --title "${TAG_NAME}" --repo open-policy-agent/opa-envoy-plugin
 fi
