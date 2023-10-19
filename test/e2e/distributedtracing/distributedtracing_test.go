@@ -12,6 +12,7 @@ import (
 
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	"github.com/open-policy-agent/opa-envoy-plugin/test/e2e"
+	"github.com/open-policy-agent/opa/logging/test"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/tracing"
 	"github.com/open-policy-agent/opa/util"
@@ -24,6 +25,7 @@ import (
 )
 
 var spanExporter *tracetest.InMemoryExporter
+var consoleLogger *test.Logger
 
 const exampleRequest = `{
 	"attributes": {
@@ -70,6 +72,8 @@ func TestMain(m *testing.M) {
 	tracing.RegisterHTTPTracing(&factory{})
 	spanExporter = tracetest.NewInMemoryExporter()
 	tracerProvider := trace.NewTracerProvider(trace.WithSpanProcessor(trace.NewSimpleSpanProcessor(spanExporter)))
+	consoleLogger = test.New()
+
 	count := 0
 	countMutex := sync.Mutex{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -88,7 +92,7 @@ func TestMain(m *testing.M) {
 		resp.body.count == 1
 	}`
 	module := fmt.Sprintf(moduleFmt, ts.URL)
-	pluginsManager, err := e2e.TestAuthzServerWithWithOpts(module, "envoy/authz/allow", ":9191", plugins.WithTracerProvider(tracerProvider))
+	pluginsManager, err := e2e.TestAuthzServerWithWithOpts(module, "envoy/authz/allow", ":9191", plugins.WithTracerProvider(tracerProvider), plugins.ConsoleLogger(consoleLogger))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -98,10 +102,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// TestServerSpan exemplarily asserts that the server handlers emit OpenTelemetry spans
-// with the correct attributes. It does NOT exercise all handlers, but contains one test
-// with a GET and one with a POST.
-func TestServerSpan(t *testing.T) {
+func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 	spanExporter.Reset()
 
 	t.Run("envoy.service.auth.v3.Authorization Check", func(t *testing.T) {
@@ -146,6 +147,53 @@ func TestServerSpan(t *testing.T) {
 		parentSpanID := spans[1].SpanContext.SpanID()
 		if got, expected := spans[0].Parent.SpanID(), parentSpanID; got != expected {
 			t.Errorf("expected span to be child of %v, got parent %v", expected, got)
+		}
+
+		var entry test.LogEntry
+		var found bool
+
+		for _, entry = range consoleLogger.Entries() {
+			//t.Log(entry.Message)
+			if entry.Message == "Decision Log" {
+				found = true
+			}
+		}
+
+		if !found {
+			t.Fatalf("Did not find 'Decision Log' event in captured log entries")
+		}
+		// Check for some important fields
+		expectedFields := map[string]*struct {
+			found bool
+			match func(*testing.T, string)
+		}{
+			"labels":      {},
+			"decision_id": {},
+			"trace_id":    {},
+			"span_id":     {},
+			"result":      {},
+			"timestamp":   {},
+			"type": {match: func(t *testing.T, actual string) {
+				if actual != "openpolicyagent.org/decision_logs" {
+					t.Fatalf("Expected field 'type' to be 'openpolicyagent.org/decision_logs'")
+				}
+			}},
+		}
+
+		// Ensure expected fields exist
+		for fieldName, rawField := range entry.Fields {
+			if fd, ok := expectedFields[fieldName]; ok {
+				if fieldValue, ok := rawField.(string); ok && fd.match != nil {
+					fd.match(t, fieldValue)
+				}
+				fd.found = true
+			}
+		}
+
+		for field, fd := range expectedFields {
+			if !fd.found {
+				t.Errorf("Missing expected field in decision log: %s\n\nEntry: %+v\n\n", field, entry)
+			}
 		}
 	})
 }
