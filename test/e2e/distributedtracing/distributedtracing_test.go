@@ -153,7 +153,7 @@ func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 		var found bool
 
 		for _, entry = range consoleLogger.Entries() {
-			t.Log(entry.Message)
+			//t.Log(entry.Message)
 			if entry.Message == "Decision Log" {
 				found = true
 			}

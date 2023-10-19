@@ -58,12 +58,8 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 	}
 	m.Register(plugin.PluginName, internal.New(m, cfg))
 
-	//services := []string{"s1", "s3"}
-
 	m.Register("test_plugin", &testPlugin{})
 	config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin"}`), nil, []string{"test_plugin"})
-	//config, err := logs.ParseConfig([]byte(`{"plugin": "test_plugin", "console": "true",
-	//"decision_logs": {"console": "true",   "service": "s1"}}`), services, []string{"test_plugin"})
 
 	if err != nil {
 		return nil, err
