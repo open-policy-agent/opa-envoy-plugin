@@ -384,13 +384,13 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil
 	}
 
-	if ctx.Err() != nil {
-		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
+	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
+	if err != nil {
 		return nil, stop, err
 	}
 
-	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
-	if err != nil {
+	if ctx.Err() != nil {
+		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
 		return nil, stop, err
 	}
 
