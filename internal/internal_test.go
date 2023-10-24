@@ -520,6 +520,10 @@ func TestCheckContextTimeout(t *testing.T) {
 	if event.Error.Error() != expectedErrMsg {
 		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
 	}
+
+	if len((*event.Input).(map[string]interface{})) == 0 {
+		t.Fatalf("Expected non empty input but got %v", *event.Input)
+	}
 }
 
 func TestCheckIllegalDecisionWithLogger(t *testing.T) {
