@@ -32,6 +32,7 @@ import (
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/open-policy-agent/opa/bundle"
+	opa_config "github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/internal/config"
 	internal_tracing "github.com/open-policy-agent/opa/internal/distributedtracing"
 	internal_logging "github.com/open-policy-agent/opa/internal/logging"
@@ -46,6 +47,7 @@ import (
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/discovery"
 	"github.com/open-policy-agent/opa/plugins/logs"
+	metrics_config "github.com/open-policy-agent/opa/plugins/server/metrics"
 	"github.com/open-policy-agent/opa/repl"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
@@ -222,6 +224,11 @@ type Params struct {
 
 	// UnixSocketPerm specifies the permission for the Unix domain socket if used to listen for connections
 	UnixSocketPerm *string
+
+	// V1Compatible will enable OPA features and behaviors that will be enabled by default in a future OPA v1.0 release.
+	// This flag allows users to opt-in to the new behavior and helps transition to the future release upon which
+	// the new behavior will be enabled by default.
+	V1Compatible bool
 }
 
 // LoggingConfig stores the configuration for OPA's logging behaviour.
@@ -347,7 +354,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		params.Router = mux.NewRouter()
 	}
 
-	metrics := prometheus.New(metrics.New(), errorLogger(logger))
+	metricsConfig, parseConfigErr := extractMetricsConfig(config, params)
+	if parseConfigErr != nil {
+		return nil, parseConfigErr
+	}
+	metrics := prometheus.New(metrics.New(), errorLogger(logger), metricsConfig.Prom.HTTPRequestDurationSeconds.Buckets)
 
 	var store storage.Store
 	if params.DiskStorage == nil {
@@ -427,6 +438,27 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	return rt, nil
 }
 
+// extractMetricsConfig returns the configuration for server metrics and parsing errors if any
+func extractMetricsConfig(config []byte, params Params) (*metrics_config.Config, error) {
+	var opaParsedConfig, opaParsedConfigErr = opa_config.ParseConfig(config, params.ID)
+	if opaParsedConfigErr != nil {
+		return nil, opaParsedConfigErr
+	}
+
+	var serverMetricsData []byte
+	if opaParsedConfig.Server != nil {
+		serverMetricsData = opaParsedConfig.Server.Metrics
+	}
+
+	var configBuilder = metrics_config.NewConfigBuilder()
+	var metricsParsedConfig, metricsParsedConfigErr = configBuilder.WithBytes(serverMetricsData).Parse()
+	if metricsParsedConfigErr != nil {
+		return nil, fmt.Errorf("server metrics configuration parse error: %w", metricsParsedConfigErr)
+	}
+
+	return metricsParsedConfig, nil
+}
+
 // StartServer starts the runtime in server mode. This function will block the
 // calling goroutine and will exit the program on error.
 func (rt *Runtime) StartServer(ctx context.Context) {
@@ -445,7 +477,7 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 	}
 
 	serverInitializingMessage := "Initializing server."
-	if !rt.Params.AddrSetByUser {
+	if !rt.Params.AddrSetByUser && !rt.Params.V1Compatible {
 		serverInitializingMessage += " OPA is running on a public (0.0.0.0) network interface. Unless you intend to expose OPA outside of the host, binding to the localhost interface (--addr localhost:8181) is recommended. See https://www.openpolicyagent.org/docs/latest/security/#interface-binding"
 	}
 
