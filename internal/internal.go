@@ -7,6 +7,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"github.com/open-policy-agent/opa/topdown"
 	"math"
 	"net"
 	"net/url"
@@ -181,7 +182,13 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 			},
 		}, []string{"handler"})
 		plugin.metricAuthzDuration = *histogramAuthzDuration
+		errorCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "error_counter",
+			Help: "A counter for errors",
+		}, []string{"reason"})
+		plugin.metricErrorCounter = *errorCounter
 		plugin.manager.PrometheusRegister().MustRegister(histogramAuthzDuration)
+		plugin.manager.PrometheusRegister().MustRegister(errorCounter)
 	}
 
 	m.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
@@ -214,6 +221,7 @@ type envoyExtAuthzGrpcServer struct {
 	interQueryBuiltinCache iCache.InterQueryCache
 	distributedTracingOpts tracing.Options
 	metricAuthzDuration    prometheus.HistogramVec
+	metricErrorCounter     prometheus.CounterVec
 }
 
 type envoyExtAuthzV2Wrapper struct {
@@ -345,25 +353,32 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz_v3.C
 	if code := stop(); resp != nil && code != nil {
 		resp.Status = code
 	}
-	return resp, err
+
+	if err != nil {
+		return resp, err.Unwrap()
+	}
+	return resp, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*ext_authz_v3.CheckResponse, func() *rpc_status.Status, error) {
+func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*ext_authz_v3.CheckResponse, func() *rpc_status.Status, *Error) {
 	var err error
 	var evalErr error
+	var internalErr Error
 	start := time.Now()
 	logger := p.manager.Logger()
 
 	result, stopeval, err := envoyauth.NewEvalResult()
 	if err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new evaluation.")
-		return nil, func() *rpc_status.Status { return nil }, err
+		internalErr = internalError(StartCheckErr, err)
+		return nil, func() *rpc_status.Status { return nil }, &internalErr
 	}
 
 	txn, txnClose, err := result.GetTxn(ctx, p.Store())
 	if err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
-		return nil, func() *rpc_status.Status { return nil }, err
+		internalErr = internalError(StartTxnErr, err)
+		return nil, func() *rpc_status.Status { return nil }, &internalErr
 	}
 
 	result.Txn = txn
@@ -374,9 +389,21 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	stop := func() *rpc_status.Status {
 		stopeval()
+		if internalErr.Unwrap() != nil || internalErr.Code != "" {
+			var topdownError *topdown.Error
+			if errors.As(internalErr.Unwrap(), &topdownError) {
+				p.metricErrorCounter.With(prometheus.Labels{"reason": topdownError.Code}).Inc()
+			} else if internalErr.Code != "" {
+				p.metricErrorCounter.With(prometheus.Labels{"reason": internalErr.Code}).Inc()
+			} else {
+				p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_check_error"}).Inc()
+			}
+		}
 		logErr := p.log(ctx, input, result, err)
 		if logErr != nil {
 			_ = txnClose(ctx, logErr) // Ignore error
+			p.Logger().Debug("Error when logging event: %v", logErr)
+			p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_log_error"}).Inc()
 			return &rpc_status.Status{
 				Code:    int32(code.Code_UNKNOWN),
 				Message: logErr.Error(),
@@ -388,23 +415,27 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
 	if err != nil {
-		return nil, stop, err
+		internalErr = internalError(RequestParseErr, err)
+		return nil, stop, &internalErr
 	}
 
 	if ctx.Err() != nil {
 		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
-		return nil, stop, err
+		internalErr = internalError(CheckRequestTimeoutErr, err)
+		return nil, stop, &internalErr
 	}
 
 	var inputValue ast.Value
 	inputValue, err = ast.InterfaceToValue(input)
 	if err != nil {
-		return nil, stop, err
+		internalErr = internalError(InputParseErr, err)
+		return nil, stop, &internalErr
 	}
 
 	if err = envoyauth.Eval(ctx, p, inputValue, result); err != nil {
 		evalErr = err
-		return nil, stop, err
+		internalErr = internalError(EnvoyAuthEvalErr, err)
+		return nil, stop, &internalErr
 	}
 
 	resp := &ext_authz_v3.CheckResponse{}
@@ -412,7 +443,9 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	var allowed bool
 	allowed, err = result.IsAllowed()
 	if err != nil {
-		return nil, stop, errors.Wrap(err, "failed to get response status")
+		err = errors.Wrap(err, "failed to get response status")
+		internalErr = internalError(EnvoyAuthResultErr, err)
+		return nil, stop, &internalErr
 	}
 
 	status := int32(code.Code_PERMISSION_DENIED)
@@ -426,7 +459,9 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		var responseHeaders []*ext_core_v3.HeaderValueOption
 		responseHeaders, err = result.GetResponseEnvoyHeaderValueOptions()
 		if err != nil {
-			return nil, stop, errors.Wrap(err, "failed to get response headers")
+			err = errors.Wrap(err, "failed to get response headers")
+			internalErr = internalError(EnvoyAuthResultErr, err)
+			return nil, stop, &internalErr
 		}
 
 		dynamicMetadata, err := result.GetDynamicMetadata()
@@ -439,13 +474,17 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 			var headersToRemove []string
 			headersToRemove, err = result.GetRequestHTTPHeadersToRemove()
 			if err != nil {
-				return nil, stop, errors.Wrap(err, "failed to get request headers to remove")
+				err = errors.Wrap(err, "failed to get request headers to remove")
+				internalErr = internalError(EnvoyAuthResultErr, err)
+				return nil, stop, &internalErr
 			}
 
 			var responseHeadersToAdd []*ext_core_v3.HeaderValueOption
 			responseHeadersToAdd, err = result.GetResponseHTTPHeadersToAdd()
 			if err != nil {
-				return nil, stop, errors.Wrap(err, "failed to get response headers to send to client")
+				err = errors.Wrap(err, "failed to get response headers to send to client")
+				internalErr = internalError(EnvoyAuthResultErr, err)
+				return nil, stop, &internalErr
 			}
 
 			resp.HttpResponse = &ext_authz_v3.CheckResponse_OkResponse{
@@ -459,13 +498,17 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 			var body string
 			body, err = result.GetResponseBody()
 			if err != nil {
-				return nil, stop, errors.Wrap(err, "failed to get response body")
+				err = errors.Wrap(err, "failed to get response body")
+				internalErr = internalError(EnvoyAuthResultErr, err)
+				return nil, stop, &internalErr
 			}
 
 			var httpStatus *ext_type_v3.HttpStatus
 			httpStatus, err = result.GetResponseEnvoyHTTPStatus()
 			if err != nil {
-				return nil, stop, errors.Wrap(err, "failed to get response http status")
+				err = errors.Wrap(err, "failed to get response http status")
+				internalErr = internalError(EnvoyAuthResultErr, err)
+				return nil, stop, &internalErr
 			}
 
 			deniedResponse := &ext_authz_v3.DeniedHttpResponse{
@@ -582,7 +625,7 @@ func (p *envoyExtAuthzV2Wrapper) Check(ctx context.Context, req *ext_authz_v2.Ch
 	}()
 
 	if err != nil {
-		return nil, err
+		return nil, err.Unwrap()
 	}
 	respV2 = v2Response(respV3)
 	return respV2, nil
