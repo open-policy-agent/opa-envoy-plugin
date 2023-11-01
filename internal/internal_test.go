@@ -491,7 +491,7 @@ func TestCheckContextTimeout(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(nil, withCustomLogger(customLogger))
+	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
 	defer cancel()
@@ -524,6 +524,8 @@ func TestCheckContextTimeout(t *testing.T) {
 	if len((*event.Input).(map[string]interface{})) == 0 {
 		t.Fatalf("Expected non empty input but got %v", *event.Input)
 	}
+
+	assertErrorCounterMetric(t, server, CheckRequestTimeoutErr)
 }
 
 func TestCheckIllegalDecisionWithLogger(t *testing.T) {
@@ -543,7 +545,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 
 		default allow = 1
 		`
-	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", &Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
@@ -569,6 +571,8 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
+
+	assertErrorCounterMetric(t, server, EnvoyAuthResultErr)
 }
 
 func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
@@ -786,7 +790,7 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := testAuthzServer(nil, withCustomLogger(customLogger))
+	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
@@ -808,6 +812,8 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
+
+	assertErrorCounterMetric(t, server, RequestParseErr)
 }
 
 func TestCheckEvalErrorWithLogger(t *testing.T) {
@@ -826,7 +832,7 @@ func TestCheckEvalErrorWithLogger(t *testing.T) {
 
         allow:= true`
 
-	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", &Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
@@ -853,6 +859,8 @@ func TestCheckEvalErrorWithLogger(t *testing.T) {
 	if !strings.Contains(event.Error.Error(), expectedMsg) {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, event.Error.Error())
 	}
+
+	assertErrorCounterMetric(t, server, topdown.ConflictErr)
 }
 
 func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.T) {
@@ -881,7 +889,7 @@ func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.
 
 	customLogger := &testPlugin{}
 
-	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(customLogger))
+	server := testAuthzServerWithModule(module, "envoy/authz/result", &Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
@@ -907,6 +915,8 @@ func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.
 	if !strings.Contains(event.Error.Error(), expectedMsg) {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, event.Error.Error())
 	}
+
+	assertErrorCounterMetric(t, server, EnvoyAuthResultErr)
 }
 
 func TestCheckWithLoggerError(t *testing.T) {
@@ -921,7 +931,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	// create custom logger
 	customLogger := &testPluginError{}
 
-	server := testAuthzServer(nil, withCustomLogger(customLogger))
+	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -935,6 +945,8 @@ func TestCheckWithLoggerError(t *testing.T) {
 	if output.Status.Message != expectedMsg {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, output.Status.Message)
 	}
+
+	assertErrorCounterMetric(t, server, "unknown_log_error")
 }
 
 // Some decision log related tests are replicated for envoy.service.auth.v2.Authorization/Check
@@ -945,7 +957,7 @@ func TestCheckWithLoggerErrorV2(t *testing.T) {
 		panic(err)
 	}
 
-	server := envoyExtAuthzV2Wrapper{testAuthzServer(nil, withCustomLogger(&testPluginError{}))}
+	server := envoyExtAuthzV2Wrapper{testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(&testPluginError{}))}
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
@@ -959,6 +971,8 @@ func TestCheckWithLoggerErrorV2(t *testing.T) {
 	if output.Status.Message != expectedMsg {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, output.Status.Message)
 	}
+
+	assertErrorCounterMetric(t, server.v3, "unknown_log_error")
 }
 
 func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
@@ -970,7 +984,7 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	server := envoyExtAuthzV2Wrapper{testAuthzServer(nil, withCustomLogger(customLogger))}
+	server := envoyExtAuthzV2Wrapper{testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))}
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
@@ -992,6 +1006,8 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
+
+	assertErrorCounterMetric(t, server.v3, RequestParseErr)
 }
 
 func TestCheckDenyWithLoggerV2(t *testing.T) {
@@ -1969,6 +1985,33 @@ func assertHeaderValues(t *testing.T, expectedHeaders http.Header, headersToAdd 
 
 		if !found {
 			t.Fatalf("unexpected value '%s' for header '%s'", value, key)
+		}
+	}
+}
+
+func assertErrorCounterMetric(t *testing.T, server *envoyExtAuthzGrpcServer, labelValues ...string) {
+	reg := prometheus.NewPedanticRegistry()
+	if err := reg.Register(server.metricErrorCounter); err != nil {
+		t.Fatalf("registering collector failed: %v", err)
+	}
+
+	g := prometheus.ToTransactionalGatherer(reg)
+	fam, _, err := g.Gather()
+	if err != nil {
+		t.Fatalf("gathering metrics failed: %v", err)
+	}
+	if len(fam) != 1 {
+		t.Fatalf("Expected 1 metric, got %d", len(fam))
+	}
+	if fam[0].Metric[0].Counter.GetValue() != 1 {
+		t.Fatalf("Expected counter value 1, got %v", fam[0].Metric[0].Counter.GetValue())
+	}
+	if len(fam[0].Metric[0].GetLabel()) != len(labelValues) {
+		t.Fatalf("Expected %v labels in the counter metric, got %v labels", len(labelValues), len(fam[0].Metric[0].GetLabel()))
+	}
+	for labelIndex, labelValue := range labelValues {
+		if fam[0].Metric[0].GetLabel()[labelIndex].GetValue() != labelValue {
+			t.Fatalf("Expected error metric with reason label %v, got %v", labelValue, fam[0].Metric[0].GetLabel()[labelIndex].GetValue())
 		}
 	}
 }
