@@ -19,8 +19,10 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa/ast"
@@ -1443,6 +1445,11 @@ func TestCheckAllowObjectDecision(t *testing.T) {
 	expectedHeaders[http.CanonicalHeaderKey("y")] = "world"
 
 	assertHeaders(t, headers, expectedHeaders)
+
+	dynamicMetadata := output.GetDynamicMetadata()
+	if dynamicMetadata == nil {
+		t.Fatal("Expected DynamicMetadata struct but got nil")
+	}
 }
 
 func TestCheckDenyObjectDecision(t *testing.T) {
@@ -1543,6 +1550,21 @@ func TestCheckAllowWithDryRunObjectDecision(t *testing.T) {
 	expectedHeaders[http.CanonicalHeaderKey("y")] = "world"
 
 	assertHeaders(t, headers, expectedHeaders)
+
+	assertDynamicMetadata(t, &_structpb.Struct{
+		Fields: map[string]*_structpb.Value{
+			"test": {
+				Kind: &_structpb.Value_StringValue{
+					StringValue: "foo",
+				},
+			},
+			"bar": {
+				Kind: &_structpb.Value_StringValue{
+					StringValue: "baz",
+				},
+			},
+		},
+	}, output.GetDynamicMetadata())
 }
 
 func TestPluginStatusLifeCycle(t *testing.T) {
@@ -1721,14 +1743,16 @@ func testAuthzServerWithObjectDecision(customConfig *Config, customPluginFuncs .
 		  "allowed": false,
 		  "headers": {"foo": "bar", "baz": "taz"},
 		  "body": "Unauthorized Request",
-		  "http_status": 301
+		  "http_status": 301,
+		  "dynamic_metadata": {"test": "foo", "bar": "baz"}
 		}
 
 		allow = response {
 			input.parsed_path = ["my", "test", "path"]
 		    response := {
 				"allowed": true,
-				"headers": {"x": "hello", "y": "world"}
+				"headers": {"x": "hello", "y": "world"},
+				"dynamic_metadata": {"test": "foo", "bar": "baz"}
 		    }
 		}`
 
@@ -1966,6 +1990,13 @@ func assertHeaderValues(t *testing.T, expectedHeaders http.Header, headersToAdd 
 		if !found {
 			t.Fatalf("unexpected value '%s' for header '%s'", value, key)
 		}
+	}
+}
+
+func assertDynamicMetadata(t *testing.T, expectedMetadata, actualMetadata *_structpb.Struct) {
+	t.Helper()
+	if !proto.Equal(expectedMetadata, actualMetadata) {
+		t.Fatalf("Expected metadata %v but got %v", expectedMetadata, actualMetadata)
 	}
 }
 

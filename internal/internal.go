@@ -427,8 +427,13 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 			return nil, stop, errors.Wrap(err, "failed to get response headers")
 		}
 
-		if status == int32(code.Code_OK) {
+		dynamicMetadata, err := result.GetDynamicMetadata()
+		if err != nil {
+			return nil, stop, errors.Wrap(err, "failed to get dynamic metadata")
+		}
+		resp.DynamicMetadata = dynamicMetadata
 
+		if status == int32(code.Code_OK) {
 			var headersToRemove []string
 			headersToRemove, err = result.GetRequestHTTPHeadersToRemove()
 			if err != nil {
