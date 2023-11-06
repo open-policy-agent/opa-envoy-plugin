@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	_structpb "github.com/golang/protobuf/ptypes/struct"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestIsAllowed(t *testing.T) {
@@ -339,5 +342,57 @@ func TestGetResponseHttpStatus(t *testing.T) {
 
 	if result.GetCode().String() != "BadRequest" {
 		t.Fatalf("Expected http status code \"BadRequest\" but got %v", result.GetCode().String())
+	}
+}
+
+func TestGetDynamicMetadata(t *testing.T) {
+	input := make(map[string]interface{})
+	er := EvalResult{
+		Decision: input,
+	}
+
+	result, err := er.GetDynamicMetadata()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if result != nil {
+		t.Fatalf("Expected no dynamic metadata but got %v", result)
+	}
+
+	input["dynamic_metadata"] = map[string]interface{}{
+		"foo": "bar",
+	}
+	result, err = er.GetDynamicMetadata()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	expectedDynamicMetadata := &_structpb.Struct{
+		Fields: map[string]*_structpb.Value{
+			"foo": {
+				Kind: &_structpb.Value_StringValue{
+					StringValue: "bar",
+				},
+			},
+		},
+	}
+	if !proto.Equal(result, expectedDynamicMetadata) {
+		t.Fatalf("Expected result %v but got %v", expectedDynamicMetadata, result)
+	}
+}
+
+func TestGetDynamicMetadataWithBooleanDecision(t *testing.T) {
+	er := EvalResult{
+		Decision: true,
+	}
+
+	result, err := er.GetDynamicMetadata()
+	if err == nil {
+		t.Fatal("Expected error error but got none")
+	}
+
+	if result != nil {
+		t.Fatalf("Expected no result but got %v", result)
 	}
 }

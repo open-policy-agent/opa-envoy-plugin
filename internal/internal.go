@@ -7,7 +7,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	"github.com/open-policy-agent/opa/topdown"
 	"math"
 	"net"
 	"net/url"
@@ -41,11 +40,14 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/topdown"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/tracing"
 	"github.com/open-policy-agent/opa/util"
 
 	"go.opentelemetry.io/otel/trace"
+
+	_structpb "github.com/golang/protobuf/ptypes/struct"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	internal_util "github.com/open-policy-agent/opa-envoy-plugin/internal/util"
@@ -464,8 +466,16 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 			return nil, stop, &internalErr
 		}
 
-		if status == int32(code.Code_OK) {
+		var dynamicMetadata *_structpb.Struct
+		dynamicMetadata, err = result.GetDynamicMetadata()
+		if err != nil {
+			err = errors.Wrap(err, "failed to get dynamic metadata")
+			internalErr = internalError(EnvoyAuthResultErr, err)
+			return nil, stop, &internalErr
+		}
+		resp.DynamicMetadata = dynamicMetadata
 
+		if status == int32(code.Code_OK) {
 			var headersToRemove []string
 			headersToRemove, err = result.GetRequestHTTPHeadersToRemove()
 			if err != nil {
