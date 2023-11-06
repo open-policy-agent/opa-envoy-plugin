@@ -8,10 +8,12 @@ import (
 
 	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // EvalResult - Captures the result from evaluating a query against an input
@@ -278,6 +280,33 @@ func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 	}
 
 	return http.StatusForbidden, result.invalidDecisionErr()
+}
+
+// GetDynamicMetadata returns the dynamic metadata to return if part of the decision
+func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
+	var (
+		val interface{}
+		ok  bool
+	)
+	switch decision := result.Decision.(type) {
+	case bool:
+		if decision {
+			return nil, fmt.Errorf("dynamic metadata undefined for boolean decision")
+		}
+	case map[string]interface{}:
+		if val, ok = decision["dynamic_metadata"]; !ok {
+			return nil, nil
+		}
+
+		metadata, ok := val.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("type assertion error")
+		}
+
+		return structpb.NewStruct(metadata)
+	}
+
+	return nil, nil
 }
 
 // GetResponseEnvoyHTTPStatus returns the http status to return if they are part of the decision
