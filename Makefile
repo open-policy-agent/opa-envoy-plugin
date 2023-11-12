@@ -102,7 +102,7 @@ image-quick:
 
 image-quick-rootless:
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
-	docker build -t $(IMAGE):$(VERSION)-rootless --build-arg USER=1000 --build-arg BASE=cgr.dev/chainguard/glibc-dynamic -f .Dockerfile_$(GOARCH) .
+	docker build -t $(IMAGE):$(VERSION)-rootless --build-arg USER=1000:1000 --build-arg BASE=cgr.dev/chainguard/glibc-dynamic -f .Dockerfile_$(GOARCH) .
 	docker tag $(IMAGE):$(VERSION)-rootless $(IMAGE):$(VERSION_ISTIO)-rootless
 
 image-quick-static:
