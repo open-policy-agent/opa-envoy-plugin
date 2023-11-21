@@ -391,21 +391,21 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	stop := func() *rpc_status.Status {
 		stopeval()
-		if internalErr.Unwrap() != nil || internalErr.Code != "" {
+		if p.cfg.EnablePerformanceMetrics {
 			var topdownError *topdown.Error
-			if errors.As(internalErr.Unwrap(), &topdownError) {
+			if internalErr.Unwrap() != nil && errors.As(internalErr.Unwrap(), &topdownError) {
 				p.metricErrorCounter.With(prometheus.Labels{"reason": topdownError.Code}).Inc()
 			} else if internalErr.Code != "" {
 				p.metricErrorCounter.With(prometheus.Labels{"reason": internalErr.Code}).Inc()
-			} else {
-				p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_check_error"}).Inc()
 			}
 		}
 		logErr := p.log(ctx, input, result, err)
 		if logErr != nil {
 			_ = txnClose(ctx, logErr) // Ignore error
-			p.Logger().Debug("Error when logging event: %v", logErr)
-			p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_log_error"}).Inc()
+			p.Logger().WithFields(map[string]interface{}{"err": logErr}).Debug("Error when logging event")
+			if p.cfg.EnablePerformanceMetrics {
+				p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_log_error"}).Inc()
+			}
 			return &rpc_status.Status{
 				Code:    int32(code.Code_UNKNOWN),
 				Message: logErr.Error(),

@@ -530,6 +530,50 @@ func TestCheckContextTimeout(t *testing.T) {
 	assertErrorCounterMetric(t, server, CheckRequestTimeoutErr)
 }
 
+func TestCheckContextTimeoutMetricsDisabled(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	server := testAuthzServer(&Config{EnablePerformanceMetrics: false}, withCustomLogger(customLogger))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
+	defer cancel()
+
+	time.Sleep(time.Millisecond * 1)
+	_, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	expectedErrMsg := "check request timed out before query execution: context deadline exceeded"
+	if err.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, err.Error())
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+
+	if event.Error == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if event.Error.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
+	}
+
+	if len((*event.Input).(map[string]interface{})) == 0 {
+		t.Fatalf("Expected non empty input but got %v", *event.Input)
+	}
+}
+
 func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 	// Example Envoy Check Request for input:
 	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
