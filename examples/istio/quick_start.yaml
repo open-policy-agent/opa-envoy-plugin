@@ -1,43 +1,53 @@
 ############################################################
-# Envoy External Authorization filter that will query OPA.
+# Add the following to the mesh config to enable external authorization:
+# mesh: |-
+#   # ADD THIS HERE
+#   extensionProviders:
+#   - name: opa-ext-authz-grpc
+#     envoyExtAuthzGrpc:
+#       service: opa-ext-authz-grpc.local
+#       port: "9191"
+#   # END
+#   defaultConfig:
+#     discoveryAddress: istiod.istio-system.svc:15012
 ############################################################
-apiVersion: networking.istio.io/v1alpha3
-kind: EnvoyFilter
+############################################################
+# AuthorizationPolicy to tell Istio to use OPA as the Authz Server
+############################################################
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
 metadata:
   name: ext-authz
-  namespace: istio-system
 spec:
-  configPatches:
-    - applyTo: HTTP_FILTER
-      match:
-        context: SIDECAR_INBOUND
-        listener:
-          filterChain:
-            filter:
-              name: "envoy.filters.network.http_connection_manager"
-              subFilter:
-                name: "envoy.filters.http.router"
-      patch:
-        operation: INSERT_BEFORE
-        value:
-          name: envoy.ext_authz
-          typed_config:
-            '@type': type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-            transport_api_version: V3
-            status_on_error:
-              code: ServiceUnavailable
-            with_request_body:
-              max_request_bytes: 8192
-              allow_partial_message: true
-            grpc_service:
-              # NOTE(tsandall): when this was tested with the envoy_grpc client the gRPC
-              # server was receiving check requests over HTTP 1.1. The gRPC server in
-              # OPA-Istio would immediately close the connection and log that a bogus
-              # preamble was sent by the client (it expected HTTP 2). Switching to the
-              # google_grpc client resolved this issue.
-              google_grpc:
-                target_uri: 127.0.0.1:9191
-                stat_prefix: "ext_authz"
+  action: CUSTOM
+  provider:
+    # The provider name must match the extension provider defined in the mesh config.
+    # You can also replace this with sample-ext-authz-http to test the other external authorizer definition.
+    name: opa-ext-authz-grpc
+  rules:
+  - to:
+    - operation:
+        notPaths: ["/health"]
+---
+############################################################
+# ServiceEntry to register the OPA-Istio sidecars as external authorizers.
+############################################################
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: opa-ext-authz-grpc-local
+spec:
+  hosts:
+  - "opa-ext-authz-grpc.local"
+  exportTo:
+  - "."
+  endpoints:
+  - address: "127.0.0.1"
+  ports:
+  - name: grpc
+    number: 9191
+    protocol: GRPC
+  resolution: STATIC
 ---
 ############################################################
 # Namespace for cluster-wide OPA-Istio components.
@@ -390,7 +400,7 @@ data:
       console: true
 ---
 ############################################################
-# Example policy to enforce into OPA-Istio sidecars.
+# Example policy to enforce on OPA-Istio sidecars.
 ############################################################
 apiVersion: v1
 kind: ConfigMap

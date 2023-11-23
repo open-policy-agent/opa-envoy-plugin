@@ -1,0 +1,33 @@
+data:
+  mesh: |-
+    accessLogFile: /dev/stdout
+    defaultConfig:
+      discoveryAddress: istiod.istio-system.svc:15012
+      proxyMetadata: {}
+      tracing:
+        zipkin:
+          address: zipkin.istio-system:9411
+    defaultProviders:
+      metrics:
+      - prometheus
+    enablePrometheusMerge: true
+    extensionProviders:
+    - envoyOtelAls:
+        port: 4317
+        service: opentelemetry-collector.istio-system.svc.cluster.local
+      name: otel
+    - name: skywalking
+      skywalking:
+        port: 11800
+        service: tracing.istio-system.svc.cluster.local
+    - name: otel-tracing
+      opentelemetry:
+        port: 4317
+        service: opentelemetry-collector.otel-collector.svc.cluster.local
+    - name: opa-ext-authz-grpc
+      envoyExtAuthzGrpc:
+        service: opa-ext-authz-grpc.local
+        port: "9191"
+    rootNamespace: istio-system
+    trustDomain: cluster.local
+  meshNetworks: 'networks: {}'
