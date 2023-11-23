@@ -11,6 +11,11 @@ SLEEP_TIME=1
   assert_success
 }
 
+@test "register OPA sidecars as external authorizer in the mesh" {
+  run kubectl patch configmap istio -n istio-system --patch-file test/bats/istio-cm-patch.yaml
+  assert_success
+}
+
 @test "label default namespace for Istio Proxy and OPA-Envoy sidecar injection" {
   run kubectl label namespace default opa-istio-injection="enabled"
   assert_success
