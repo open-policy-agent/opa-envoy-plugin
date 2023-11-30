@@ -3,7 +3,7 @@
 # github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
 ## explicit; go 1.20
 github.com/AdaLogics/go-fuzz-headers
-# github.com/Microsoft/hcsshim v0.11.1
+# github.com/Microsoft/hcsshim v0.11.4
 ## explicit; go 1.18
 github.com/Microsoft/hcsshim/osversion
 # github.com/OneOfOne/xxhash v1.2.8
@@ -39,7 +39,7 @@ github.com/cespare/xxhash/v2
 github.com/cncf/xds/go/udpa/annotations
 github.com/cncf/xds/go/xds/annotations/v3
 github.com/cncf/xds/go/xds/core/v3
-# github.com/containerd/containerd v1.7.7
+# github.com/containerd/containerd v1.7.9
 ## explicit; go 1.19
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
@@ -148,11 +148,11 @@ github.com/golang/snappy
 # github.com/google/flatbuffers v1.12.1
 ## explicit
 github.com/google/flatbuffers/go
-# github.com/google/uuid v1.3.1
+# github.com/google/uuid v1.4.0
 ## explicit
 github.com/google/uuid
-# github.com/gorilla/mux v1.8.0
-## explicit; go 1.12
+# github.com/gorilla/mux v1.8.1
+## explicit; go 1.20
 github.com/gorilla/mux
 # github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
 ## explicit; go 1.17
@@ -183,7 +183,7 @@ github.com/moby/locker
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.58.0
+# github.com/open-policy-agent/opa v0.59.0
 ## explicit; go 1.19
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -193,7 +193,6 @@ github.com/open-policy-agent/opa/ast/location
 github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/capabilities
 github.com/open-policy-agent/opa/cmd
-github.com/open-policy-agent/opa/cmd/internal/deprecation
 github.com/open-policy-agent/opa/cmd/internal/exec
 github.com/open-policy-agent/opa/compile
 github.com/open-policy-agent/opa/config
@@ -356,7 +355,7 @@ github.com/rivo/uniseg
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# github.com/spf13/cobra v1.7.0
+# github.com/spf13/cobra v1.8.0
 ## explicit; go 1.15
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
@@ -406,11 +405,11 @@ go.opentelemetry.io/otel/semconv/v1.17.0
 go.opentelemetry.io/otel/semconv/v1.17.0/httpconv
 go.opentelemetry.io/otel/semconv/v1.21.0
 go.opentelemetry.io/otel/semconv/v1.7.0
-# go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.19.0
+# go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.21.0
 ## explicit; go 1.20
 go.opentelemetry.io/otel/exporters/otlp/otlptrace
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/tracetransform
-# go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.19.0
+# go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.21.0
 ## explicit; go 1.20
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/internal
@@ -480,8 +479,8 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/time v0.3.0
-## explicit
+# golang.org/x/time v0.5.0
+## explicit; go 1.18
 golang.org/x/time/rate
 # golang.org/x/tools v0.16.0
 ## explicit; go 1.18
