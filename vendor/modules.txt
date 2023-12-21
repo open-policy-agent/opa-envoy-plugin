@@ -148,7 +148,7 @@ github.com/golang/snappy
 # github.com/google/flatbuffers v1.12.1
 ## explicit
 github.com/google/flatbuffers/go
-# github.com/google/uuid v1.4.0
+# github.com/google/uuid v1.5.0
 ## explicit
 github.com/google/uuid
 # github.com/gorilla/mux v1.8.1
@@ -183,7 +183,7 @@ github.com/moby/locker
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.59.0
+# github.com/open-policy-agent/opa v0.60.0
 ## explicit; go 1.19
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -352,6 +352,9 @@ github.com/rcrowley/go-metrics
 # github.com/rivo/uniseg v0.2.0
 ## explicit; go 1.12
 github.com/rivo/uniseg
+# github.com/sergi/go-diff v1.3.1
+## explicit; go 1.12
+github.com/sergi/go-diff/diffmatchpatch
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
