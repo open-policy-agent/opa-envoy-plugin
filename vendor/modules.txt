@@ -81,7 +81,7 @@ github.com/dgraph-io/ristretto/z/simd
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
-# github.com/envoyproxy/go-control-plane v0.11.1
+# github.com/envoyproxy/go-control-plane v0.12.0
 ## explicit; go 1.17
 github.com/envoyproxy/go-control-plane/envoy/annotations
 github.com/envoyproxy/go-control-plane/envoy/api/v2/core

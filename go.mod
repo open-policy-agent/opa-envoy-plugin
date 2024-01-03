@@ -3,7 +3,7 @@ module github.com/open-policy-agent/opa-envoy-plugin
 go 1.19
 
 require (
-	github.com/envoyproxy/go-control-plane v0.11.1
+	github.com/envoyproxy/go-control-plane v0.12.0
 	github.com/golang/protobuf v1.5.3
 	github.com/open-policy-agent/opa v0.60.0
 	github.com/pkg/errors v0.9.1
