@@ -557,6 +557,19 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		}
 	}
 
+	// Add decision_id to dynamic metadata
+	if resp.DynamicMetadata == nil {
+		resp.DynamicMetadata = &_structpb.Struct{
+			Fields: map[string]*_structpb.Value{},
+		}
+	}
+
+	resp.DynamicMetadata.Fields["decision_id"] = &_structpb.Value{
+		Kind: &_structpb.Value_StringValue{
+			StringValue: result.DecisionID,
+		},
+	}
+
 	return resp, stop, nil
 }
 

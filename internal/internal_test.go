@@ -317,6 +317,28 @@ func TestCheckDeny(t *testing.T) {
 	}
 }
 
+func TestCheckDenyDynamicMetadataDecisionID(t *testing.T) {
+	// Example Envoy Check Request for input:
+	// curl --user  alice:password  -o /dev/null -s -w "%{http_code}\n" http://${GATEWAY_URL}/api/v1/products
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleDeniedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
+		t.Fatal("Expected request to be denied but got:", output)
+	}
+
+	assertDynamicMetadataDecisionID(t, output.GetDynamicMetadata())
+}
+
 func TestCheckDenyParsedBody(t *testing.T) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleDeniedRequestParsedBody), &req); err != nil {
@@ -1361,6 +1383,42 @@ func TestCheckAllowObjectDecisionDynamicMetadata(t *testing.T) {
 	}, output.GetDynamicMetadata())
 }
 
+func TestCheckAllowObjectDecisionDynamicMetadataDecisionID(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+	
+		default allow = false
+
+		allow {
+			input.parsed_path = ["my", "test", "path"]
+		}
+
+		dynamic_metadata["foo"] = "bar"
+		dynamic_metadata["bar"] = "baz"
+
+		result["allowed"] = allow
+		result["dynamic_metadata"] = dynamic_metadata
+	`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	assertDynamicMetadataDecisionID(t, output.GetDynamicMetadata())
+}
+
 func TestCheckAllowBooleanDecisionDynamicMetadata(t *testing.T) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
@@ -1388,9 +1446,37 @@ func TestCheckAllowBooleanDecisionDynamicMetadata(t *testing.T) {
 		t.Fatalf("Expected request to be allowed but got: %v", output)
 	}
 
-	if output.GetDynamicMetadata() != nil {
-		t.Fatal("Expected nil dynamic metadata when using boolean decision")
+	assertDynamicMetadata(t, &_structpb.Struct{}, output.GetDynamicMetadata())
+}
+
+func TestCheckAllowBooleanDecisionDynamicMetadataDecisionID(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
+		panic(err)
 	}
+
+	module := `
+		package envoy.authz
+	
+		default allow = false
+
+		allow {
+			input.parsed_path = ["my", "test", "path"]
+		}
+	`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	assertDynamicMetadataDecisionID(t, output.GetDynamicMetadata())
 }
 
 func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
@@ -2172,8 +2258,33 @@ func assertErrorCounterMetric(t *testing.T, server *envoyExtAuthzGrpcServer, lab
 
 func assertDynamicMetadata(t *testing.T, expectedMetadata, actualMetadata *_structpb.Struct) {
 	t.Helper()
+
+	// Remove decision_id from actual metadata since it is randomly generated.
+	delete(actualMetadata.Fields, "decision_id")
+
 	if !proto.Equal(expectedMetadata, actualMetadata) {
 		t.Fatalf("Expected metadata %v but got %v", expectedMetadata, actualMetadata)
+	}
+}
+
+func assertDynamicMetadataDecisionID(t *testing.T, dynamicMetadata *_structpb.Struct) {
+	t.Helper()
+
+	if dynamicMetadata == nil {
+		t.Fatal("Expected dynamic metadata but got nil")
+	}
+
+	if dynamicMetadata.Fields == nil {
+		t.Fatal("Expected dynamic metadata fields but got nil")
+	}
+
+	key, ok := dynamicMetadata.Fields["decision_id"]
+	if !ok {
+		t.Fatal("Expected decision_id but got nil")
+	}
+
+	if len(key.GetStringValue()) != 36 { // 32 + 4 dashes
+		t.Fatalf("Expected decision_id to be 36 characters but got %v", len(key.GetStringValue()))
 	}
 }
 
