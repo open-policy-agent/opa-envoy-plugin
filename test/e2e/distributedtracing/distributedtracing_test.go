@@ -22,6 +22,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 var spanExporter *tracetest.InMemoryExporter
@@ -41,6 +42,17 @@ const exampleRequest = `{
 			"authorization": "Basic Ym9iOnBhc3N3b3Jk",
 			"content-length": "0",
 			"user-agent": "curl/7.54.0",
+			"x-b3-sampled": "1",
+			"x-b3-spanid": "3f6a0b6d9d5f4b45",
+			"x-b3-traceid": "8a3c416a54a04ae6830de2f4f6dd4aef",
+			"x-b3-parentspanid": "2a2b3c4d5e6f7a8b",
+			"X-B3-TraceID": "8a3c416a54a04ae6830de2f4f6dd4aef",
+			"X-B3-SpanID": "3f6a0b6d9d5f4b45",
+			"X-B3-ParentSpanID": "2a2b3c4d5e6f7a8b",
+			"X-B3-Sampled": "1",
+			"X-B3-Flags": "1",
+			"X-B3-Baggage-User": "alice",
+			"X-B3-Baggage-Transaction": "12345"
 		  },
 		  "path": "/api/v1/products",
 		  "host": "192.168.99.100:31380",
@@ -115,7 +127,14 @@ func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 			t.Fatalf("did not connect: %v", err)
 		}
 		client := ext_authz.NewAuthorizationClient(conn)
-		resp, err := client.Check(context.Background(), &req)
+		ctx := context.Background()
+
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-parentspanid", "2a2b3c4d5e6f7a8b")
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-traceid", "8a3c416a54a04ae6830de2f4f6dd4aef")
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-spanid", "3f6a0b6d9d5f4b45")
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-sampled", "1")
+
+		resp, err := client.Check(ctx, &req)
 		if err != nil {
 			t.Fatalf("error when send request %v", err)
 		}

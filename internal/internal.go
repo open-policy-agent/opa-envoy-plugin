@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpc_status "google.golang.org/genproto/googleapis/rpc/status"
@@ -134,11 +135,11 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	if m.TracerProvider() != nil {
 		grpcTracingOption := []otelgrpc.Option{
 			otelgrpc.WithTracerProvider(m.TracerProvider()),
-			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})),
+			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader)))),
 		}
 		distributedTracingOpts = tracing.NewOptions(
 			otelhttp.WithTracerProvider(m.TracerProvider()),
-			otelhttp.WithPropagators(propagation.TraceContext{}),
+			otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader)))),
 		)
 		grpcOpts = append(grpcOpts,
 			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(grpcTracingOption...)),
@@ -476,6 +477,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		resp.DynamicMetadata = dynamicMetadata
 
 		if status == int32(code.Code_OK) {
+
 			var headersToRemove []string
 			headersToRemove, err = result.GetRequestHTTPHeadersToRemove()
 			if err != nil {
