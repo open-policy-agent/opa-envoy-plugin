@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package semconv implements OpenTelemetry semantic conventions.
-//
-// OpenTelemetry semantic conventions are agreed standardized naming
-// patterns for OpenTelemetry things. This package represents the v1.21.0
-// version of the OpenTelemetry semantic conventions.
-package semconv // import "go.opentelemetry.io/otel/semconv/v1.21.0"
+// Package b3 implements the B3 propagator specification as defined at
+// https://github.com/openzipkin/b3-propagation
+package b3 // import "go.opentelemetry.io/contrib/propagators/b3"

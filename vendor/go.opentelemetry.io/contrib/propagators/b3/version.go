@@ -12,9 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package semconv implements OpenTelemetry semantic conventions.
+package b3 // import "go.opentelemetry.io/contrib/propagators/b3"
+
+// Version is the current release version of the B3 propagator.
+func Version() string {
+	return "1.22.0"
+	// This string is updated by the pre_release.sh script during release
+}
+
+// SemVersion is the semantic version to be supplied to tracer/meter creation.
 //
-// OpenTelemetry semantic conventions are agreed standardized naming
-// patterns for OpenTelemetry things. This package represents the v1.21.0
-// version of the OpenTelemetry semantic conventions.
-package semconv // import "go.opentelemetry.io/otel/semconv/v1.21.0"
+// Deprecated: Use [Version] instead.
+func SemVersion() string {
+	return Version()
+}
