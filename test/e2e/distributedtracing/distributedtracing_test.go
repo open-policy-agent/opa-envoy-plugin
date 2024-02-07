@@ -22,11 +22,13 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 var spanExporter *tracetest.InMemoryExporter
 var consoleLogger *test.Logger
 
+const exampleTraceID = "8a3c416a54a04ae6830de2f4f6dd4aef"
 const exampleRequest = `{
 	"attributes": {
 	  "request": {
@@ -115,7 +117,18 @@ func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 			t.Fatalf("did not connect: %v", err)
 		}
 		client := ext_authz.NewAuthorizationClient(conn)
-		resp, err := client.Check(context.Background(), &req)
+		ctx := context.Background()
+
+		// mimicking how a grpc client would append the headers to the outgoing context
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-parentspanid", "2a2b3c4d5e6f7a8b")
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-traceid", exampleTraceID)
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-spanid", "3f6a0b6d9d5f4b45")
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-sampled", "1")
+		ctx = metadata.AppendToOutgoingContext(ctx, "X-B3-Flags", "1")
+		ctx = metadata.AppendToOutgoingContext(ctx, "X-B3-Baggage-User", "alice")
+		ctx = metadata.AppendToOutgoingContext(ctx, "X-B3-Baggage-Transaction", "12345")
+
+		resp, err := client.Check(ctx, &req)
 		if err != nil {
 			t.Fatalf("error when send request %v", err)
 		}
@@ -168,10 +181,14 @@ func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
 		}{
 			"labels":      {},
 			"decision_id": {},
-			"trace_id":    {},
-			"span_id":     {},
-			"result":      {},
-			"timestamp":   {},
+			"trace_id": {match: func(t *testing.T, actual string) {
+				if actual != exampleTraceID {
+					t.Fatalf("Expected field 'trace_id' to be " + exampleTraceID)
+				}
+			}},
+			"span_id":   {},
+			"result":    {},
+			"timestamp": {},
 			"type": {match: func(t *testing.T, actual string) {
 				if actual != "openpolicyagent.org/decision_logs" {
 					t.Fatalf("Expected field 'type' to be 'openpolicyagent.org/decision_logs'")
