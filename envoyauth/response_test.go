@@ -396,3 +396,23 @@ func TestGetDynamicMetadataWithBooleanDecision(t *testing.T) {
 		t.Fatalf("Expected no result but got %v", result)
 	}
 }
+
+func TestNewEvalResultWithDecisionID(t *testing.T) {
+	type Opt func(*EvalResult)
+
+	withDecisionID := func(decisionID string) Opt {
+		return func(result *EvalResult) {
+			result.DecisionID = decisionID
+		}
+	}
+
+	expectedDecisionID := "some-decision-id"
+
+	er, _, err := NewEvalResult(withDecisionID(expectedDecisionID))
+	if err != nil {
+		t.Fatalf("NewEvalResult() error = %v, wantErr %v", err, false)
+	}
+	if er.DecisionID != expectedDecisionID {
+		t.Errorf("Expected DecisionID to be '%v', got '%v'", expectedDecisionID, er.DecisionID)
+	}
+}
