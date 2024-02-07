@@ -35,13 +35,20 @@ type StopFunc = func()
 type TransactionCloser func(ctx context.Context, err error) error
 
 // NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics
-func NewEvalResult() (*EvalResult, StopFunc, error) {
+func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	var err error
 
-	er := EvalResult{
+	er := &EvalResult{
 		Metrics: metrics.New(),
 	}
-	er.DecisionID, err = util.UUID4()
+
+	for _, opt := range opts {
+		opt(er)
+	}
+
+	if er.DecisionID == "" {
+		er.DecisionID, err = util.UUID4()
+	}
 
 	if err != nil {
 		return nil, nil, err
@@ -53,7 +60,7 @@ func NewEvalResult() (*EvalResult, StopFunc, error) {
 		_ = er.Metrics.Timer(metrics.ServerHandler).Stop()
 	}
 
-	return &er, stop, nil
+	return er, stop, nil
 }
 
 // GetTxn creates a read transaction suitable for the configured EvalResult object
