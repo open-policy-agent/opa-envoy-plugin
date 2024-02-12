@@ -78,12 +78,12 @@ func TestMain(m *testing.M) {
 
 	count := 0
 	countMutex := sync.Mutex{}
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		countMutex.Lock()
 		count = count + 1
 		countMutex.Unlock()
-		fmt.Fprintf(w, `{"count": %d}`, count)
+		fmt.Fprintf(w, `{"count": %d, "b3multiheader": "%s", "b3singleheader": "%s"}`, count, req.Header.Get("X-B3-Traceid"), req.Header.Get("B3"))
 	}))
 	defer ts.Close()
 	moduleFmt := `
@@ -92,8 +92,10 @@ func TestMain(m *testing.M) {
 	allow {
 		resp := http.send({"url": "%s", "method":"GET"})
 		resp.body.count == 1
+		resp.body.b3multiheader == "%s"
+		contains(resp.body.b3singleheader, "%s")
 	}`
-	module := fmt.Sprintf(moduleFmt, ts.URL)
+	module := fmt.Sprintf(moduleFmt, ts.URL, exampleTraceID, exampleTraceID)
 	pluginsManager, err := e2e.TestAuthzServerWithWithOpts(module, "envoy/authz/allow", ":9191", plugins.WithTracerProvider(tracerProvider), plugins.ConsoleLogger(consoleLogger))
 	if err != nil {
 		log.Fatal(err)
@@ -104,7 +106,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestServerSpanAndTraceIdInDecisionLog(t *testing.T) {
+func TestServerSpanAndTraceIdInDecisionLogAndB3TraceHeadersPropagation(t *testing.T) {
 	spanExporter.Reset()
 
 	t.Run("envoy.service.auth.v3.Authorization Check", func(t *testing.T) {

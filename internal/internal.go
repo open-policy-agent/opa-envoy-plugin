@@ -135,11 +135,11 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	if m.TracerProvider() != nil {
 		grpcTracingOption := []otelgrpc.Option{
 			otelgrpc.WithTracerProvider(m.TracerProvider()),
-			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader)))),
+			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)))),
 		}
 		distributedTracingOpts = tracing.NewOptions(
 			otelhttp.WithTracerProvider(m.TracerProvider()),
-			otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader)))),
+			otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)))),
 		)
 		grpcOpts = append(grpcOpts,
 			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(grpcTracingOption...)),
