@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/envoyproxy/go-control-plane v0.12.0
-	github.com/golang/protobuf v1.5.3
+	github.com/golang/protobuf v1.5.4
 	github.com/open-policy-agent/opa v0.62.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.0
