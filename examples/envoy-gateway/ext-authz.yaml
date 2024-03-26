@@ -1,0 +1,14 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: httpbin-opa-authz
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: httpbin
+  extAuth:
+    grpc:
+      backendRef:
+        name: opa
+        port: 9191
