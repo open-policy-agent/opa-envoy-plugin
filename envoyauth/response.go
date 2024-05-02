@@ -105,7 +105,7 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 		}
 
 		if allowed, ok = val.(bool); !ok {
-			return false, fmt.Errorf("type assertion error")
+			return false, fmt.Errorf("type assertion error, expected allowed to be of type 'boolean' but got '%T'", val)
 		}
 
 		return allowed, nil
@@ -137,14 +137,14 @@ func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
 			for _, vval := range val {
 				header, ok := vval.(string)
 				if !ok {
-					return nil, fmt.Errorf("type assertion error")
+					return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove value to be of type 'string' but got '%T'", vval)
 				}
 
 				headersToRemove = append(headersToRemove, header)
 			}
 			return headersToRemove, nil
 		default:
-			return nil, fmt.Errorf("type assertion error")
+			return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove to be of type '[]string' but got '%T'", val)
 		}
 	}
 
@@ -244,7 +244,7 @@ func (result *EvalResult) GetResponseBody() (string, error) {
 	}
 
 	if body, ok = val.(string); !ok {
-		return "", fmt.Errorf("type assertion error")
+		return "", fmt.Errorf("type assertion error, expected body to be of type 'string' but got '%T'", val)
 	}
 
 	return body, nil
@@ -271,7 +271,7 @@ func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 		}
 
 		if statusCode, ok = val.(json.Number); !ok {
-			return status, fmt.Errorf("type assertion error")
+			return status, fmt.Errorf("type assertion error, expected http_status to be of type 'number' but got '%T'", val)
 		}
 
 		httpStatusCode, err := statusCode.Int64()
@@ -307,7 +307,7 @@ func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
 
 		metadata, ok := val.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("type assertion error")
+			return nil, fmt.Errorf("type assertion error, expected dynamic_metadata to be of type 'object' but got '%T'", val)
 		}
 
 		return structpb.NewStruct(metadata)
@@ -369,7 +369,7 @@ func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
 		for _, val := range input {
 			headers, ok := val.(map[string]interface{})
 			if !ok {
-				return fmt.Errorf("type assertion error")
+				return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
 			}
 
 			err := takeResponseHeaders(headers, result)
@@ -385,7 +385,7 @@ func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
 		}
 
 	default:
-		return fmt.Errorf("type assertion error")
+		return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
 	}
 
 	return nil
