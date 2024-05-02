@@ -3,6 +3,7 @@ package envoyauth
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	_structpb "github.com/golang/protobuf/ptypes/struct"
@@ -26,6 +27,10 @@ func TestIsAllowed(t *testing.T) {
 	_, err = er.IsAllowed()
 	if err == nil {
 		t.Fatal("Expected error but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "but got 'int'") {
+		t.Fatal("Assertion error type reflection failed")
 	}
 
 	input["allowed"] = true
@@ -107,6 +112,21 @@ func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("type_assertion_error", func(t *testing.T) {
+		er := EvalResult{
+			Decision: map[string]interface{}{"request_headers_to_remove": 1},
+		}
+
+		_, err := er.GetRequestHTTPHeadersToRemove()
+		if err == nil {
+			t.Fatal("Expected error but got nil")
+		}
+
+		if !strings.Contains(err.Error(), "but got 'int'") {
+			t.Fatalf("Assertion error type reflection failed")
+		}
+	})
 }
 
 func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
@@ -295,9 +315,13 @@ func TestGetResponseBody(t *testing.T) {
 	}
 
 	input["body"] = 123
-	result, err = er.GetResponseBody()
+	_, err = er.GetResponseBody()
 	if err == nil {
 		t.Fatal("Expected error but got nil", err)
+	}
+
+	if !strings.Contains(err.Error(), "but got 'int'") {
+		t.Fatalf("Assertion error type reflection failed")
 	}
 }
 
@@ -317,19 +341,23 @@ func TestGetResponseHttpStatus(t *testing.T) {
 	}
 
 	input["http_status"] = true
-	result, err = er.GetResponseEnvoyHTTPStatus()
+	_, err = er.GetResponseEnvoyHTTPStatus()
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
 
+	if !strings.Contains(err.Error(), "but got 'bool'") {
+		t.Fatalf("Assertion error type reflection failed")
+	}
+
 	input["http_status"] = json.Number("1")
-	result, err = er.GetResponseEnvoyHTTPStatus()
+	_, err = er.GetResponseEnvoyHTTPStatus()
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
 
 	input["http_status"] = json.Number("9999")
-	result, err = er.GetResponseEnvoyHTTPStatus()
+	_, err = er.GetResponseEnvoyHTTPStatus()
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
@@ -379,6 +407,16 @@ func TestGetDynamicMetadata(t *testing.T) {
 	}
 	if !proto.Equal(result, expectedDynamicMetadata) {
 		t.Fatalf("Expected result %v but got %v", expectedDynamicMetadata, result)
+	}
+
+	input["dynamic_metadata"] = 123
+	_, err = er.GetDynamicMetadata()
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "but got 'int'") {
+		t.Fatalf("Assertion error type reflection failed")
 	}
 }
 
