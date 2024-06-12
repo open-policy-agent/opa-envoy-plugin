@@ -1242,6 +1242,23 @@ func TestConfigValidWithGRPCMaxMessageSizes(t *testing.T) {
 	}
 }
 
+func TestConfigValidWithGRPCRequestDurationSecondsBuckets(t *testing.T) {
+	m, err := plugins.New([]byte{}, "test", inmem.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in := `{"grpc-request-duration-seconds-buckets": [1e-5, 0.2, 1, 5]}`
+	config, err := Validate(m, []byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(config.GRPCRequestDurationSecondsBuckets, []float64{1e-5, 0.2, 1, 5}) {
+		t.Fatalf("Expected grpc_request_duration_seconds buckets to be [1e-5 0.2 1 5] but got %v", config.GRPCRequestDurationSecondsBuckets)
+	}
+}
+
 func TestConfigValidDefault(t *testing.T) {
 	m, err := plugins.New([]byte{}, "test", inmem.New())
 	if err != nil {
@@ -1288,6 +1305,10 @@ func TestConfigValidDefault(t *testing.T) {
 
 	if config.EnablePerformanceMetrics != defaultEnablePerformanceMetrics {
 		t.Fatalf("Expected enabled-prometheus-metrics to be disabled by default")
+	}
+
+	if !reflect.DeepEqual(config.GRPCRequestDurationSecondsBuckets, defaultGRPCRequestDurationSecondsBuckets) {
+		t.Fatalf("Exptected grpc_request_duration_seconds buckets %v but got %v", defaultGRPCRequestDurationSecondsBuckets, config.GRPCRequestDurationSecondsBuckets)
 	}
 }
 

@@ -72,18 +72,33 @@ const (
 	PluginName = "envoy_ext_authz_grpc"
 )
 
+var defaultGRPCRequestDurationSecondsBuckets = []float64{
+	1e-6,
+	5e-6,
+	1e-5,
+	5e-5,
+	1e-4,
+	5e-4,
+	1e-3,
+	3e-3,
+	5e-3,
+	0.1,
+	1,
+}
+
 // Validate receives a slice of bytes representing the plugin's
 // configuration and returns a configuration value that can be used to
 // instantiate the plugin.
 func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 	cfg := Config{
-		Addr:                     defaultAddr,
-		DryRun:                   defaultDryRun,
-		EnableReflection:         defaultEnableReflection,
-		GRPCMaxRecvMsgSize:       defaultGRPCServerMaxReceiveMessageSize,
-		GRPCMaxSendMsgSize:       defaultGRPCServerMaxSendMessageSize,
-		SkipRequestBodyParse:     defaultSkipRequestBodyParse,
-		EnablePerformanceMetrics: defaultEnablePerformanceMetrics,
+		Addr:                              defaultAddr,
+		DryRun:                            defaultDryRun,
+		EnableReflection:                  defaultEnableReflection,
+		GRPCMaxRecvMsgSize:                defaultGRPCServerMaxReceiveMessageSize,
+		GRPCMaxSendMsgSize:                defaultGRPCServerMaxSendMessageSize,
+		SkipRequestBodyParse:              defaultSkipRequestBodyParse,
+		EnablePerformanceMetrics:          defaultEnablePerformanceMetrics,
+		GRPCRequestDurationSecondsBuckets: defaultGRPCRequestDurationSecondsBuckets,
 	}
 
 	if err := util.Unmarshal(bs, &cfg); err != nil {
@@ -168,21 +183,9 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	}
 	if cfg.EnablePerformanceMetrics {
 		histogramAuthzDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "grpc_request_duration_seconds",
-			Help: "A histogram of duration for grpc authz requests.",
-			Buckets: []float64{
-				1e-6,
-				5e-6,
-				1e-5,
-				5e-5,
-				1e-4,
-				5e-4,
-				1e-3,
-				3e-3,
-				5e-3,
-				0.1,
-				1,
-			},
+			Name:    "grpc_request_duration_seconds",
+			Help:    "A histogram of duration for grpc authz requests.",
+			Buckets: cfg.GRPCRequestDurationSecondsBuckets,
 		}, []string{"handler"})
 		plugin.metricAuthzDuration = *histogramAuthzDuration
 		errorCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -201,18 +204,19 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 
 // Config represents the plugin configuration.
 type Config struct {
-	Addr                     string `json:"addr"`
-	Query                    string `json:"query"` // Deprecated: Use Path instead
-	Path                     string `json:"path"`
-	DryRun                   bool   `json:"dry-run"`
-	EnableReflection         bool   `json:"enable-reflection"`
-	parsedQuery              ast.Body
-	ProtoDescriptor          string `json:"proto-descriptor"`
-	protoSet                 *protoregistry.Files
-	GRPCMaxRecvMsgSize       int  `json:"grpc-max-recv-msg-size"`
-	GRPCMaxSendMsgSize       int  `json:"grpc-max-send-msg-size"`
-	SkipRequestBodyParse     bool `json:"skip-request-body-parse"`
-	EnablePerformanceMetrics bool `json:"enable-performance-metrics"`
+	Addr                              string `json:"addr"`
+	Query                             string `json:"query"` // Deprecated: Use Path instead
+	Path                              string `json:"path"`
+	DryRun                            bool   `json:"dry-run"`
+	EnableReflection                  bool   `json:"enable-reflection"`
+	parsedQuery                       ast.Body
+	ProtoDescriptor                   string `json:"proto-descriptor"`
+	protoSet                          *protoregistry.Files
+	GRPCMaxRecvMsgSize                int       `json:"grpc-max-recv-msg-size"`
+	GRPCMaxSendMsgSize                int       `json:"grpc-max-send-msg-size"`
+	SkipRequestBodyParse              bool      `json:"skip-request-body-parse"`
+	EnablePerformanceMetrics          bool      `json:"enable-performance-metrics"`
+	GRPCRequestDurationSecondsBuckets []float64 `json:"grpc-request-duration-seconds-buckets"`
 }
 
 type envoyExtAuthzGrpcServer struct {
