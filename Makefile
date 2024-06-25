@@ -93,12 +93,12 @@ image-static:
 
 image-quick:
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
-	docker build -t $(IMAGE):$(VERSION) --build-arg BASE=cgr.dev/chainguard/glibc-dynamic -f .Dockerfile_$(GOARCH) .
+	docker build -t $(IMAGE):$(VERSION) --build-arg BASE=chainguard/glibc-dynamic -f .Dockerfile_$(GOARCH) .
 	docker tag $(IMAGE):$(VERSION) $(IMAGE):$(VERSION_ISTIO)
 
 image-quick-static:
 	sed -e 's/GOARCH/$(GOARCH)/g' Dockerfile > .Dockerfile_$(GOARCH)
-	docker build -t $(IMAGE):$(VERSION)-static --build-arg BASE=cgr.dev/chainguard/static:latest -f .Dockerfile_$(GOARCH) .
+	docker build -t $(IMAGE):$(VERSION)-static --build-arg BASE=chainguard/static:latest -f .Dockerfile_$(GOARCH) .
 	docker tag $(IMAGE):$(VERSION)-static $(IMAGE):$(VERSION_ISTIO)-static
 
 push:
