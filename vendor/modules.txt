@@ -37,7 +37,7 @@ github.com/cespare/xxhash/v2
 github.com/cncf/xds/go/udpa/annotations
 github.com/cncf/xds/go/xds/annotations/v3
 github.com/cncf/xds/go/xds/core/v3
-# github.com/containerd/containerd v1.7.17
+# github.com/containerd/containerd v1.7.18
 ## explicit; go 1.21
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
@@ -46,7 +46,6 @@ github.com/containerd/containerd/errdefs
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/images
 github.com/containerd/containerd/labels
-github.com/containerd/containerd/log
 github.com/containerd/containerd/pkg/randutil
 github.com/containerd/containerd/platforms
 github.com/containerd/containerd/reference
@@ -58,6 +57,9 @@ github.com/containerd/containerd/remotes/docker/schema1
 github.com/containerd/containerd/remotes/errors
 github.com/containerd/containerd/tracing
 github.com/containerd/containerd/version
+# github.com/containerd/errdefs v0.1.0
+## explicit; go 1.20
+github.com/containerd/errdefs
 # github.com/containerd/log v0.1.0
 ## explicit; go 1.20
 github.com/containerd/log
@@ -195,7 +197,7 @@ github.com/moby/locker
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
 github.com/olekukonko/tablewriter
-# github.com/open-policy-agent/opa v0.65.0
+# github.com/open-policy-agent/opa v0.66.0
 ## explicit; go 1.21
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -397,7 +399,7 @@ github.com/spf13/afero/mem
 # github.com/spf13/cast v1.6.0
 ## explicit; go 1.19
 github.com/spf13/cast
-# github.com/spf13/cobra v1.8.0
+# github.com/spf13/cobra v1.8.1
 ## explicit; go 1.15
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5

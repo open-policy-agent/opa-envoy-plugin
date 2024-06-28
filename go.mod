@@ -7,7 +7,7 @@ toolchain go1.21.0
 require (
 	github.com/envoyproxy/go-control-plane v0.12.0
 	github.com/golang/protobuf v1.5.4
-	github.com/open-policy-agent/opa v0.65.0
+	github.com/open-policy-agent/opa v0.66.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.46.1
@@ -23,6 +23,7 @@ require (
 )
 
 require (
+	github.com/containerd/errdefs v0.1.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -52,7 +53,7 @@ require (
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20240318125728-8a4994d93e50 // indirect
-	github.com/containerd/containerd v1.7.17 // indirect
+	github.com/containerd/containerd v1.7.18 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.5 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
@@ -87,7 +88,7 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/spf13/cobra v1.8.0 // indirect
+	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect

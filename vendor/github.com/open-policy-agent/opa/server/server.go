@@ -6,7 +6,6 @@ package server
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -647,7 +646,7 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL, h http.Handler, t httpLis
 		// GetConfigForClient is used to ensure that a fresh config is provided containing the latest cert pool.
 		// This is not required, but appears to be how connect time updates config should be done:
 		// https://github.com/golang/go/issues/16066#issuecomment-250606132
-		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+		GetConfigForClient: func(_ *tls.ClientHelloInfo) (*tls.Config, error) {
 			s.tlsConfigMtx.Lock()
 			defer s.tlsConfigMtx.Unlock()
 
@@ -1337,7 +1336,7 @@ func (s *Server) v1CompilePost(w http.ResponseWriter, r *http.Request) {
 	m.Timer(metrics.RegoQueryParse).Start()
 
 	// decompress the input if sent as zip
-	body, err := readPlainBody(r)
+	body, err := util.ReadMaybeCompressedBody(r)
 	if err != nil {
 		writer.Error(w, http.StatusBadRequest, types.NewErrorV1(types.CodeInvalidParameter, "could not decompress the body"))
 		return
@@ -2503,7 +2502,7 @@ func (s *Server) getCompiler() *ast.Compiler {
 	return s.manager.GetCompiler()
 }
 
-func (s *Server) makeRego(ctx context.Context,
+func (s *Server) makeRego(_ context.Context,
 	strictBuiltinErrors bool,
 	txn storage.Transaction,
 	input ast.Value,
@@ -2732,7 +2731,7 @@ func readInputV0(r *http.Request) (ast.Value, *interface{}, error) {
 	}
 
 	// decompress the input if sent as zip
-	body, err := readPlainBody(r)
+	body, err := util.ReadMaybeCompressedBody(r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not decompress the body: %w", err)
 	}
@@ -2785,7 +2784,7 @@ func readInputPostV1(r *http.Request) (ast.Value, *interface{}, error) {
 	var request types.DataRequestV1
 
 	// decompress the input if sent as zip
-	body, err := readPlainBody(r)
+	body, err := util.ReadMaybeCompressedBody(r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not decompress the body: %w", err)
 	}
@@ -3021,22 +3020,6 @@ func annotateSpan(ctx context.Context, decisionID string) {
 	}
 	trace.SpanFromContext(ctx).
 		SetAttributes(attribute.String(otelDecisionIDAttr, decisionID))
-}
-
-func readPlainBody(r *http.Request) (io.ReadCloser, error) {
-	if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-		gzReader, err := gzip.NewReader(r.Body)
-		if err != nil {
-			return nil, err
-		}
-		bytesBody, err := io.ReadAll(gzReader)
-		if err != nil {
-			return nil, err
-		}
-		defer gzReader.Close()
-		return io.NopCloser(bytes.NewReader(bytesBody)), err
-	}
-	return r.Body, nil
 }
 
 func pretty(r *http.Request) bool {
