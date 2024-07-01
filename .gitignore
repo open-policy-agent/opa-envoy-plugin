@@ -10,6 +10,7 @@ opa_*
 _release
 site.tar.gz
 *.bak
+.go/
 
 # runtime artifacts
 policies
