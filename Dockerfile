@@ -6,18 +6,19 @@ ARG BASE
 
 FROM ${BASE}
 
+LABEL org.opencontainers.image.authors="Ashutosh Narkar <anrkar4387@gmail.com>"
+
 # Any non-zero number will do, and unfortunately a named user will not, as k8s
 # pod securityContext runAsNonRoot can't resolve the user ID:
 # https://github.com/kubernetes/kubernetes/issues/40958.
 ARG USER=1000:1000
 USER ${USER}
 
-MAINTAINER Ashutosh Narkar  <anarkar4387@gmail.com>
+ARG TARGETOS
+ARG TARGETARCH
 
-WORKDIR /app
+COPY opa_envoy_${TARGETOS}_${TARGETARCH} /opa
 
-COPY opa_envoy_linux_GOARCH /app
-
-ENTRYPOINT ["./opa_envoy_linux_GOARCH"]
+ENTRYPOINT ["/opa"]
 
 CMD ["run"]
