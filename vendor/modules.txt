@@ -447,8 +447,8 @@ go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc/inte
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconv
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconvutil
-# go.opentelemetry.io/contrib/propagators/b3 v1.21.1
-## explicit; go 1.20
+# go.opentelemetry.io/contrib/propagators/b3 v1.28.0
+## explicit; go 1.21
 go.opentelemetry.io/contrib/propagators/b3
 # go.opentelemetry.io/otel v1.28.0
 ## explicit; go 1.21
