@@ -6,7 +6,7 @@
 #   - name: opa-ext-authz-grpc
 #     envoyExtAuthzGrpc:
 #       service: opa-ext-authz-grpc.local
-#       port: "9191"
+#       port: 9191
 #   # END
 #   defaultConfig:
 #     discoveryAddress: istiod.istio-system.svc:15012
