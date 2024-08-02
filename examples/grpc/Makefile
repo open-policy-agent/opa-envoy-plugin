@@ -14,12 +14,12 @@ testsrv.pb: testsrv/test.proto
 
 .PHONY: test-setup
 test-setup:
-	docker-compose up -d
+	docker compose up -d
 
 .PHONY: test-teardown
 test-teardown:
-	docker-compose logs
-	docker-compose down
+	docker compose logs
+	docker compose down
 
 .PHONY: test
 test:
