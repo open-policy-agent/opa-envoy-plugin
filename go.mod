@@ -7,7 +7,7 @@ toolchain go1.21.0
 require (
 	github.com/envoyproxy/go-control-plane v0.12.0
 	github.com/golang/protobuf v1.5.4
-	github.com/open-policy-agent/opa v0.67.0
+	github.com/open-policy-agent/opa v0.67.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0
