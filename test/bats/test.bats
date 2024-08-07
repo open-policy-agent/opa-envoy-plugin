@@ -53,6 +53,21 @@ SLEEP_TIME=1
   [ "$result" == 200 ]
 }
 
+@test "alice cannot access invalid url /%+o" {
+  host="$(docker_ip 'kind-control-plane')"
+  port="$(ingress_port)"
+
+  echo "$host"
+  echo "$port"
+
+  cmd="docker exec kind-control-plane curl --connect-timeout 30 --max-time 60 --retry 10 --retry-delay 0 --retry-max-time 600 \
+  --retry-connrefused --user alice:password -s -o /dev/null -w "%{http_code}" http://"$host":"$port"/%+o"
+
+  result=`$cmd`
+  echo "result: $result"
+  [ "$result" == 400 ]
+}
+
 @test "alice cannot access /api/v1/products" {
   host="$(docker_ip 'kind-control-plane')"
   port="$(ingress_port)"
