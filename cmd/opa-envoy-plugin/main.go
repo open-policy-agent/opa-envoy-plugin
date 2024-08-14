@@ -7,13 +7,14 @@ package main
 import (
 	"os"
 
-	"github.com/open-policy-agent/opa-envoy-plugin/plugin"
 	"github.com/open-policy-agent/opa/cmd"
 	"github.com/open-policy-agent/opa/v1/runtime"
+
+	"github.com/open-policy-agent/opa-envoy-plugin/plugin"
 )
 
 func main() {
-	runtime.RegisterPlugin("envoy.ext_authz.grpc", plugin.Factory{}) // for backwards compatibility
+	//runtime.RegisterPlugin("envoy.ext_authz.grpc", plugin.Factory{}) // for backwards compatibility
 	runtime.RegisterPlugin(plugin.PluginName, plugin.Factory{})
 
 	if err := cmd.RootCommand.Execute(); err != nil {
