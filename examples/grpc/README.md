@@ -20,7 +20,7 @@ The docker-compose.yaml file defines three services:
          pack_as_bytes: true
    ```
 
-After spinning them up with `docker-compose up`, they can be exercised
+After spinning them up with `docker compose up`, they can be exercised
 using a gRPC client.
 
 This is an example invocation using `grpcurl`:
