@@ -260,7 +260,7 @@ release:
 .PHONY: release-build-linux-%
 release-build-linux-%: ensure-release-dir
 	@$(MAKE) build GOOS=linux GOARCH=$*
-	mv opa_envoy_linux_$* $(RELEASE_DIR)/opa_envoy_linux_$*
+	mv opa_envoy_linux_$*_dynamic $(RELEASE_DIR)/opa_envoy_linux_$*
 
 .PHONY: release-build-linux-static-%
 release-build-linux-static-%: ensure-release-dir
@@ -270,7 +270,7 @@ release-build-linux-static-%: ensure-release-dir
 .PHONY: release-build-darwin-%
 release-build-darwin-%: ensure-release-dir
 	@$(MAKE) build GOOS=darwin GOARCH=$*
-	mv opa_envoy_darwin_$* $(RELEASE_DIR)/opa_envoy_darwin_$*
+	mv opa_envoy_darwin_$*_dynamic $(RELEASE_DIR)/opa_envoy_darwin_$*
 
 .PHONY: release-build-darwin-static-%
 release-build-darwin-static-%: ensure-release-dir
