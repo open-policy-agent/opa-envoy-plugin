@@ -287,4 +287,4 @@ ensure-release-dir:
 	mkdir -p $(RELEASE_DIR)
 
 .PHONY: build-all-platforms
-build-all-platforms: release-build-linux-amd64 release-build-linux-static-amd64 release-build-linux-static-arm64 release-build-darwin-amd64 release-build-darwin-static-amd64 release-build-darwin-static-arm64 release-build-windows
+build-all-platforms: release-build-linux-amd64 release-build-linux-static-amd64 release-build-linux-static-arm64 release-build-darwin-static-amd64 release-build-darwin-static-arm64 release-build-windows
