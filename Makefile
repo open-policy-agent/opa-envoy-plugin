@@ -100,7 +100,6 @@ build-linux-static: ensure-release-dir ensure-linux-toolchain
 
 .PHONY: ci-build-linux
 ci-build-linux:
-	$(MAKE) ci-go-build-linux GOARCH=arm64
 	$(MAKE) ci-go-build-linux GOARCH=amd64
 
 .PHONY: ci-build-linux-static
@@ -172,7 +171,7 @@ docker-login:
 push-image: docker-login push-manifest-list-$(VERSION)
 
 .PHONY: deploy-ci
-deploy-ci: ensure-release-dir start-builder ci-build-linux ci-build-linux-static push-manifest-list-latest push-manifest-list-latest-istio push-manifest-list-latest-envoy push-manifest-list-$(VERSION) push-manifest-list-$(VERSION_ISTIO)
+deploy-ci: docker-login ensure-release-dir start-builder ci-build-linux ci-build-linux-static push-manifest-list-latest-istio push-manifest-list-latest-envoy push-manifest-list-$(VERSION) push-manifest-list-$(VERSION_ISTIO)
 
 .PHONY: test
 test: generate
@@ -260,13 +259,23 @@ release:
 
 .PHONY: release-build-linux-%
 release-build-linux-%: ensure-release-dir
+	@$(MAKE) build GOOS=linux GOARCH=$*
+	mv opa_envoy_linux_$* $(RELEASE_DIR)/opa_envoy_linux_$*
+
+.PHONY: release-build-linux-static-%
+release-build-linux-static-%: ensure-release-dir
 	@$(MAKE) build GOOS=linux CGO_ENABLED=0 WASM_ENABLED=0 GOARCH=$*
-	mv opa_envoy_linux_$*_static $(RELEASE_DIR)/opa_envoy_linux_$*
+	mv opa_envoy_linux_$*_static $(RELEASE_DIR)/opa_envoy_linux_$*_static
 
 .PHONY: release-build-darwin-%
 release-build-darwin-%: ensure-release-dir
+	@$(MAKE) build GOOS=darwin GOARCH=$*
+	mv opa_envoy_darwin_$* $(RELEASE_DIR)/opa_envoy_darwin_$*
+
+.PHONY: release-build-darwin-static-%
+release-build-darwin-static-%: ensure-release-dir
 	@$(MAKE) build GOOS=darwin CGO_ENABLED=0 WASM_ENABLED=0 GOARCH=$*
-	mv opa_envoy_darwin_$*_static $(RELEASE_DIR)/opa_envoy_darwin_$*
+	mv opa_envoy_darwin_$*_static $(RELEASE_DIR)/opa_envoy_darwin_$*_static
 
 .PHONY: release-build-windows
 release-build-windows: ensure-release-dir
@@ -278,4 +287,4 @@ ensure-release-dir:
 	mkdir -p $(RELEASE_DIR)
 
 .PHONY: build-all-platforms
-build-all-platforms: release-build-linux-amd64 release-build-darwin-amd64 release-build-windows release-build-linux-arm64 release-build-darwin-arm64
+build-all-platforms: release-build-linux-amd64 release-build-linux-static-amd64 release-build-linux-static-arm64 release-build-darwin-amd64 release-build-darwin-static-amd64 release-build-darwin-static-arm64 release-build-windows
