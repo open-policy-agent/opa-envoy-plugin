@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -862,12 +864,20 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
-	if err == nil {
-		t.Fatal("Expected error but got nil")
+	if err != nil {
+		t.Fatal("Expected nil err")
 	}
 
-	if output != nil {
-		t.Fatalf("Expected no output but got %v", output)
+	if output == nil {
+		t.Fatal("Expected output but got nil")
+	}
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
+		t.Fatalf("Expected status %v status: %v", int32(code.Code_PERMISSION_DENIED), output.Status.Code)
+	}
+	if deniedResponse, ok := output.HttpResponse.(*ext_authz.CheckResponse_DeniedResponse); !ok {
+		t.Fatalf("Expected http response of type ext_authz.CheckResponse_DeniedResponse")
+	} else if deniedResponse.DeniedResponse.Status.Code != ext_type_v3.StatusCode_BadRequest {
+		t.Fatalf("Unexpected http status code: %v", deniedResponse.DeniedResponse.Status.Code)
 	}
 
 	if len(customLogger.events) != 1 {
@@ -1056,12 +1066,20 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 	ctx := context.Background()
 	output, err := server.Check(ctx, &req)
 
-	if err == nil {
-		t.Fatal("Expected error but got nil")
+	if err != nil {
+		t.Fatal("Expected nil err")
 	}
 
-	if output != nil {
-		t.Fatalf("Expected no output but got %v", output)
+	if output == nil {
+		t.Fatal("Expected output but got nil")
+	}
+	if output.Status.Code != int32(code.Code_PERMISSION_DENIED) {
+		t.Fatalf("Expected status %v status: %v", int32(code.Code_PERMISSION_DENIED), output.Status.Code)
+	}
+	if deniedResponse, ok := output.HttpResponse.(*ext_authz_v2.CheckResponse_DeniedResponse); !ok {
+		t.Fatalf("Expected http response of type ext_authz.CheckResponse_DeniedResponse")
+	} else if deniedResponse.DeniedResponse.Status.Code != ext_type_v2.StatusCode_BadRequest {
+		t.Fatalf("Unexpected http status code: %v", deniedResponse.DeniedResponse.Status.Code)
 	}
 
 	if len(customLogger.events) != 1 {
