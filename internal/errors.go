@@ -61,6 +61,6 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
-func internalError(code string, err error) Error {
-	return Error{Code: code, err: err}
+func newInternalError(code string, err error) *Error {
+	return &Error{Code: code, err: err}
 }
