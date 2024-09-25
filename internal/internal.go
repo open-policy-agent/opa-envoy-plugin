@@ -333,6 +333,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 
 	if err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to create listener.")
+		return
 	}
 
 	logger.WithFields(map[string]interface{}{
