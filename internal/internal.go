@@ -225,6 +225,7 @@ type envoyExtAuthzGrpcServer struct {
 	manager                *plugins.Manager
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
+	preparedQueryErr       error
 	interQueryBuiltinCache iCache.InterQueryCache
 	distributedTracingOpts tracing.Options
 	metricAuthzDuration    prometheus.HistogramVec
@@ -277,6 +278,17 @@ func (p *envoyExtAuthzGrpcServer) Logger() logging.Logger {
 
 func (p *envoyExtAuthzGrpcServer) DistributedTracing() tracing.Options {
 	return p.distributedTracingOpts
+}
+
+func (p *envoyExtAuthzGrpcServer) CreatePreparedQueryOnce(opts envoyauth.PrepareQueryOpts) (*rego.PreparedEvalQuery, error) {
+	p.preparedQueryDoOnce.Do(func() {
+		pq, err := rego.New(opts.Opts...).PrepareForEval(context.Background())
+
+		p.preparedQuery = &pq
+		p.preparedQueryErr = err
+	})
+
+	return p.preparedQuery, p.preparedQueryErr
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
