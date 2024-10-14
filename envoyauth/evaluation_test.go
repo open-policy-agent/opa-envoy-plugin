@@ -254,6 +254,7 @@ type mockExtAuthzGrpcServer struct {
 	manager                *plugins.Manager
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
+	preparedQueryErr       error
 	distributedTracingOpts tracing.Options
 }
 
@@ -299,6 +300,17 @@ func (m *mockExtAuthzGrpcServer) Logger() logging.Logger {
 
 func (m *mockExtAuthzGrpcServer) DistributedTracing() tracing.Options {
 	return m.distributedTracingOpts
+}
+
+func (m *mockExtAuthzGrpcServer) CreatePreparedQueryOnce(opts PrepareQueryOpts) (*rego.PreparedEvalQuery, error) {
+	m.preparedQueryDoOnce.Do(func() {
+		pq, err := rego.New(opts.Opts...).PrepareForEval(context.Background())
+
+		m.preparedQuery = &pq
+		m.preparedQueryErr = err
+	})
+
+	return m.preparedQuery, m.preparedQueryErr
 }
 
 type testPlugin struct {
