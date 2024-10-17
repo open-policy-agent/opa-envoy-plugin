@@ -1,6 +1,6 @@
 module github.com/open-policy-agent/opa-envoy-plugin
 
-go 1.23
+go 1.21
 toolchain go1.23.1
 
 require (
