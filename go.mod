@@ -4,7 +4,7 @@ go 1.21
 toolchain go1.22.5
 
 require (
-	github.com/envoyproxy/go-control-plane v0.13.0
+	github.com/envoyproxy/go-control-plane v0.13.1
 	github.com/golang/protobuf v1.5.4
 	github.com/open-policy-agent/opa v0.69.0
 	github.com/pkg/errors v0.9.1
