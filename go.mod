@@ -1,7 +1,7 @@
 module github.com/open-policy-agent/opa-envoy-plugin
 
 go 1.21
-toolchain go1.22.5
+toolchain go1.23.1
 
 require (
 	github.com/envoyproxy/go-control-plane v0.13.1
