@@ -21,6 +21,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	iCache "github.com/open-policy-agent/opa/topdown/cache"
+	"github.com/open-policy-agent/opa/topdown/print"
 )
 
 func TestGetRevisionLegacy(t *testing.T) {
@@ -116,6 +117,15 @@ func TestGetRevisionMulti(t *testing.T) {
 
 }
 
+type testPrintHook struct {
+	printed string
+}
+
+func (h *testPrintHook) Print(pctx print.Context, msg string) error {
+	h.printed = msg
+	return nil
+}
+
 func TestEval(t *testing.T) {
 	ctx := context.Background()
 
@@ -179,6 +189,17 @@ func TestEval(t *testing.T) {
 	err = Eval(ctx, server, inputValue, er)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	hook := testPrintHook{}
+
+	erp, _, _ := NewEvalResult()
+	if err := Eval(ctx, server, inputValue, erp, rego.EvalPrintHook(&hook)); err != nil {
+		t.Fatal(err)
+	}
+
+	if exp, act := "{\"firstname\": \"foo\", \"lastname\": \"bar\"}", hook.printed; exp != act {
+		t.Errorf("expected last printed message to be %q, got %q", exp, act)
 	}
 }
 
@@ -254,6 +275,7 @@ type mockExtAuthzGrpcServer struct {
 	manager                *plugins.Manager
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
+	preparedQueryErr       error
 	distributedTracingOpts tracing.Options
 }
 
@@ -299,6 +321,17 @@ func (m *mockExtAuthzGrpcServer) Logger() logging.Logger {
 
 func (m *mockExtAuthzGrpcServer) DistributedTracing() tracing.Options {
 	return m.distributedTracingOpts
+}
+
+func (m *mockExtAuthzGrpcServer) CreatePreparedQueryOnce(opts PrepareQueryOpts) (*rego.PreparedEvalQuery, error) {
+	m.preparedQueryDoOnce.Do(func() {
+		pq, err := rego.New(opts.Opts...).PrepareForEval(context.Background())
+
+		m.preparedQuery = &pq
+		m.preparedQueryErr = err
+	})
+
+	return m.preparedQuery, m.preparedQueryErr
 }
 
 type testPlugin struct {

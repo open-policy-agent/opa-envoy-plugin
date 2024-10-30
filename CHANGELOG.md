@@ -5,6 +5,10 @@ project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- Refactor creation of prepared queries (#604, @mjungsbluth)
+  
+  When using the opa-envoy-plugin as a Go library, the interface EvalContext contains a breaking change [#604](https://github.com/open-policy-agent/opa-envoy-plugin/pull/604) that allows users of the library to control all three types of options that can be passed during preparation and evaluation of the underlying Rego query.  
+
 ### Fixes
 
 - Support escaped forward-slashes (`\/`) in JSON request bodies (#256, @Dakatan).

@@ -3,13 +3,11 @@ package envoyauth
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/logging"
-	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
@@ -25,17 +23,21 @@ type EvalContext interface {
 	Store() storage.Store
 	Compiler() *ast.Compiler
 	Runtime() *ast.Term
-	PreparedQueryDoOnce() *sync.Once
 	InterQueryBuiltinCache() iCache.InterQueryCache
-	PreparedQuery() *rego.PreparedEvalQuery
-	SetPreparedQuery(*rego.PreparedEvalQuery)
 	Logger() logging.Logger
 	Config() *config.Config
 	DistributedTracing() tracing.Options
+	CreatePreparedQueryOnce(opts PrepareQueryOpts) (*rego.PreparedEvalQuery, error)
+}
+
+// PrepareQueryOpts - Options to prepare a Rego query to be passed to the CreatePreparedQueryOnce method
+type PrepareQueryOpts struct {
+	Opts        []func(*rego.Rego)
+	PrepareOpts []rego.PrepareOption
 }
 
 // Eval - Evaluates an input against a provided EvalContext and yields result
-func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, opts ...func(*rego.Rego)) error {
+func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, evalOpts ...rego.EvalOption) error {
 	var err error
 	logger := evalContext.Logger()
 
@@ -64,7 +66,19 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		"txn":   result.TxnID,
 	}).Debug("Executing policy query.")
 
-	err = constructPreparedQuery(evalContext, result.Txn, result.Metrics, opts)
+	pq, err := evalContext.CreatePreparedQueryOnce(
+		PrepareQueryOpts{
+			Opts: []func(*rego.Rego){
+				rego.Metrics(result.Metrics),
+				rego.ParsedQuery(evalContext.ParsedQuery()),
+				rego.Compiler(evalContext.Compiler()),
+				rego.Store(evalContext.Store()),
+				rego.Transaction(result.Txn),
+				rego.Runtime(evalContext.Runtime()),
+				rego.EnablePrintStatements(true),
+				rego.DistributedTracingOpts(evalContext.DistributedTracing()),
+			},
+		})
 	if err != nil {
 		return err
 	}
@@ -76,15 +90,22 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		ndbCache = builtins.NDBCache{}
 	}
 
+	evalOpts = append(
+		[]rego.EvalOption{
+			rego.EvalParsedInput(input),
+			rego.EvalTransaction(result.Txn),
+			rego.EvalMetrics(result.Metrics),
+			rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
+			rego.EvalPrintHook(&ph),
+			rego.EvalNDBuiltinCache(ndbCache),
+		},
+		evalOpts...,
+	)
+
 	var rs rego.ResultSet
-	rs, err = evalContext.PreparedQuery().Eval(
+	rs, err = pq.Eval(
 		ctx,
-		rego.EvalParsedInput(input),
-		rego.EvalTransaction(result.Txn),
-		rego.EvalMetrics(result.Metrics),
-		rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
-		rego.EvalPrintHook(&ph),
-		rego.EvalNDBuiltinCache(ndbCache),
+		evalOpts...,
 	)
 
 	switch {
@@ -99,28 +120,6 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 	result.NDBuiltinCache = ndbCache
 	result.Decision = rs[0].Expressions[0].Value
 	return nil
-}
-
-func constructPreparedQuery(evalContext EvalContext, txn storage.Transaction, m metrics.Metrics, opts []func(*rego.Rego)) error {
-	var err error
-	var pq rego.PreparedEvalQuery
-	evalContext.PreparedQueryDoOnce().Do(func() {
-		opts = append(opts,
-			rego.Metrics(m),
-			rego.ParsedQuery(evalContext.ParsedQuery()),
-			rego.Compiler(evalContext.Compiler()),
-			rego.Store(evalContext.Store()),
-			rego.Transaction(txn),
-			rego.Runtime(evalContext.Runtime()),
-			rego.EnablePrintStatements(true),
-			rego.DistributedTracingOpts(evalContext.DistributedTracing()),
-		)
-
-		pq, err = rego.New(opts...).PrepareForEval(context.Background())
-		evalContext.SetPreparedQuery(&pq)
-	})
-
-	return err
 }
 
 func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction, result *EvalResult) error {
