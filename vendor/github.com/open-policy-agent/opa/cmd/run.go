@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/open-policy-agent/opa/cmd/internal/env"
+	fileurl "github.com/open-policy-agent/opa/internal/file/url"
 	"github.com/open-policy-agent/opa/runtime"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/util"
@@ -241,6 +242,7 @@ See https://godoc.org/crypto/tls#pkg-constants for more information.
 	addConfigOverrides(runCommand.Flags(), &cmdParams.rt.ConfigOverrides)
 	addConfigOverrideFiles(runCommand.Flags(), &cmdParams.rt.ConfigOverrideFiles)
 	addBundleModeFlag(runCommand.Flags(), &cmdParams.rt.BundleMode, false)
+	addReadAstValuesFromStoreFlag(runCommand.Flags(), &cmdParams.rt.ReadAstValuesFromStore, false)
 
 	runCommand.Flags().BoolVar(&cmdParams.skipVersionCheck, "skip-version-check", false, "disables anonymous version reporting (see: https://www.openpolicyagent.org/docs/latest/privacy)")
 	err := runCommand.Flags().MarkDeprecated("skip-version-check", "\"skip-version-check\" is deprecated. Use \"disable-telemetry\" instead")
@@ -291,18 +293,31 @@ func initRuntime(ctx context.Context, params runCmdParams, args []string, addrSe
 		"1.3": tls.VersionTLS13,
 	}
 
-	cert, err := loadCertificate(params.tlsCertFile, params.tlsPrivateKeyFile)
+	tlsCertFilePath, err := fileurl.Clean(params.tlsCertFile)
+	if err != nil {
+		return nil, fmt.Errorf("invalid certificate file path: %w", err)
+	}
+	tlsPrivateKeyFilePath, err := fileurl.Clean(params.tlsPrivateKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("invalid certificate private key file path: %w", err)
+	}
+	tlsCACertFilePath, err := fileurl.Clean(params.tlsCACertFile)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CA certificate file path: %w", err)
+	}
+
+	cert, err := loadCertificate(tlsCertFilePath, tlsPrivateKeyFilePath)
 	if err != nil {
 		return nil, err
 	}
 
-	params.rt.CertificateFile = params.tlsCertFile
-	params.rt.CertificateKeyFile = params.tlsPrivateKeyFile
+	params.rt.CertificateFile = tlsCertFilePath
+	params.rt.CertificateKeyFile = tlsPrivateKeyFilePath
 	params.rt.CertificateRefresh = params.tlsCertRefresh
-	params.rt.CertPoolFile = params.tlsCACertFile
+	params.rt.CertPoolFile = tlsCACertFilePath
 
-	if params.tlsCACertFile != "" {
-		pool, err := loadCertPool(params.tlsCACertFile)
+	if tlsCACertFilePath != "" {
+		pool, err := loadCertPool(tlsCACertFilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +437,6 @@ func historyPath() string {
 }
 
 func loadCertificate(tlsCertFile, tlsPrivateKeyFile string) (*tls.Certificate, error) {
-
 	if tlsCertFile != "" && tlsPrivateKeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(tlsCertFile, tlsPrivateKeyFile)
 		if err != nil {
