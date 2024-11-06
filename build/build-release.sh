@@ -46,6 +46,7 @@ build_release() {
 }
 
 clone_repo() {
+    git config --system --add safe.directory '*'
     git clone $SOURCE_URL /go/src/github.com/open-policy-agent/opa-envoy-plugin
     cd /go/src/github.com/open-policy-agent/opa-envoy-plugin
     if [ -n "$VERSION" ]; then
