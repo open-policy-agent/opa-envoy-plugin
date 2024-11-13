@@ -7,6 +7,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/url"
@@ -53,13 +54,14 @@ import (
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyextproc"
+	"github.com/open-policy-agent/opa-envoy-plugin/internal/types"
 	internal_util "github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 	"github.com/open-policy-agent/opa-envoy-plugin/opa/decisionlog"
 )
 
 const (
-	defaultAddr                     = ":9292"
-	defaultPath                     = "envoy.service.ext_proc.v3.ExternalProcessor/Process"
+	defaultAddr                     = ":9191"
+	defaultPath                     = "envoy/authz/allow"
 	defaultDryRun                   = false
 	defaultEnableReflection         = false
 	defaultSkipRequestBodyParse     = false
@@ -70,9 +72,9 @@ const (
 	defaultGRPCServerMaxReceiveMessageSize = 1024 * 1024 * 4
 	defaultGRPCServerMaxSendMessageSize    = math.MaxInt32
 
-	// PluginName is the name to register with the OPA plugin manager
-	//PluginName = "envoy_ext_authz_grpc"
-	PluginName = "envoy_ext_proc_grpc"
+	// AuthZPluginName and ExtProcPluginName Respective names to register with the OPA plugin manager
+	AuthZPluginName   = "envoy_ext_authz_grpc"
+	ExtProcPluginName = "envoy_ext_proc_grpc"
 )
 
 var defaultGRPCRequestDurationSecondsBuckets = []float64{
@@ -205,7 +207,7 @@ func newWithContext(ctx context.Context, m *plugins.Manager, cfg *Config) plugin
 		plugin.manager.PrometheusRegister().MustRegister(errorCounter)
 	}
 
-	m.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	m.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
 
 	return plugin
 }
@@ -300,14 +302,19 @@ func (p *envoyExtAuthzGrpcServer) CreatePreparedQueryOnce(opts envoyauth.Prepare
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
 	go p.listen()
 	return nil
 }
 
 func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
+<<<<<<< HEAD
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 	p.server.GracefulStop()
+=======
+	p.server.Stop()
+	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
+>>>>>>> db9929d1 (Updating internal code for the ext_proc feature)
 }
 
 func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
@@ -364,7 +371,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 		"enable-reflection": p.cfg.EnableReflection,
 	}).Info("Starting gRPC server.")
 
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
+	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateOK})
 
 	if err := p.server.Serve(l); err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
@@ -372,7 +379,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	}
 
 	logger.Info("Listener exited.")
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
 // Check is envoy.service.auth.v3.Authorization/Check
@@ -766,10 +773,22 @@ type envoyExtProcGrpcServer struct {
 	manager                *plugins.Manager
 	preparedQuery          *rego.PreparedEvalQuery
 	preparedQueryDoOnce    *sync.Once
+	preparedQueryErr       error
 	interQueryBuiltinCache iCache.InterQueryCache
 	distributedTracingOpts tracing.Options
 	metricExtProcDuration  prometheus.HistogramVec
 	metricErrorCounter     prometheus.CounterVec
+}
+
+func (p *envoyExtProcGrpcServer) CreatePreparedQueryOnce(opts envoyextproc.PrepareQueryOpts) (*rego.PreparedEvalQuery, error) {
+	p.preparedQueryDoOnce.Do(func() {
+		pq, err := rego.New(opts.Opts...).PrepareForEval(context.Background())
+
+		p.preparedQuery = &pq
+		p.preparedQueryErr = err
+	})
+
+	return p.preparedQuery, p.preparedQueryErr
 }
 
 // NewExtProc creates a new instance of the ext_proc gRPC server.
@@ -829,14 +848,14 @@ func NewExtProc(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		plugin.manager.PrometheusRegister().MustRegister(errorCounter)
 	}
 
-	m.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	m.UpdatePluginStatus(ExtProcPluginName, &plugins.Status{State: plugins.StateNotReady})
 
 	return plugin
 }
 
 // Start starts the gRPC server for the ext_proc plugin.
 func (p *envoyExtProcGrpcServer) Start(ctx context.Context) error {
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(ExtProcPluginName, &plugins.Status{State: plugins.StateNotReady})
 	go p.listen()
 	return nil
 }
@@ -844,7 +863,7 @@ func (p *envoyExtProcGrpcServer) Start(ctx context.Context) error {
 // Stop stops the gRPC server for the ext_proc plugin.
 func (p *envoyExtProcGrpcServer) Stop(ctx context.Context) {
 	p.server.Stop()
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(ExtProcPluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
 // Reconfigure is not implemented for this plugin.
@@ -894,7 +913,7 @@ func (p *envoyExtProcGrpcServer) listen() {
 		"enable-reflection": p.cfg.EnableReflection,
 	}).Info("Starting gRPC server.")
 
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
+	p.manager.UpdatePluginStatus(ExtProcPluginName, &plugins.Status{State: plugins.StateOK})
 
 	if err := p.server.Serve(l); err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
@@ -902,107 +921,223 @@ func (p *envoyExtProcGrpcServer) listen() {
 	}
 
 	logger.Info("Listener exited.")
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(ExtProcPluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
-// Process handles the processing of incoming ext_proc requests.
 func (p *envoyExtProcGrpcServer) Process(stream ext_proc_v3.ExternalProcessor_ProcessServer) error {
 	logger := p.manager.Logger()
 	logger.Info("Processing incoming stream")
 
+	// Initialize the state object
+	state := &types.StreamState{}
+
 	for {
+		var err error
+
 		req, err := stream.Recv()
 		if err != nil {
+			if err == io.EOF {
+				logger.Info("Stream closed by client")
+				return nil
+			}
 			logger.Error(fmt.Sprintf("Failed to receive request: %v", err))
 			return err
 		}
 
-		logger.Info(fmt.Sprintf("Received request: %v", req))
+		logger.Info(fmt.Sprintf("Received request: %v \n\n", req))
 
 		start := time.Now()
 
-		logger.Info("LOG - Step 1")
 		// Initialize evaluation result
-		result, _, err := envoyextproc.NewExtProcEvalResult()
+		result, stopFunc, err := envoyextproc.NewEvalResult()
 		if err != nil {
 			logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new evaluation.")
 			return err
 		}
 
-		logger.Info("LOG - Step 2")
 		// Start a new storage transaction
 		txn, txnClose, err := result.GetTxn(stream.Context(), p.Store())
 		if err != nil {
 			logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
 			return err
 		}
-		defer txnClose(stream.Context(), err)
 		result.Txn = txn
 
-		logger.Info("LOG - Step 3")
-		logger.Info(fmt.Sprintf("req: %v", req))
-
 		// Convert request to input
-		input, err := RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
+		input, err := envoyextproc.RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse, state)
 		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to convert request to input: %v \n\n", err))
+			txnClose(stream.Context(), err)
+			stopFunc()
 			return err
 		}
-
-		input = map[string]interface{}{
-			"request_headers": map[string]interface{}{
-				"headers": map[string]interface{}{
-					"headers": []map[string]interface{}{
-						{
-							"key":       "some-key",
-							"raw_value": "some-value",
-						},
-					},
-				},
-			},
-		}
-
-		logger.Info(fmt.Sprintf("input: %v", input))
-
-		logger.Info("LOG - Step 4")
 
 		if stream.Context().Err() != nil {
 			err = errors.Wrap(stream.Context().Err(), "process request timed out before query execution")
+			txnClose(stream.Context(), err)
+			stopFunc()
 			return err
 		}
-
-		logger.Info("LOG - Step 5")
 
 		// Convert input to ast.Value
 		inputValue, err := ast.InterfaceToValue(input)
 		if err != nil {
+			txnClose(stream.Context(), err)
+			stopFunc()
 			return err
 		}
 
-		logger.Info("LOG - Step 6")
-		logger.Info(fmt.Sprintf("Input to be evaluated: %v", inputValue))
+		logger.Info(fmt.Sprintf("Input to ast.Value: %v \n\n", inputValue))
 
-		// Evaluate the policy
-		if err = envoyextproc.ExtProcEval(stream.Context(), p, inputValue, result); err != nil {
+		// Perform the evaluation
+		err = envoyextproc.Eval(stream.Context(), p, inputValue, result)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Policy evaluation error: %v \n\n", err))
+			txnClose(stream.Context(), err)
+			stopFunc()
 			return err
 		}
 
-		logger.Info("LOG - Step 7")
+		logger.Info(fmt.Sprintf("Policy decision: %v", result.Decision))
 
-		response := &ext_proc_v3.ProcessingResponse{}
-
-		// Apply OPA evaluation results to the response
-		// Setting headers, status, etc., based on the decision
-
-		// Send the response to the client
-		if err := stream.Send(response); err != nil {
-			logger.Error(fmt.Sprintf("Failed to send response: %v", err))
+		// Handle the decision
+		// Check for immediate response
+		immediateResponse, err := result.GetImmediateResponse()
+		if err != nil {
+			txnClose(stream.Context(), err)
+			stopFunc()
 			return err
+		}
+		if immediateResponse != nil {
+			response := &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_ImmediateResponse{
+					ImmediateResponse: immediateResponse,
+				},
+			}
+			// Send the immediate response
+			if sendErr := stream.Send(response); sendErr != nil {
+				txnClose(stream.Context(), sendErr)
+				stopFunc()
+				return sendErr
+			}
+			// Clean up and terminate the stream
+			txnClose(stream.Context(), nil)
+			stopFunc()
+			return nil
+		}
+
+		commonResponse, err := result.GetCommonResponse()
+		if err != nil {
+			txnClose(stream.Context(), err)
+			stopFunc()
+			return err
+		}
+
+		// Include dynamic metadata if any
+		dynamicMetadata, err := result.GetDynamicMetadata()
+		if err != nil {
+			txnClose(stream.Context(), err)
+			stopFunc()
+			return err
+		}
+
+		var processingResponse *ext_proc_v3.ProcessingResponse
+
+		switch req.Request.(type) {
+		case *ext_proc_v3.ProcessingRequest_RequestHeaders:
+			headersResponse := &ext_proc_v3.HeadersResponse{
+				Response: commonResponse,
+			}
+			processingResponse = &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_RequestHeaders{
+					RequestHeaders: headersResponse,
+				},
+			}
+		case *ext_proc_v3.ProcessingRequest_RequestBody:
+			bodyResponse := &ext_proc_v3.BodyResponse{
+				Response: commonResponse,
+			}
+			processingResponse = &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_RequestBody{
+					RequestBody: bodyResponse,
+				},
+			}
+		case *ext_proc_v3.ProcessingRequest_RequestTrailers:
+			trailerMutation, err := result.GetTrailerMutation()
+			if err != nil {
+				txnClose(stream.Context(), err)
+				stopFunc()
+				return err
+			}
+
+			trailersResponse := &ext_proc_v3.TrailersResponse{}
+			if trailerMutation != nil {
+				trailersResponse.HeaderMutation = trailerMutation
+			}
+
+			processingResponse = &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_RequestTrailers{
+					RequestTrailers: trailersResponse,
+				},
+			}
+		case *ext_proc_v3.ProcessingRequest_ResponseHeaders:
+			headersResponse := &ext_proc_v3.HeadersResponse{
+				Response: commonResponse,
+			}
+			processingResponse = &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_ResponseHeaders{
+					ResponseHeaders: headersResponse,
+				},
+			}
+		case *ext_proc_v3.ProcessingRequest_ResponseBody:
+			bodyResponse := &ext_proc_v3.BodyResponse{
+				Response: commonResponse,
+			}
+			processingResponse = &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_ResponseBody{
+					ResponseBody: bodyResponse,
+				},
+			}
+		case *ext_proc_v3.ProcessingRequest_ResponseTrailers:
+			trailerMutation, err := result.GetTrailerMutation()
+			if err != nil {
+				txnClose(stream.Context(), err)
+				stopFunc()
+				return err
+			}
+
+			trailersResponse := &ext_proc_v3.TrailersResponse{}
+			if trailerMutation != nil {
+				trailersResponse.HeaderMutation = trailerMutation
+			}
+
+			processingResponse = &ext_proc_v3.ProcessingResponse{
+				Response: &ext_proc_v3.ProcessingResponse_ResponseTrailers{
+					ResponseTrailers: trailersResponse,
+				},
+			}
+		default:
+			logger.Error("Unsupported request type")
+			txnClose(stream.Context(), fmt.Errorf("unsupported request type"))
+			stopFunc()
+			return fmt.Errorf("unsupported request type")
+		}
+
+		if dynamicMetadata != nil {
+			processingResponse.DynamicMetadata = dynamicMetadata
+		}
+
+		// Send the response back to Envoy
+		if sendErr := stream.Send(processingResponse); sendErr != nil {
+			txnClose(stream.Context(), sendErr)
+			stopFunc()
+			return sendErr
 		}
 
 		// Log the total decision time
 		totalDecisionTime := time.Since(start)
 		if p.cfg.EnablePerformanceMetrics {
-			p.metricExtProcDuration.With(prometheus.Labels{"handler": "process"}).Observe(float64(totalDecisionTime.Seconds()))
+			p.metricExtProcDuration.With(prometheus.Labels{"handler": "process"}).Observe(totalDecisionTime.Seconds())
 		}
 
 		p.manager.Logger().WithFields(map[string]interface{}{
@@ -1013,13 +1148,11 @@ func (p *envoyExtProcGrpcServer) Process(stream ext_proc_v3.ExternalProcessor_Pr
 			"metrics":             result.Metrics.All(),
 			"total_decision_time": totalDecisionTime,
 		}).Debug("Returning policy decision.")
-	}
-}
 
-// RequestToInput converts an incoming ext_proc request to an input map for policy evaluation.
-func RequestToInput(req *ext_proc_v3.ProcessingRequest, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]interface{}, error) {
-	// This is a placeholder implementation for now.
-	return map[string]interface{}{}, nil
+		// Clean up the transaction and evaluation result before the next iteration
+		txnClose(stream.Context(), nil)
+		stopFunc()
+	}
 }
 
 // compilerUpdated resets the prepared query when the compiler is updated.
@@ -1052,24 +1185,9 @@ func (p *envoyExtProcGrpcServer) Runtime() *ast.Term {
 	return p.manager.Info
 }
 
-// PreparedQueryDoOnce returns the sync.Once for the prepared query.
-func (p *envoyExtProcGrpcServer) PreparedQueryDoOnce() *sync.Once {
-	return p.preparedQueryDoOnce
-}
-
 // InterQueryBuiltinCache returns the inter-query cache.
 func (p *envoyExtProcGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
 	return p.interQueryBuiltinCache
-}
-
-// PreparedQuery returns the prepared evaluation query.
-func (p *envoyExtProcGrpcServer) PreparedQuery() *rego.PreparedEvalQuery {
-	return p.preparedQuery
-}
-
-// SetPreparedQuery sets the prepared evaluation query.
-func (p *envoyExtProcGrpcServer) SetPreparedQuery(pq *rego.PreparedEvalQuery) {
-	p.preparedQuery = pq
 }
 
 // Logger returns the logger associated with the OPA instance.
@@ -1083,7 +1201,7 @@ func (p *envoyExtProcGrpcServer) DistributedTracing() tracing.Options {
 }
 
 // Log logs the decision to the decision log.
-func (p *envoyExtProcGrpcServer) log(ctx context.Context, input interface{}, result *envoyextproc.ExtProcEvalResult, err error) error {
+func (p *envoyExtProcGrpcServer) log(ctx context.Context, input interface{}, result *envoyextproc.EvalResult, err error) error {
 	info := &server.Info{
 		Timestamp: time.Now(),
 		Input:     &input,
@@ -1111,7 +1229,5 @@ func (p *envoyExtProcGrpcServer) log(ctx context.Context, input interface{}, res
 		info.NDBuiltinCache = &x
 	}
 
-	// Use the adapter to convert ExtProcEvalResult to EvalResult
-	adaptedResult := result.ToEnvoyAuthEvalResult()
-	return decisionlog.LogDecision(ctx, p.manager, info, adaptedResult, err)
+	return decisionlog.LogDecisionExtProc(ctx, p.manager, info, result, err)
 }
