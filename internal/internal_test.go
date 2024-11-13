@@ -8,8 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
-	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -17,6 +15,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
@@ -26,7 +27,6 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
@@ -34,6 +34,8 @@ import (
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/util"
+
+	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 )
 
 const exampleAllowedRequest = `{
@@ -1848,12 +1850,12 @@ func TestPluginStatusLifeCycle(t *testing.T) {
 		t.Fatalf("Unexpected error: %s", err)
 	}
 
-	p := New(m, &Config{
+	p := NewAuthZ(m, &Config{
 		Addr: ":0",
 	})
-	m.Register(PluginName, p)
+	m.Register(AuthZPluginName, p)
 
-	assertPluginState(t, m, plugins.StateNotReady)
+	assertAuthZPluginState(t, m, plugins.StateNotReady)
 
 	ctx := context.Background()
 	err = m.Start(ctx)
@@ -1863,14 +1865,14 @@ func TestPluginStatusLifeCycle(t *testing.T) {
 
 	// Wait a short time for the plugin to reach OK state
 	// If it hits this timeout something bad has almost definitely happened
-	waitForPluginState(t, m, plugins.StateOK, 5*time.Second)
+	waitForAuthZPluginState(t, m, plugins.StateOK, 5*time.Second)
 
 	m.Stop(ctx)
 
-	assertPluginState(t, m, plugins.StateNotReady)
+	assertAuthZPluginState(t, m, plugins.StateNotReady)
 }
 
-func waitForPluginState(t *testing.T, m *plugins.Manager, desired plugins.State, timeout time.Duration) {
+func waitForAuthZPluginState(t *testing.T, m *plugins.Manager, desired plugins.State, timeout time.Duration) {
 	after := time.After(timeout)
 	tick := time.Tick(10 * time.Microsecond)
 	for {
@@ -1878,7 +1880,7 @@ func waitForPluginState(t *testing.T, m *plugins.Manager, desired plugins.State,
 		case <-after:
 			t.Fatal("Plugin failed to reach OK state in time")
 		case <-tick:
-			state, err := getPluginState(t, m)
+			state, err := getAuthZPluginState(t, m)
 			if err == nil && state == desired {
 				return
 			}
@@ -1886,11 +1888,11 @@ func waitForPluginState(t *testing.T, m *plugins.Manager, desired plugins.State,
 	}
 }
 
-func getPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error) {
+func getAuthZPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error) {
 	t.Helper()
-	status, ok := m.PluginStatus()[PluginName]
+	status, ok := m.PluginStatus()[AuthZPluginName]
 	if !ok {
-		return plugins.StateNotReady, fmt.Errorf("expected plugin %s to be in manager plugin status map", PluginName)
+		return plugins.StateNotReady, fmt.Errorf("expected plugin %s to be in manager plugin status map", AuthZPluginName)
 	}
 	if status == nil {
 		return plugins.StateNotReady, errors.New("expected a non-nil status value")
@@ -1898,9 +1900,9 @@ func getPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error) {
 	return status.State, nil
 }
 
-func assertPluginState(t *testing.T, m *plugins.Manager, expected plugins.State) {
+func assertAuthZPluginState(t *testing.T, m *plugins.Manager, expected plugins.State) {
 	t.Helper()
-	state, err := getPluginState(t, m)
+	state, err := getAuthZPluginState(t, m)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2006,7 +2008,7 @@ func testAuthzServerWithModule(module string, path string, customConfig *Config,
 		}
 	}
 
-	s := New(m, &cfg)
+	s := NewAuthZ(m, &cfg)
 	return s.(*envoyExtAuthzGrpcServer)
 }
 
