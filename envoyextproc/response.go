@@ -7,33 +7,18 @@ import (
 	"net/http"
 
 	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	ext_proc_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 )
 
-// ToEnvoyAuthEvalResult converts ExtProcEvalResult to envoyauth.EvalResult
-func (r *ExtProcEvalResult) ToEnvoyAuthEvalResult() *envoyauth.EvalResult {
-	return &envoyauth.EvalResult{
-		Revision:       r.Revision,
-		Revisions:      r.Revisions,
-		DecisionID:     r.DecisionID,
-		TxnID:          r.TxnID,
-		Decision:       r.Decision,
-		Metrics:        r.Metrics,
-		Txn:            r.Txn,
-		NDBuiltinCache: r.NDBuiltinCache,
-	}
-}
-
-// ExtProcEvalResult captures the result from evaluating a query against an input.
-type ExtProcEvalResult struct {
+// EvalResult captures the result from evaluating a query against an input.
+type EvalResult struct {
 	Revision       string // Deprecated: Use `revisions` instead.
 	Revisions      map[string]string
 	DecisionID     string
@@ -50,11 +35,11 @@ type StopFunc = func()
 // TransactionCloser should be called to abort the transaction.
 type TransactionCloser func(ctx context.Context, err error) error
 
-// NewExtProcEvalResult creates a new ExtProcEvalResult and a StopFunc that is used to stop the timer for metrics.
-func NewExtProcEvalResult(opts ...func(*ExtProcEvalResult)) (*ExtProcEvalResult, StopFunc, error) {
+// NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics.
+func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	var err error
 
-	er := &ExtProcEvalResult{
+	er := &EvalResult{
 		Metrics: metrics.New(),
 	}
 
@@ -79,8 +64,8 @@ func NewExtProcEvalResult(opts ...func(*ExtProcEvalResult)) (*ExtProcEvalResult,
 	return er, stop, nil
 }
 
-// GetTxn creates a read transaction suitable for the configured ExtProcEvalResult object.
-func (result *ExtProcEvalResult) GetTxn(ctx context.Context, store storage.Store) (storage.Transaction, TransactionCloser, error) {
+// GetTxn creates a read transaction suitable for the configured EvalResult object.
+func (result *EvalResult) GetTxn(ctx context.Context, store storage.Store) (storage.Transaction, TransactionCloser, error) {
 	params := storage.TransactionParams{}
 
 	noopCloser := func(ctx context.Context, err error) error {
@@ -102,324 +87,325 @@ func (result *ExtProcEvalResult) GetTxn(ctx context.Context, store storage.Store
 	return txn, closer, nil
 }
 
-func (result *ExtProcEvalResult) invalidDecisionErr() error {
+// invalidDecisionErr returns an error indicating that the decision is invalid.
+func (result *EvalResult) invalidDecisionErr() error {
 	return fmt.Errorf("illegal value for policy evaluation result: %T", result.Decision)
 }
 
-// IsAllowed returns whether the decision represents an "allow" depending on the decision structure.
-// Returns an error if the decision structure is invalid.
-func (result *ExtProcEvalResult) IsAllowed() (bool, error) {
-	switch decision := result.Decision.(type) {
-	case bool:
-		return decision, nil
-	case map[string]interface{}:
-		var val interface{}
-		var ok, allowed bool
-
-		if val, ok = decision["allowed"]; !ok {
-			return false, fmt.Errorf("unable to determine evaluation result due to missing \"allowed\" key")
-		}
-
-		if allowed, ok = val.(bool); !ok {
-			return false, fmt.Errorf("type assertion error, expected allowed to be of type 'boolean' but got '%T'", val)
-		}
-
-		return allowed, nil
-	}
-
-	return false, result.invalidDecisionErr()
-}
-
-// GetRequestHTTPHeadersToRemove returns the HTTP headers to remove from the original request before dispatching it to the upstream.
-func (result *ExtProcEvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
-	headersToRemove := []string{}
-
-	switch decision := result.Decision.(type) {
-	case bool:
-		return headersToRemove, nil
-	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["request_headers_to_remove"]; !ok {
-			return headersToRemove, nil
-		}
-
-		switch val := val.(type) {
-		case []string:
-			return val, nil
-		case []interface{}:
-			for _, vval := range val {
-				header, ok := vval.(string)
-				if !ok {
-					return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove value to be of type 'string' but got '%T'", vval)
-				}
-
-				headersToRemove = append(headersToRemove, header)
-			}
-			return headersToRemove, nil
-		default:
-			return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove to be of type '[]string' but got '%T'", val)
-		}
-	}
-
-	return nil, result.invalidDecisionErr()
-}
-
-// GetResponseHTTPHeaders returns the HTTP headers to return if they are part of the decision.
-func (result *ExtProcEvalResult) GetResponseHTTPHeaders() (http.Header, error) {
-	var responseHeaders = make(http.Header)
-
-	switch decision := result.Decision.(type) {
-	case bool:
-		return responseHeaders, nil
-	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["headers"]; !ok {
-			return responseHeaders, nil
-		}
-
-		err := transformToHTTPHeaderFormat(val, &responseHeaders)
-		if err != nil {
-			return nil, err
-		}
-
-		return responseHeaders, nil
-	}
-
-	return nil, result.invalidDecisionErr()
-}
-
-// GetResponseEnvoyHeaderValueOptions returns the HTTP headers to return if they are part of the decision as Envoy header value options.
-func (result *ExtProcEvalResult) GetResponseEnvoyHeaderValueOptions() ([]*ext_core_v3.HeaderValueOption, error) {
-	headers, err := result.GetResponseHTTPHeaders()
-	if err != nil {
-		return nil, err
-	}
-
-	return transformHTTPHeaderToEnvoyHeaderValueOption(headers)
-}
-
-// GetResponseHTTPHeadersToAdd returns the HTTP headers to send to the downstream client.
-func (result *ExtProcEvalResult) GetResponseHTTPHeadersToAdd() ([]*ext_core_v3.HeaderValueOption, error) {
-	var responseHeaders = make(http.Header)
-
-	finalHeaders := []*ext_core_v3.HeaderValueOption{}
-
-	switch decision := result.Decision.(type) {
-	case bool:
-		return finalHeaders, nil
-	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["response_headers_to_add"]; !ok {
-			return finalHeaders, nil
-		}
-
-		err := transformToHTTPHeaderFormat(val, &responseHeaders)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, result.invalidDecisionErr()
-	}
-
-	return transformHTTPHeaderToEnvoyHeaderValueOption(responseHeaders)
-}
-
-// HasResponseBody returns true if the decision defines a body (only true for structured decisions).
-func (result *ExtProcEvalResult) HasResponseBody() bool {
-	decision, ok := result.Decision.(map[string]interface{})
-
+// GetImmediateResponse constructs an ImmediateResponse message based on the policy decision.
+func (result *EvalResult) GetImmediateResponse() (*ext_proc_v3.ImmediateResponse, error) {
+	decisionMap, ok := result.Decision.(map[string]interface{})
 	if !ok {
-		return false
+		return nil, nil // No immediate response
 	}
 
-	_, ok = decision["body"]
-
-	return ok
-}
-
-// GetResponseBody returns the HTTP body to return if they are part of the decision.
-func (result *ExtProcEvalResult) GetResponseBody() (string, error) {
-	var ok bool
-	var val interface{}
-	var body string
-	var decision map[string]interface{}
-
-	if decision, ok = result.Decision.(map[string]interface{}); !ok {
-		return "", nil
+	immediateRespData, ok := decisionMap["immediate_response"].(map[string]interface{})
+	if !ok {
+		return nil, nil // No immediate response
 	}
 
-	if val, ok = decision["body"]; !ok {
-		return "", nil
-	}
+	// Default status code
+	statusInt := http.StatusForbidden
 
-	if body, ok = val.(string); !ok {
-		return "", fmt.Errorf("type assertion error, expected body to be of type 'string' but got '%T'", val)
-	}
-
-	return body, nil
-}
-
-// GetResponseHTTPStatus returns the HTTP status to return if they are part of the decision.
-func (result *ExtProcEvalResult) GetResponseHTTPStatus() (int, error) {
-	var ok bool
-	var val interface{}
-	var statusCode json.Number
-
-	status := http.StatusForbidden
-
-	switch decision := result.Decision.(type) {
-	case bool:
-		if decision {
-			return http.StatusOK, fmt.Errorf("HTTP status code undefined for simple 'allow'")
-		}
-
-		return status, nil
-	case map[string]interface{}:
-		if val, ok = decision["http_status"]; !ok {
-			return status, nil
-		}
-
+	// Extract status code
+	if val, ok := immediateRespData["status"]; ok {
+		var statusCode json.Number
 		if statusCode, ok = val.(json.Number); !ok {
-			return status, fmt.Errorf("type assertion error, expected http_status to be of type 'number' but got '%T'", val)
+			return nil, fmt.Errorf("type assertion error, expected status to be of type 'number' but got '%T'", val)
 		}
 
 		httpStatusCode, err := statusCode.Int64()
 		if err != nil {
-			return status, fmt.Errorf("error converting JSON number to int: %v", err)
+			return nil, fmt.Errorf("error converting JSON number to int: %v", err)
 		}
 
 		if http.StatusText(int(httpStatusCode)) == "" {
-			return status, fmt.Errorf("Invalid HTTP status code %v", httpStatusCode)
+			return nil, fmt.Errorf("invalid HTTP status code %v", httpStatusCode)
 		}
 
-		return int(httpStatusCode), nil
+		statusInt = int(httpStatusCode)
 	}
 
-	return http.StatusForbidden, result.invalidDecisionErr()
+	// Construct HttpStatus
+	statusCode := &ext_type_v3.HttpStatus{
+		Code: ext_type_v3.StatusCode(statusInt),
+	}
+
+	// Extract body
+	body := []byte{}
+	if bodyVal, ok := immediateRespData["body"].(string); ok {
+		body = []byte(bodyVal)
+	}
+
+	// Extract headers
+	headers := []*ext_core_v3.HeaderValueOption{}
+	if headersVal, ok := immediateRespData["headers"].([]interface{}); ok {
+		for _, headerObj := range headersVal {
+			headerMap, ok := headerObj.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			key, ok := headerMap["key"].(string)
+			if !ok {
+				continue
+			}
+
+			value, ok := headerMap["value"].(string)
+			if !ok {
+				continue
+			}
+
+			headerValueOption := &ext_core_v3.HeaderValueOption{
+				Header: &ext_core_v3.HeaderValue{Key: key, Value: value},
+			}
+			headers = append(headers, headerValueOption)
+		}
+	}
+
+	immediateResponse := &ext_proc_v3.ImmediateResponse{
+		Status: statusCode,
+		Body:   body,
+		Headers: &ext_proc_v3.HeaderMutation{
+			SetHeaders: headers,
+		},
+	}
+
+	// Optional: Handle gRPC status and details if needed
+	if grpcStatusVal, ok := immediateRespData["grpc_status"].(float64); ok {
+		immediateResponse.GrpcStatus = &ext_proc_v3.GrpcStatus{
+			Status: uint32(grpcStatusVal),
+		}
+	}
+
+	if detailsVal, ok := immediateRespData["details"].(string); ok {
+		immediateResponse.Details = detailsVal
+	}
+
+	return immediateResponse, nil
 }
 
-// GetDynamicMetadata returns the dynamic metadata to return if part of the decision.
-func (result *ExtProcEvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
-	var (
-		val interface{}
-		ok  bool
-	)
-	switch decision := result.Decision.(type) {
-	case bool:
-		if decision {
-			return nil, fmt.Errorf("dynamic metadata undefined for boolean decision")
-		}
-	case map[string]interface{}:
-		if val, ok = decision["dynamic_metadata"]; !ok {
-			return nil, nil
-		}
-
-		metadata, ok := val.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("type assertion error, expected dynamic_metadata to be of type 'object' but got '%T'", val)
-		}
-
-		return structpb.NewStruct(metadata)
+// GetCommonResponse constructs a CommonResponse based on the policy decision.
+func (result *EvalResult) GetCommonResponse() (*ext_proc_v3.CommonResponse, error) {
+	_, ok := result.Decision.(map[string]interface{})
+	if !ok {
+		return nil, nil // No modifications
 	}
 
-	return nil, nil
-}
-
-// GetResponseEnvoyHTTPStatus returns the HTTP status to return if they are part of the decision.
-func (result *ExtProcEvalResult) GetResponseEnvoyHTTPStatus() (*ext_type_v3.HttpStatus, error) {
-	status := &ext_type_v3.HttpStatus{
-		Code: ext_type_v3.StatusCode(ext_type_v3.StatusCode_Forbidden),
-	}
-
-	httpStatusCode, err := result.GetResponseHTTPStatus()
-
+	headerMutation, err := result.getHeaderMutation()
 	if err != nil {
 		return nil, err
 	}
 
-	// This check is partially redundant but might be more strict than http.StatusText().
-	if _, ok := ext_type_v3.StatusCode_name[int32(httpStatusCode)]; !ok {
-		return nil, fmt.Errorf("Invalid HTTP status code %v", httpStatusCode)
+	bodyMutation, err := result.getBodyMutation()
+	if err != nil {
+		return nil, err
 	}
 
-	status.Code = ext_type_v3.StatusCode(int32(httpStatusCode))
+	if headerMutation == nil && bodyMutation == nil {
+		return nil, nil // No modifications
+	}
 
-	return status, nil
+	commonResponse := &ext_proc_v3.CommonResponse{
+		HeaderMutation: headerMutation,
+		BodyMutation:   bodyMutation,
+	}
+
+	// Set status if needed
+	if bodyMutation != nil {
+		commonResponse.Status = ext_proc_v3.CommonResponse_CONTINUE_AND_REPLACE
+	}
+
+	return commonResponse, nil
 }
 
-func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
-	takeResponseHeaders := func(headers map[string]interface{}, targetHeaders *http.Header) error {
-		for key, value := range headers {
-			switch values := value.(type) {
-			case string:
-				targetHeaders.Add(key, values)
-			case []string:
-				for _, v := range values {
-					targetHeaders.Add(key, v)
-				}
-			case []interface{}:
-				for _, value := range values {
-					if headerVal, ok := value.(string); ok {
-						targetHeaders.Add(key, headerVal)
-					} else {
-						return fmt.Errorf("invalid value type for header '%s'", key)
-					}
-				}
-			default:
-				return fmt.Errorf("type assertion error for header '%s'", key)
-			}
-		}
-		return nil
+// getHeaderMutation constructs a HeaderMutation from the policy decision.
+func (result *EvalResult) getHeaderMutation() (*ext_proc_v3.HeaderMutation, error) {
+	decisionMap, ok := result.Decision.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("decision is not a map")
 	}
 
-	switch input := input.(type) {
-	case []interface{}:
-		for _, val := range input {
-			headers, ok := val.(map[string]interface{})
+	// Initialize slices for set and remove headers
+	setHeaders := []*ext_core_v3.HeaderValueOption{}
+	removeHeaders := []string{}
+
+	// Process headers to add
+	if responseHeaders, ok := decisionMap["headers_to_add"]; ok {
+		headersSlice, ok := responseHeaders.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("headers_to_add is not an array")
+		}
+
+		for _, headerObj := range headersSlice {
+			headerMap, ok := headerObj.(map[string]interface{})
 			if !ok {
-				return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
+				continue
 			}
 
-			err := takeResponseHeaders(headers, result)
-			if err != nil {
-				return err
+			key, ok := headerMap["key"].(string)
+			if !ok {
+				continue
 			}
-		}
 
-	case map[string]interface{}:
-		err := takeResponseHeaders(input, result)
-		if err != nil {
-			return err
-		}
+			value, ok := headerMap["value"].(string)
+			if !ok {
+				continue
+			}
 
-	default:
-		return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
+			headerValueOption := &ext_core_v3.HeaderValueOption{
+				Header: &ext_core_v3.HeaderValue{Key: key, Value: value},
+			}
+
+			setHeaders = append(setHeaders, headerValueOption)
+		}
 	}
 
-	return nil
+	// Process headers to remove
+	if removeHeadersVal, ok := decisionMap["headers_to_remove"]; ok {
+		removeHeadersSlice, ok := removeHeadersVal.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("headers_to_remove is not an array")
+		}
+		for _, v := range removeHeadersSlice {
+			header, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("header to remove is not a string")
+			}
+			removeHeaders = append(removeHeaders, header)
+		}
+	}
+
+	// Check if there are any header mutations
+	if len(setHeaders) == 0 && len(removeHeaders) == 0 {
+		return nil, nil // No header mutations
+	}
+
+	headerMutation := &ext_proc_v3.HeaderMutation{
+		SetHeaders:    setHeaders,
+		RemoveHeaders: removeHeaders,
+	}
+
+	return headerMutation, nil
 }
 
-func transformHTTPHeaderToEnvoyHeaderValueOption(headers http.Header) ([]*ext_core_v3.HeaderValueOption, error) {
-	responseHeaders := []*ext_core_v3.HeaderValueOption{}
+// getBodyMutation constructs a BodyMutation from the policy decision.
+func (result *EvalResult) getBodyMutation() (*ext_proc_v3.BodyMutation, error) {
+	decisionMap, ok := result.Decision.(map[string]interface{})
+	if !ok {
+		return nil, nil
+	}
 
-	for key, values := range headers {
-		for idx := range values {
-			headerValue := &ext_core_v3.HeaderValue{
-				Key:   key,
-				Value: values[idx],
+	bodyVal, ok := decisionMap["body"]
+	if !ok {
+		return nil, nil
+	}
+
+	bodyStr, ok := bodyVal.(string)
+	if !ok {
+		return nil, fmt.Errorf("body is not a string")
+	}
+
+	bodyMutation := &ext_proc_v3.BodyMutation{
+		Mutation: &ext_proc_v3.BodyMutation_Body{
+			Body: []byte(bodyStr),
+		},
+	}
+
+	return bodyMutation, nil
+}
+
+// GetDynamicMetadata retrieves dynamic metadata from the policy decision.
+func (result *EvalResult) GetDynamicMetadata() (*structpb.Struct, error) {
+	decisionMap, ok := result.Decision.(map[string]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	val, ok := decisionMap["dynamic_metadata"]
+	if !ok {
+		return nil, nil // No dynamic metadata
+	}
+
+	metadataMap, ok := val.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("dynamic_metadata is not a map")
+	}
+
+	dynamicMetadata, err := structpb.NewStruct(metadataMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert dynamic_metadata to Struct: %v", err)
+	}
+
+	return dynamicMetadata, nil
+}
+
+// GetTrailerMutation constructs a HeaderMutation from the policy decision for trailers.
+func (result *EvalResult) GetTrailerMutation() (*ext_proc_v3.HeaderMutation, error) {
+	decisionMap, ok := result.Decision.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("decision is not a map")
+	}
+
+	// Initialize slices for set and remove trailers
+	setTrailers := []*ext_core_v3.HeaderValueOption{}
+	removeTrailers := []string{}
+
+	// Process trailers to add
+	if responseTrailers, ok := decisionMap["trailers_to_add"]; ok {
+		trailersSlice, ok := responseTrailers.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("trailers_to_add is not an array")
+		}
+
+		for _, trailerObj := range trailersSlice {
+			trailerMap, ok := trailerObj.(map[string]interface{})
+			if !ok {
+				continue
 			}
+
+			key, ok := trailerMap["key"].(string)
+			if !ok {
+				continue
+			}
+
+			value, ok := trailerMap["value"].(string)
+			if !ok {
+				continue
+			}
+
 			headerValueOption := &ext_core_v3.HeaderValueOption{
-				Header: headerValue,
+				Header: &ext_core_v3.HeaderValue{Key: key, Value: value},
 			}
-			responseHeaders = append(responseHeaders, headerValueOption)
+
+			setTrailers = append(setTrailers, headerValueOption)
 		}
 	}
 
-	return responseHeaders, nil
+	// Process trailers to remove
+	if removeTrailersVal, ok := decisionMap["trailers_to_remove"]; ok {
+		removeTrailersSlice, ok := removeTrailersVal.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("trailers_to_remove is not an array")
+		}
+		for _, v := range removeTrailersSlice {
+			trailer, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("trailer to remove is not a string")
+			}
+			removeTrailers = append(removeTrailers, trailer)
+		}
+	}
+
+	// Check if there are any trailer mutations
+	if len(setTrailers) == 0 && len(removeTrailers) == 0 {
+		return nil, nil // No trailer mutations
+	}
+
+	headerMutation := &ext_proc_v3.HeaderMutation{
+		SetHeaders:    setTrailers,
+		RemoveHeaders: removeTrailers,
+	}
+
+	return headerMutation, nil
 }
