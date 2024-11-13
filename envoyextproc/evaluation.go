@@ -3,13 +3,11 @@ package envoyextproc
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/logging"
-	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
@@ -18,28 +16,30 @@ import (
 	"github.com/open-policy-agent/opa/tracing"
 )
 
-// ExtProcEvalContext defines the interface for the evaluation context in the `ext_proc` context.
-type ExtProcEvalContext interface {
+// EvalContext - This is an SPI that has to be provided if the envoy external authorization
+// is used from outside the plugin, i.e. as a Go module
+type EvalContext interface {
 	ParsedQuery() ast.Body
 	Store() storage.Store
 	Compiler() *ast.Compiler
 	Runtime() *ast.Term
-	PreparedQueryDoOnce() *sync.Once
 	InterQueryBuiltinCache() iCache.InterQueryCache
-	PreparedQuery() *rego.PreparedEvalQuery
-	SetPreparedQuery(*rego.PreparedEvalQuery)
 	Logger() logging.Logger
 	Config() *config.Config
 	DistributedTracing() tracing.Options
+	CreatePreparedQueryOnce(opts PrepareQueryOpts) (*rego.PreparedEvalQuery, error)
 }
 
-// ExtProcEval evaluates the input against the provided ExtProcEvalContext and yields a result.
-func ExtProcEval(ctx context.Context, evalContext ExtProcEvalContext, input ast.Value, result *ExtProcEvalResult, opts ...func(*rego.Rego)) error {
+// PrepareQueryOpts - Options to prepare a Rego query to be passed to the CreatePreparedQueryOnce method
+type PrepareQueryOpts struct {
+	Opts        []func(*rego.Rego)
+	PrepareOpts []rego.PrepareOption
+}
+
+// Eval - Evaluates an input against a provided EvalContext and yields result
+func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result *EvalResult, evalOpts ...rego.EvalOption) error {
 	var err error
 	logger := evalContext.Logger()
-
-	// Log when starting the evaluation process
-	logger.Info("Starting ExtProcEval")
 
 	if result.Txn == nil {
 		var txn storage.Transaction
@@ -51,14 +51,10 @@ func ExtProcEval(ctx context.Context, evalContext ExtProcEvalContext, input ast.
 		}
 		defer txnClose(ctx, err)
 		result.Txn = txn
-		logger.Info("Started new transaction")
 	}
 
-	// Log before retrieving revision information
-	logger.Info("Getting revision information")
 	err = getRevision(ctx, evalContext.Store(), result.Txn, result)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to get revision information: %v", err))
 		return err
 	}
 
@@ -68,54 +64,49 @@ func ExtProcEval(ctx context.Context, evalContext ExtProcEvalContext, input ast.
 		"input": input,
 		"query": evalContext.ParsedQuery().String(),
 		"txn":   result.TxnID,
-	}).Debug("Executing policy query")
+	}).Debug("Executing policy query.")
 
-	// Create a mock result set to simulate a policy evaluation result
-	mockResult := rego.ResultSet{
-		{
-			Expressions: []*rego.ExpressionValue{
-				{
-					Text:  "mock_decision",
-					Value: "allowed",
-				},
+	pq, err := evalContext.CreatePreparedQueryOnce(
+		PrepareQueryOpts{
+			Opts: []func(*rego.Rego){
+				rego.Metrics(result.Metrics),
+				rego.ParsedQuery(evalContext.ParsedQuery()),
+				rego.Compiler(evalContext.Compiler()),
+				rego.Store(evalContext.Store()),
+				rego.Transaction(result.Txn),
+				rego.Runtime(evalContext.Runtime()),
+				rego.EnablePrintStatements(true),
+				rego.DistributedTracingOpts(evalContext.DistributedTracing()),
 			},
-		},
+		})
+	if err != nil {
+		return err
 	}
-	logger.Info("Using mock result set for policy evaluation")
-	rs := mockResult
 
-	// Actual policy evaluation
-	/*
-		logger.Info("Constructing prepared query")
-		err = constructPreparedQuery(evalContext, result.Txn, result.Metrics, opts)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to construct prepared query: %v", err))
-			return err
-		}
+	ph := hook{logger: logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})}
 
-		ph := extProcHook{logger: logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})}
+	var ndbCache builtins.NDBCache
+	if evalContext.Config().NDBuiltinCacheEnabled() {
+		ndbCache = builtins.NDBCache{}
+	}
 
-		var ndbCache builtins.NDBCache
-		if evalContext.Config().NDBuiltinCacheEnabled() {
-			ndbCache = builtins.NDBCache{}
-		}
-
-		logger.Info("Evaluating policy with prepared query")
-		rs, err = evalContext.PreparedQuery().Eval(
-			ctx,
+	evalOpts = append(
+		[]rego.EvalOption{
 			rego.EvalParsedInput(input),
 			rego.EvalTransaction(result.Txn),
 			rego.EvalMetrics(result.Metrics),
 			rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
 			rego.EvalPrintHook(&ph),
 			rego.EvalNDBuiltinCache(ndbCache),
-		)
+		},
+		evalOpts...,
+	)
 
-		if err != nil {
-			logger.Error(fmt.Sprintf("Error during policy evaluation: %v", err))
-			return err
-		}
-	*/
+	var rs rego.ResultSet
+	rs, err = pq.Eval(
+		ctx,
+		evalOpts...,
+	)
 
 	switch {
 	case err != nil:
@@ -126,37 +117,12 @@ func ExtProcEval(ctx context.Context, evalContext ExtProcEvalContext, input ast.
 		return fmt.Errorf("multiple evaluation results")
 	}
 
-	result.NDBuiltinCache = builtins.NDBCache{}
+	result.NDBuiltinCache = ndbCache
 	result.Decision = rs[0].Expressions[0].Value
-
-	logger.Info(fmt.Sprintf("Final decision: %v", result.Decision))
 	return nil
 }
 
-// Constructing the prepared query
-func constructPreparedQuery(evalContext ExtProcEvalContext, txn storage.Transaction, m metrics.Metrics, opts []func(*rego.Rego)) error {
-	var err error
-	var pq rego.PreparedEvalQuery
-	evalContext.PreparedQueryDoOnce().Do(func() {
-		opts = append(opts,
-			rego.Metrics(m),
-			rego.ParsedQuery(evalContext.ParsedQuery()),
-			rego.Compiler(evalContext.Compiler()),
-			rego.Store(evalContext.Store()),
-			rego.Transaction(txn),
-			rego.Runtime(evalContext.Runtime()),
-			rego.EnablePrintStatements(true),
-			rego.DistributedTracingOpts(evalContext.DistributedTracing()),
-		)
-
-		pq, err = rego.New(opts...).PrepareForEval(context.Background())
-		evalContext.SetPreparedQuery(&pq)
-	})
-
-	return err
-}
-
-func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction, result *ExtProcEvalResult) error {
+func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction, result *EvalResult) error {
 	revisions := map[string]string{}
 
 	names, err := bundle.ReadBundleNamesFromStore(ctx, store, txn)
@@ -172,6 +138,7 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 		revisions[name] = r
 	}
 
+	// Check legacy bundle manifest in the store
 	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, txn)
 	if err != nil && !storage.IsNotFound(err) {
 		return err
@@ -182,11 +149,11 @@ func getRevision(ctx context.Context, store storage.Store, txn storage.Transacti
 	return nil
 }
 
-type extProcHook struct {
+type hook struct {
 	logger logging.Logger
 }
 
-func (h *extProcHook) Print(pctx print.Context, msg string) error {
+func (h *hook) Print(pctx print.Context, msg string) error {
 	h.logger.Info("%v: %s", pctx.Location, msg)
 	return nil
 }
