@@ -1850,12 +1850,12 @@ func TestPluginStatusLifeCycle(t *testing.T) {
 		t.Fatalf("Unexpected error: %s", err)
 	}
 
-	p := NewAuthZ(m, &Config{
+	p := New(m, &Config{
 		Addr: ":0",
 	})
-	m.Register(AuthZPluginName, p)
+	m.Register(PluginName, p)
 
-	assertAuthZPluginState(t, m, plugins.StateNotReady)
+	assertPluginState(t, m, plugins.StateNotReady)
 
 	ctx := context.Background()
 	err = m.Start(ctx)
@@ -1865,14 +1865,14 @@ func TestPluginStatusLifeCycle(t *testing.T) {
 
 	// Wait a short time for the plugin to reach OK state
 	// If it hits this timeout something bad has almost definitely happened
-	waitForAuthZPluginState(t, m, plugins.StateOK, 5*time.Second)
+	waitForPluginState(t, m, plugins.StateOK, 5*time.Second)
 
 	m.Stop(ctx)
 
-	assertAuthZPluginState(t, m, plugins.StateNotReady)
+	assertPluginState(t, m, plugins.StateNotReady)
 }
 
-func waitForAuthZPluginState(t *testing.T, m *plugins.Manager, desired plugins.State, timeout time.Duration) {
+func waitForPluginState(t *testing.T, m *plugins.Manager, desired plugins.State, timeout time.Duration) {
 	after := time.After(timeout)
 	tick := time.Tick(10 * time.Microsecond)
 	for {
@@ -1880,7 +1880,7 @@ func waitForAuthZPluginState(t *testing.T, m *plugins.Manager, desired plugins.S
 		case <-after:
 			t.Fatal("Plugin failed to reach OK state in time")
 		case <-tick:
-			state, err := getAuthZPluginState(t, m)
+			state, err := getPluginState(t, m)
 			if err == nil && state == desired {
 				return
 			}
@@ -1888,11 +1888,11 @@ func waitForAuthZPluginState(t *testing.T, m *plugins.Manager, desired plugins.S
 	}
 }
 
-func getAuthZPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error) {
+func getPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error) {
 	t.Helper()
-	status, ok := m.PluginStatus()[AuthZPluginName]
+	status, ok := m.PluginStatus()[PluginName]
 	if !ok {
-		return plugins.StateNotReady, fmt.Errorf("expected plugin %s to be in manager plugin status map", AuthZPluginName)
+		return plugins.StateNotReady, fmt.Errorf("expected plugin %s to be in manager plugin status map", PluginName)
 	}
 	if status == nil {
 		return plugins.StateNotReady, errors.New("expected a non-nil status value")
@@ -1900,9 +1900,9 @@ func getAuthZPluginState(t *testing.T, m *plugins.Manager) (plugins.State, error
 	return status.State, nil
 }
 
-func assertAuthZPluginState(t *testing.T, m *plugins.Manager, expected plugins.State) {
+func assertPluginState(t *testing.T, m *plugins.Manager, expected plugins.State) {
 	t.Helper()
-	state, err := getAuthZPluginState(t, m)
+	state, err := getPluginState(t, m)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2008,7 +2008,7 @@ func testAuthzServerWithModule(module string, path string, customConfig *Config,
 		}
 	}
 
-	s := NewAuthZ(m, &cfg)
+	s := New(m, &cfg)
 	return s.(*envoyExtAuthzGrpcServer)
 }
 

@@ -10,34 +10,34 @@ import (
 	"github.com/open-policy-agent/opa-envoy-plugin/internal"
 )
 
-// AuthZFactory defines the factory for the AuthZ plugin.
-type AuthZFactory struct{}
+// Factory defines the interface OPA uses to instantiate a plugin.
+type Factory struct{}
 
 // ExtProcFactory defines the factory for the ExtProc plugin.
 type ExtProcFactory struct{}
 
 // Plugin names to register with the OPA plugin manager.
 const (
-	AuthZPluginName   = "envoy_ext_authz_grpc"
+	PluginName        = internal.PluginName
 	ExtProcPluginName = "envoy_ext_proc_grpc"
 )
 
-// New method for AuthZFactory.
-func (AuthZFactory) New(m *plugins.Manager, config interface{}) plugins.Plugin {
-	return internal.NewAuthZ(m, config.(*internal.Config))
+// New returns the object initialized with a valid plugin configuration.
+func (Factory) New(m *plugins.Manager, config interface{}) plugins.Plugin {
+	return internal.New(m, config.(*internal.Config))
 }
 
-// Validate method for AuthZFactory.
-func (AuthZFactory) Validate(m *plugins.Manager, configBytes []byte) (interface{}, error) {
+// Validate returns a valid configuration to instantiate the plugin.
+func (Factory) Validate(m *plugins.Manager, configBytes []byte) (interface{}, error) {
 	return internal.Validate(m, configBytes)
 }
 
-// New method for ExtProcFactory.
+// New returns the object initialized with a valid plugin configuration.
 func (ExtProcFactory) New(m *plugins.Manager, config interface{}) plugins.Plugin {
 	return internal.NewExtProc(m, config.(*internal.Config))
 }
 
-// Validate method for ExtProcFactory.
+// Validate returns a valid configuration to instantiate the plugin.
 func (ExtProcFactory) Validate(m *plugins.Manager, configBytes []byte) (interface{}, error) {
 	return internal.Validate(m, configBytes)
 }
