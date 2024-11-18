@@ -72,8 +72,8 @@ const (
 	defaultGRPCServerMaxReceiveMessageSize = 1024 * 1024 * 4
 	defaultGRPCServerMaxSendMessageSize    = math.MaxInt32
 
-	// AuthZPluginName and ExtProcPluginName Respective names to register with the OPA plugin manager
-	AuthZPluginName   = "envoy_ext_authz_grpc"
+	// PluginName and ExtProcPluginName Respective names to register with the OPA plugin manager
+	PluginName        = "envoy_ext_authz_grpc"
 	ExtProcPluginName = "envoy_ext_proc_grpc"
 )
 
@@ -147,7 +147,6 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 	return &cfg, nil
 }
 
-// New returns a Plugin that implements the Envoy ext_authz API with the background context.
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 	return newWithContext(context.Background(), m, cfg)
 }
@@ -207,7 +206,7 @@ func newWithContext(ctx context.Context, m *plugins.Manager, cfg *Config) plugin
 		plugin.manager.PrometheusRegister().MustRegister(errorCounter)
 	}
 
-	m.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
+	m.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 
 	return plugin
 }
@@ -302,7 +301,7 @@ func (p *envoyExtAuthzGrpcServer) CreatePreparedQueryOnce(opts envoyauth.Prepare
 }
 
 func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
-	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 	go p.listen()
 	return nil
 }
@@ -313,8 +312,12 @@ func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 	p.server.GracefulStop()
 =======
 	p.server.Stop()
+<<<<<<< HEAD
 	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
 >>>>>>> db9929d1 (Updating internal code for the ext_proc feature)
+=======
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
+>>>>>>> c0220b73 (Moving back to original Factory and PluginName for authz backwards compatibility)
 }
 
 func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
@@ -371,7 +374,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 		"enable-reflection": p.cfg.EnableReflection,
 	}).Info("Starting gRPC server.")
 
-	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateOK})
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
 
 	if err := p.server.Serve(l); err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
@@ -379,7 +382,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	}
 
 	logger.Info("Listener exited.")
-	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
+	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
 // Check is envoy.service.auth.v3.Authorization/Check
