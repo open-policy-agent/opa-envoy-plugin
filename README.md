@@ -190,3 +190,7 @@ Dependencies are managed with [Modules](https://github.com/golang/go/wiki/Module
 If you need to add or update dependencies, modify the `go.mod` file or
 use `go get`. More information is available [here](https://github.com/golang/go/wiki/Modules#how-to-upgrade-and-downgrade-dependencies).
 Finally commit all changes to the repository.
+
+## Maintainers
+
+Please see the [MAINTAINERS.md](./MAINTAINERS.md) file for maintainer details.
