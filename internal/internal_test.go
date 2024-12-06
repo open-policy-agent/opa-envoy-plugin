@@ -8,8 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
-	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -17,6 +15,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
@@ -26,7 +27,6 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
@@ -34,6 +34,8 @@ import (
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/util"
+
+	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 )
 
 const exampleAllowedRequest = `{
