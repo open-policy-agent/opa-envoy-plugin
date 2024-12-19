@@ -114,6 +114,43 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 	return false, result.invalidDecisionErr()
 }
 
+// GetRequestQueryParametersToRemove - returns the query parameters to remove from the original request before dispatching
+// it to the upstream
+func (result *EvalResult) GetRequestQueryParametersToRemove() ([]string, error) {
+	queryParamsToRemove := []string{}
+
+	switch decision := result.Decision.(type) {
+	case bool:
+		return queryParamsToRemove, nil
+	case map[string]interface{}:
+		var ok bool
+		var val interface{}
+
+		if val, ok = decision["query_parameters_to_remove"]; !ok {
+			return queryParamsToRemove, nil
+		}
+
+		switch val := val.(type) {
+		case []string:
+			return val, nil
+		case []interface{}:
+			for _, vval := range val {
+				param, ok := vval.(string)
+				if !ok {
+					return nil, fmt.Errorf("type assertion error, expected query_parameters_to_remove value to be of type 'string' but got '%T'", vval)
+				}
+
+				queryParamsToRemove = append(queryParamsToRemove, param)
+			}
+			return queryParamsToRemove, nil
+		default:
+			return nil, fmt.Errorf("type assertion error, expected query_parameters_to_remove to be of type '[]string' but got '%T'", val)
+		}
+	}
+
+	return nil, result.invalidDecisionErr()
+}
+
 // GetRequestHTTPHeadersToRemove - returns the http headers to remove from the original request before dispatching
 // it to the upstream
 func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {

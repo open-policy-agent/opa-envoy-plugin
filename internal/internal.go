@@ -525,11 +525,20 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 				return nil, stop, internalErr
 			}
 
+			var queryParamsToRemove []string
+			queryParamsToRemove, err = result.GetRequestQueryParametersToRemove()
+			if err != nil {
+				err = errors.Wrap(err, "failed to get request query parameters to remove")
+				internalErr = newInternalError(EnvoyAuthResultErr, err)
+				return nil, stop, internalErr
+			}
+
 			resp.HttpResponse = &ext_authz_v3.CheckResponse_OkResponse{
 				OkResponse: &ext_authz_v3.OkHttpResponse{
-					Headers:              responseHeaders,
-					HeadersToRemove:      headersToRemove,
-					ResponseHeadersToAdd: responseHeadersToAdd,
+					Headers:                 responseHeaders,
+					HeadersToRemove:         headersToRemove,
+					ResponseHeadersToAdd:    responseHeadersToAdd,
+					QueryParametersToRemove: queryParamsToRemove,
 				},
 			}
 		} else {
