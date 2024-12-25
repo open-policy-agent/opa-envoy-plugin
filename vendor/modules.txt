@@ -79,7 +79,7 @@ github.com/dgraph-io/ristretto/z/simd
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
-# github.com/envoyproxy/go-control-plane v0.13.1
+# github.com/envoyproxy/go-control-plane/envoy v1.32.2
 ## explicit; go 1.21
 github.com/envoyproxy/go-control-plane/envoy/annotations
 github.com/envoyproxy/go-control-plane/envoy/api/v2/core
@@ -426,6 +426,8 @@ github.com/spf13/viper/internal/encoding/json
 github.com/spf13/viper/internal/encoding/toml
 github.com/spf13/viper/internal/encoding/yaml
 github.com/spf13/viper/internal/features
+# github.com/stretchr/testify v1.10.0
+## explicit; go 1.17
 # github.com/subosito/gotenv v1.6.0
 ## explicit; go 1.18
 github.com/subosito/gotenv

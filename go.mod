@@ -1,11 +1,10 @@
 module github.com/open-policy-agent/opa-envoy-plugin
 
 go 1.22.0
-
 toolchain go1.23.1
 
 require (
-	github.com/envoyproxy/go-control-plane v0.13.1
+	github.com/envoyproxy/go-control-plane/envoy v1.32.2
 	github.com/golang/protobuf v1.5.4
 	github.com/open-policy-agent/opa v0.70.0
 	github.com/pkg/errors v0.9.1
@@ -37,6 +36,7 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/viper v1.18.2 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
