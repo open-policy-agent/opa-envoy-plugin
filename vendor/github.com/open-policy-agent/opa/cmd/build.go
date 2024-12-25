@@ -14,12 +14,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/cmd/internal/env"
-	"github.com/open-policy-agent/opa/compile"
-	"github.com/open-policy-agent/opa/keys"
-	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/compile"
+	"github.com/open-policy-agent/opa/v1/keys"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 const defaultPublicKeyID = "default"
@@ -47,6 +47,7 @@ type buildParams struct {
 	v0Compatible       bool
 	v1Compatible       bool
 	followSymlinks     bool
+	wasmIncludePrint   bool
 }
 
 func newBuildParams() buildParams {
@@ -54,6 +55,17 @@ func newBuildParams() buildParams {
 		capabilities: newcapabilitiesFlag(),
 		target:       util.NewEnumFlag(compile.TargetRego, compile.Targets),
 	}
+}
+
+func (p *buildParams) regoVersion() ast.RegoVersion {
+	if p.v0Compatible {
+		// v0 takes precedence over v1
+		return ast.RegoV0
+	}
+	if p.v1Compatible {
+		return ast.RegoV1
+	}
+	return ast.DefaultRegoVersion
 }
 
 func init() {
@@ -241,6 +253,7 @@ against OPA v0.22.0:
 	buildCommand.Flags().StringVarP(&buildParams.outputFile, "output", "o", "bundle.tar.gz", "set the output filename")
 	buildCommand.Flags().StringVar(&buildParams.ns, "partial-namespace", "partial", "set the namespace to use for partially evaluated files in an optimized bundle")
 	buildCommand.Flags().BoolVar(&buildParams.followSymlinks, "follow-symlinks", false, "follow symlinks in the input set of paths when building the bundle")
+	buildCommand.Flags().BoolVar(&buildParams.wasmIncludePrint, "wasm-include-print", false, "enable print statements inside of WebAssembly modules compiled by the compiler")
 
 	addBundleModeFlag(buildCommand.Flags(), &buildParams.bundleMode, false)
 	addIgnoreFlag(buildCommand.Flags(), &buildParams.ignore)
@@ -290,7 +303,7 @@ func dobuild(params buildParams, args []string) error {
 	if params.capabilities.C != nil {
 		capabilities = params.capabilities.C
 	} else {
-		capabilities = ast.CapabilitiesForThisVersion()
+		capabilities = ast.CapabilitiesForThisVersion(ast.CapabilitiesRegoVersion(params.regoVersion()))
 	}
 
 	compiler := compile.New().
@@ -309,14 +322,7 @@ func dobuild(params buildParams, args []string) error {
 		WithPartialNamespace(params.ns).
 		WithFollowSymlinks(params.followSymlinks)
 
-	regoVersion := ast.DefaultRegoVersion
-	if params.v0Compatible {
-		// v0 takes precedence over v1
-		regoVersion = ast.RegoV0
-	} else if params.v1Compatible {
-		regoVersion = ast.RegoV1
-	}
-	compiler = compiler.WithRegoVersion(regoVersion)
+	compiler = compiler.WithRegoVersion(params.regoVersion())
 
 	if params.revision.isSet {
 		compiler = compiler.WithRevision(*params.revision.v)
@@ -332,6 +338,10 @@ func dobuild(params buildParams, args []string) error {
 
 	if params.target.String() == compile.TargetPlan {
 		compiler = compiler.WithEnablePrintStatements(true)
+	}
+
+	if params.target.String() == compile.TargetWasm {
+		compiler = compiler.WithEnablePrintStatements(params.wasmIncludePrint)
 	}
 
 	err = compiler.Build(context.Background())
