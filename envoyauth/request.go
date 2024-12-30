@@ -2,7 +2,6 @@ package envoyauth
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
@@ -29,58 +28,59 @@ var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 // RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
 func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]interface{}, error) {
 	var err error
-	var input map[string]interface{}
+	var input = make(map[string]interface{})
 
-	var bs, rawBody []byte
+	var rawBody []byte
 	var path, body string
-	var headers, version map[string]string
+	var headers map[string]string
+	var version map[string]string
 
-	// NOTE: The path/body/headers blocks look silly, but they allow us to retrieve
-	//       the parts of the incoming request we care about, without having to convert
-	//       the entire v2 message into v3. It's nested, each level has a different type,
-	//       etc -- we only care for its JSON representation as fed into evaluation later.
 	switch req := req.(type) {
 	case *ext_authz_v3.CheckRequest:
-		bs, err = protojson.Marshal(req)
-		if err != nil {
-			return nil, err
+		attributes := req.GetAttributes()
+		if attributes == nil || attributes.GetRequest() == nil || attributes.GetRequest().GetHttp() == nil {
+			return nil, fmt.Errorf("missing required attributes in v3 CheckRequest")
 		}
-		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
-		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
-		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
-		rawBody = req.GetAttributes().GetRequest().GetHttp().GetRawBody()
+		httpReq := attributes.GetRequest().GetHttp()
+		path = httpReq.GetPath()
+		body = httpReq.GetBody()
+		headers = httpReq.GetHeaders()
+		rawBody = httpReq.GetRawBody()
 		version = v3Info
+
 	case *ext_authz_v2.CheckRequest:
-		bs, err = json.Marshal(req)
-		if err != nil {
-			return nil, err
+		attributes := req.GetAttributes()
+		if attributes == nil || attributes.GetRequest() == nil || attributes.GetRequest().GetHttp() == nil {
+			return nil, fmt.Errorf("missing required attributes in v2 CheckRequest")
 		}
-		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
-		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
-		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		httpReq := attributes.GetRequest().GetHttp()
+		path = httpReq.GetPath()
+		body = httpReq.GetBody()
+		headers = httpReq.GetHeaders()
 		version = v2Info
+
+	default:
+		return nil, fmt.Errorf("unsupported request type: %T", req)
 	}
 
-	err = util.UnmarshalJSON(bs, &input)
-	if err != nil {
-		return nil, err
-	}
+	// Directly map fields to the input.
 	input["version"] = version
+	input["path"] = path
+	input["headers"] = headers
+	input["body"] = body
 
 	parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error parsing path and query: %w", err)
 	}
-
 	input["parsed_path"] = parsedPath
 	input["parsed_query"] = parsedQuery
 
 	if !skipRequestBodyParse {
 		parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error parsing request body: %w", err)
 		}
-
 		input["parsed_body"] = parsedBody
 		input["truncated_body"] = isBodyTruncated
 	}
