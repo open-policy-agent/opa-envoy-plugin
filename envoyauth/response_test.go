@@ -46,6 +46,74 @@ func TestIsAllowed(t *testing.T) {
 	}
 }
 
+func TestGetRequestQueryParametersToRemove(t *testing.T) {
+	tests := map[string]struct {
+		decision interface{}
+		exp      []string
+		wantErr  bool
+	}{
+		"bool_eval_result": {
+			true,
+			nil,
+			false,
+		},
+		"invalid_eval_result": {
+			"hello",
+			nil,
+			true,
+		},
+		"empty_map_result": {
+			map[string]interface{}{},
+			nil,
+			false,
+		},
+		"bad_param_value": {
+			map[string]interface{}{"query_parameters_to_remove": "test"},
+			nil,
+			true,
+		},
+		"string_array_param_value": {
+			map[string]interface{}{"query_parameters_to_remove": []string{"foo", "bar"}},
+			[]string{"foo", "bar"},
+			false,
+		},
+		"interface_array_param_value": {
+			map[string]interface{}{"query_parameters_to_remove": []interface{}{"foo", "bar", "fuz"}},
+			[]string{"foo", "bar", "fuz"},
+			false,
+		},
+		"interface_array_bad_param_value": {
+			map[string]interface{}{"query_parameters_to_remove": []interface{}{1}},
+			nil,
+			true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			er := EvalResult{
+				Decision: tc.decision,
+			}
+
+			result, err := er.GetRequestQueryParametersToRemove()
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Expected error but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Unexpected error %v", err)
+				}
+
+				if !reflect.DeepEqual(tc.exp, result) {
+					t.Fatalf("Expected result %v but got %v", tc.exp, result)
+				}
+			}
+		})
+	}
+}
+
 func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 	tests := map[string]struct {
 		decision interface{}
@@ -54,22 +122,22 @@ func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 	}{
 		"bool_eval_result": {
 			true,
-			[]string{},
+			nil,
 			false,
 		},
 		"invalid_eval_result": {
 			"hello",
-			[]string{},
+			nil,
 			true,
 		},
 		"empty_map_result": {
 			map[string]interface{}{},
-			[]string{},
+			nil,
 			false,
 		},
 		"bad_header_value": {
 			map[string]interface{}{"request_headers_to_remove": "test"},
-			[]string{},
+			nil,
 			true,
 		},
 		"string_array_header_value": {
@@ -84,7 +152,7 @@ func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 		},
 		"interface_array_bad_header_value": {
 			map[string]interface{}{"request_headers_to_remove": []interface{}{1}},
-			[]string{},
+			nil,
 			true,
 		},
 	}

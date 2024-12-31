@@ -114,41 +114,49 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 	return false, result.invalidDecisionErr()
 }
 
-// GetRequestHTTPHeadersToRemove - returns the http headers to remove from the original request before dispatching
-// it to the upstream
-func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
-	headersToRemove := []string{}
-
+func (result *EvalResult) getStringSliceFromDecision(fieldName string) ([]string, error) {
 	switch decision := result.Decision.(type) {
 	case bool:
-		return headersToRemove, nil
+		return nil, nil
 	case map[string]interface{}:
 		var ok bool
 		var val interface{}
 
-		if val, ok = decision["request_headers_to_remove"]; !ok {
-			return headersToRemove, nil
+		if val, ok = decision[fieldName]; !ok {
+			return nil, nil
 		}
 
 		switch val := val.(type) {
 		case []string:
 			return val, nil
 		case []interface{}:
-			for _, vval := range val {
-				header, ok := vval.(string)
+			ss := make([]string, len(val))
+			for i, v := range val {
+				s, ok := v.(string)
 				if !ok {
-					return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove value to be of type 'string' but got '%T'", vval)
+					return nil, fmt.Errorf("type assertion error, expected %s value to be of type 'string' but got '%T'", fieldName, v)
 				}
-
-				headersToRemove = append(headersToRemove, header)
+				ss[i] = s
 			}
-			return headersToRemove, nil
+			return ss, nil
 		default:
-			return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove to be of type '[]string' but got '%T'", val)
+			return nil, fmt.Errorf("type assertion error, expected %s to be of type '[]string' but got '%T'", fieldName, val)
 		}
 	}
 
 	return nil, result.invalidDecisionErr()
+}
+
+// GetRequestQueryParametersToRemove - returns the query parameters to remove from the original request before dispatching
+// it to the upstream
+func (result *EvalResult) GetRequestQueryParametersToRemove() ([]string, error) {
+	return result.getStringSliceFromDecision("query_parameters_to_remove")
+}
+
+// GetRequestHTTPHeadersToRemove - returns the http headers to remove from the original request before dispatching
+// it to the upstream
+func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
+	return result.getStringSliceFromDecision("request_headers_to_remove")
 }
 
 // GetResponseHTTPHeaders - returns the http headers to return if they are part of the decision
