@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
@@ -159,68 +160,30 @@ func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
 	return result.getStringSliceFromDecision("request_headers_to_remove")
 }
 
-// GetResponseHTTPHeaders - returns the http headers to return if they are part of the decision
-func (result *EvalResult) GetResponseHTTPHeaders() (http.Header, error) {
-	var responseHeaders = make(http.Header)
-
+func (result *EvalResult) getHeadersFromDecision(fieldName string) ([]*ext_core_v3.HeaderValueOption, error) {
 	switch decision := result.Decision.(type) {
 	case bool:
-		return responseHeaders, nil
+		return nil, nil
 	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["headers"]; !ok {
-			return responseHeaders, nil
+		val, ok := decision[fieldName]
+		if !ok {
+			return nil, nil
 		}
 
-		err := transformToHTTPHeaderFormat(val, &responseHeaders)
-		if err != nil {
-			return nil, err
-		}
-
-		return responseHeaders, nil
+		return transformHeadersToEnvoy(val)
+	default:
+		return nil, result.invalidDecisionErr()
 	}
-
-	return nil, result.invalidDecisionErr()
 }
 
 // GetResponseEnvoyHeaderValueOptions - returns the http headers to return if they are part of the decision as envoy header value options
 func (result *EvalResult) GetResponseEnvoyHeaderValueOptions() ([]*ext_core_v3.HeaderValueOption, error) {
-	headers, err := result.GetResponseHTTPHeaders()
-	if err != nil {
-		return nil, err
-	}
-
-	return transformHTTPHeaderToEnvoyHeaderValueOption(headers)
+	return result.getHeadersFromDecision("headers")
 }
 
 // GetResponseHTTPHeadersToAdd - returns the http headers to send to the downstream client
 func (result *EvalResult) GetResponseHTTPHeadersToAdd() ([]*ext_core_v3.HeaderValueOption, error) {
-	var responseHeaders = make(http.Header)
-
-	finalHeaders := []*ext_core_v3.HeaderValueOption{}
-
-	switch decision := result.Decision.(type) {
-	case bool:
-		return finalHeaders, nil
-	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["response_headers_to_add"]; !ok {
-			return finalHeaders, nil
-		}
-
-		err := transformToHTTPHeaderFormat(val, &responseHeaders)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, result.invalidDecisionErr()
-	}
-
-	return transformHTTPHeaderToEnvoyHeaderValueOption(responseHeaders)
+	return result.getHeadersFromDecision("response_headers_to_add")
 }
 
 // HasResponseBody returns true if the decision defines a body (only true for structured decisions)
@@ -299,16 +262,16 @@ func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 
 // GetDynamicMetadata returns the dynamic metadata to return if part of the decision
 func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
-	var (
-		val interface{}
-		ok  bool
-	)
 	switch decision := result.Decision.(type) {
 	case bool:
 		if decision {
 			return nil, fmt.Errorf("dynamic metadata undefined for boolean decision")
 		}
 	case map[string]interface{}:
+		var (
+			val interface{}
+			ok  bool
+		)
 		if val, ok = decision["dynamic_metadata"]; !ok {
 			return nil, nil
 		}
@@ -346,74 +309,63 @@ func (result *EvalResult) GetResponseEnvoyHTTPStatus() (*ext_type_v3.HttpStatus,
 	return status, nil
 }
 
-func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
-
-	takeResponseHeaders := func(headers map[string]interface{}, targetHeaders *http.Header) error {
-		for key, value := range headers {
-			switch values := value.(type) {
-			case string:
-				targetHeaders.Add(key, values)
-			case []string:
-				for _, v := range values {
-					targetHeaders.Add(key, v)
-				}
-			case []interface{}:
-				for _, value := range values {
-					if headerVal, ok := value.(string); ok {
-						targetHeaders.Add(key, headerVal)
-					} else {
-						return fmt.Errorf("invalid value type for header '%s'", key)
-					}
-				}
-			default:
-				return fmt.Errorf("type assertion error for header '%s'", key)
-			}
-		}
-		return nil
+func makeHeaderValueOption(k, v string) *ext_core_v3.HeaderValueOption {
+	return &ext_core_v3.HeaderValueOption{
+		Header: &ext_core_v3.HeaderValue{
+			Key:   k,
+			Value: v,
+		},
 	}
-
-	switch input := input.(type) {
-	case []interface{}:
-		for _, val := range input {
-			headers, ok := val.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
-			}
-
-			err := takeResponseHeaders(headers, result)
-			if err != nil {
-				return err
-			}
-		}
-
-	case map[string]interface{}:
-		err := takeResponseHeaders(input, result)
-		if err != nil {
-			return err
-		}
-
-	default:
-		return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
-	}
-
-	return nil
 }
 
-func transformHTTPHeaderToEnvoyHeaderValueOption(headers http.Header) ([]*ext_core_v3.HeaderValueOption, error) {
-	responseHeaders := []*ext_core_v3.HeaderValueOption{}
-
-	for key, values := range headers {
-		for idx := range values {
-			headerValue := &ext_core_v3.HeaderValue{
-				Key:   key,
-				Value: values[idx],
+func makeEnvoyHeaderValueOptionsFromHeadersMap(hvo []*ext_core_v3.HeaderValueOption, headers map[string]any) ([]*ext_core_v3.HeaderValueOption, error) {
+	hvo = slices.Grow(hvo, len(headers))
+	for key, value := range headers {
+		switch val := value.(type) {
+		case string:
+			hvo = append(hvo, makeHeaderValueOption(key, val))
+		case []string:
+			hvo = slices.Grow(hvo, len(val))
+			for _, v := range val {
+				hvo = append(hvo, makeHeaderValueOption(key, v))
 			}
-			headerValueOption := &ext_core_v3.HeaderValueOption{
-				Header: headerValue,
+		case []interface{}:
+			hvo = slices.Grow(hvo, len(val))
+			for _, v := range val {
+				s, ok := v.(string)
+				if !ok {
+					return nil, fmt.Errorf("invalid value type %T for header '%s'", v, key)
+				}
+				hvo = append(hvo, makeHeaderValueOption(key, s))
 			}
-			responseHeaders = append(responseHeaders, headerValueOption)
+		default:
+			return nil, fmt.Errorf("type assertion error for header '%s'", key)
 		}
 	}
+	return hvo, nil
+}
 
-	return responseHeaders, nil
+func transformHeadersToEnvoy(input any) ([]*ext_core_v3.HeaderValueOption, error) {
+	switch input := input.(type) {
+	case []any:
+		var (
+			hvo []*ext_core_v3.HeaderValueOption
+			err error
+		)
+		for _, val := range input {
+			headers, ok := val.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
+			}
+
+			hvo, err = makeEnvoyHeaderValueOptionsFromHeadersMap(hvo, headers)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return hvo, nil
+	case map[string]any:
+		return makeEnvoyHeaderValueOptionsFromHeadersMap(nil, input)
+	}
+	return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
 }

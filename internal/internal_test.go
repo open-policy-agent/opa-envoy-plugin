@@ -1708,15 +1708,29 @@ func TestCheckAllowObjectDecisionMultiValuedHeaders(t *testing.T) {
 		t.Fatalf("Expected two headers to add but got %v", headersToAdd)
 	}
 
+	expected := []*ext_core.HeaderValueOption{
+		{
+			Header: &ext_core.HeaderValue{
+				Key:   "x",
+				Value: "hello",
+			},
+		},
+		{
+			Header: &ext_core.HeaderValue{
+				Key:   "x",
+				Value: "world",
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(expected, headersToAdd) {
+		t.Fatal("Unexpected response_headers_to_add")
+	}
+
 	headers := response.GetHeaders()
 	if len(headers) != 0 {
 		t.Fatalf("Expected no headers but got %v", len(headers))
 	}
-
-	expectedHeaders := http.Header{}
-	expectedHeaders.Set("x", "hello")
-	expectedHeaders.Add("x", "world")
-	assertHeaderValues(t, expectedHeaders, headersToAdd)
 }
 
 func TestCheckAllowObjectDecision(t *testing.T) {
@@ -2283,31 +2297,6 @@ func assertHeaders(t *testing.T, actualHeaders []*ext_core.HeaderValueOption, ex
 			if expVal != value {
 				t.Fatalf("Expected value for header \"%v\" is \"%v\" but got \"%v\"", key, expVal, value)
 			}
-		}
-	}
-}
-
-func assertHeaderValues(t *testing.T, expectedHeaders http.Header, headersToAdd []*ext_core.HeaderValueOption) {
-	t.Helper()
-	for _, header := range headersToAdd {
-		key := header.GetHeader().GetKey()
-		value := header.GetHeader().GetValue()
-
-		expectedValues := expectedHeaders[key]
-		if expectedValues == nil {
-			t.Fatalf("unexpected header '%s'", key)
-		}
-
-		found := false
-		for _, expectedValue := range expectedValues {
-			if expectedValue == value {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			t.Fatalf("unexpected value '%s' for header '%s'", value, key)
 		}
 	}
 }
