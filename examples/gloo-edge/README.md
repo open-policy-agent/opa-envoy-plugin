@@ -115,11 +115,11 @@ import input.attributes.request.http as http_request
 
 default allow = false
 
-allow {
+allow if {
     action_allowed
 }
 
-action_allowed {
+action_allowed if {
   http_request.method == "GET"
 }
 ```
