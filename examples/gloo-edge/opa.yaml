@@ -61,11 +61,11 @@ data:
 
     default allow = false
 
-    allow {
+    allow if {
         action_allowed
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "GET"
     }
 
