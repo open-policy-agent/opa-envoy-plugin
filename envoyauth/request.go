@@ -31,7 +31,7 @@ func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregis
 	var err error
 	var input map[string]interface{}
 
-	var bs, rawBody []byte
+	var rawBody []byte
 	var path, body string
 	var headers, version map[string]string
 
@@ -41,18 +41,18 @@ func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregis
 	//       etc -- we only care for its JSON representation as fed into evaluation later.
 	switch req := req.(type) {
 	case *ext_authz_v3.CheckRequest:
-		bs, err = protojson.Marshal(req)
-		if err != nil {
-			return nil, err
-		}
+		input = protomap(req.ProtoReflect())
 		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
 		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
 		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
 		rawBody = req.GetAttributes().GetRequest().GetHttp().GetRawBody()
 		version = v3Info
 	case *ext_authz_v2.CheckRequest:
-		bs, err = json.Marshal(req)
-		if err != nil {
+		var bs []byte
+		if bs, err = json.Marshal(req); err != nil {
+			return nil, err
+		}
+		if err = util.UnmarshalJSON(bs, &input); err != nil {
 			return nil, err
 		}
 		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
@@ -61,10 +61,6 @@ func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregis
 		version = v2Info
 	}
 
-	err = util.UnmarshalJSON(bs, &input)
-	if err != nil {
-		return nil, err
-	}
 	input["version"] = version
 
 	parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
