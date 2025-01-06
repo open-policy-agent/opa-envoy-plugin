@@ -34,6 +34,10 @@ type StopFunc = func()
 // TransactionCloser should be called to abort the transaction
 type TransactionCloser func(ctx context.Context, err error) error
 
+func noopTransactionCloser(context.Context, error) error {
+	return nil // no-op default
+}
+
 // NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics
 func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	var err error
@@ -67,13 +71,9 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 func (result *EvalResult) GetTxn(ctx context.Context, store storage.Store) (storage.Transaction, TransactionCloser, error) {
 	params := storage.TransactionParams{}
 
-	noopCloser := func(ctx context.Context, err error) error {
-		return nil // no-op default
-	}
-
 	txn, err := store.NewTransaction(ctx, params)
 	if err != nil {
-		return nil, noopCloser, err
+		return nil, noopTransactionCloser, err
 	}
 
 	// Setup a closer function that will abort the transaction.

@@ -2138,7 +2138,7 @@ func TestPrometheusMetrics(t *testing.T) {
 
 func TestLogWithASTError(t *testing.T) {
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	err := server.log(context.Background(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
+	err := server.logDecision(context.Background(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
 	if err != nil {
 		panic(err)
 	}
@@ -2149,7 +2149,7 @@ func TestLogWithCancelError(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(nil, withCustomLogger(customLogger))
-	err := server.log(context.Background(), nil, &envoyauth.EvalResult{}, &topdown.Error{
+	err := server.logDecision(context.Background(), nil, &envoyauth.EvalResult{}, &topdown.Error{
 		Code:    topdown.CancelErr,
 		Message: "caller cancelled query execution",
 	})
