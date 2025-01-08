@@ -86,6 +86,8 @@ var defaultGRPCRequestDurationSecondsBuckets = []float64{
 	1,
 }
 
+var checkPromLabels = prometheus.Labels{"handler": "check"}
+
 // Validate receives a slice of bytes representing the plugin's
 // configuration and returns a configuration value that can be used to
 // instantiate the plugin.
@@ -574,19 +576,21 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	if p.cfg.EnablePerformanceMetrics {
 		p.metricAuthzDuration.
-			With(prometheus.Labels{"handler": "check"}).
-			Observe(float64(totalDecisionTime.Seconds()))
+			With(checkPromLabels).
+			Observe(totalDecisionTime.Seconds())
 	}
 
-	logger.WithFields(map[string]interface{}{
-		"query":               p.cfg.parsedQuery.String(),
-		"dry-run":             p.cfg.DryRun,
-		"decision":            result.Decision,
-		"err":                 err,
-		"txn":                 result.TxnID,
-		"metrics":             result.Metrics.All(),
-		"total_decision_time": totalDecisionTime,
-	}).Debug("Returning policy decision.")
+	if logger.GetLevel() == logging.Debug {
+		logger.WithFields(map[string]interface{}{
+			"query":               p.cfg.parsedQuery.String(),
+			"dry-run":             p.cfg.DryRun,
+			"decision":            result.Decision,
+			"err":                 err,
+			"txn":                 result.TxnID,
+			"metrics":             result.Metrics.All(),
+			"total_decision_time": totalDecisionTime,
+		}).Debug("Returning policy decision.")
+	}
 
 	// If dry-run mode, override the Status code to unconditionally Allow the request
 	// DecisionLogging should reflect what "would" have happened
