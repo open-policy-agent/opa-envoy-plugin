@@ -159,8 +159,7 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 			otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)))),
 		)
 		grpcOpts = append(grpcOpts,
-			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(grpcTracingOption...)),
-			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor(grpcTracingOption...)),
+			grpc.StatsHandler(otelgrpc.NewServerHandler(grpcTracingOption...)),
 		)
 	}
 
