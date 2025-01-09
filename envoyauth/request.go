@@ -96,8 +96,9 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 		parsedPathInterface[i] = v
 	}
 
-	parsedQueryInterface := make(map[string]interface{})
-	for paramKey, paramValues := range parsedURL.Query() {
+	query := parsedURL.Query()
+	parsedQueryInterface := make(map[string]interface{}, len(query))
+	for paramKey, paramValues := range query {
 		queryValues := make([]interface{}, len(paramValues))
 		for i, v := range paramValues {
 			queryValues[i] = v

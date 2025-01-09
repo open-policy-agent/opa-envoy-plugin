@@ -10,7 +10,7 @@ import (
 	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	_structpb "github.com/golang/protobuf/ptypes/struct"
-	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
+	"github.com/google/uuid"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
@@ -41,8 +41,6 @@ func noopTransactionCloser(context.Context, error) error {
 
 // NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics
 func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
-	var err error
-
 	er := &EvalResult{
 		Metrics: metrics.New(),
 	}
@@ -52,11 +50,7 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	}
 
 	if er.DecisionID == "" {
-		er.DecisionID, err = util.UUID4()
-	}
-
-	if err != nil {
-		return nil, nil, err
+		er.DecisionID = uuid.NewString()
 	}
 
 	er.Metrics.Timer(metrics.ServerHandler).Start()
