@@ -11,6 +11,7 @@ import (
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/google/uuid"
+	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/builtins"
@@ -60,6 +61,36 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	}
 
 	return er, stop, nil
+}
+
+// ReadRevisions adds bundle revisions to the result.
+func (result *EvalResult) ReadRevisions(ctx context.Context, store storage.Store) error {
+	if result.Txn == nil {
+		return nil
+	}
+	names, err := bundle.ReadBundleNamesFromStore(ctx, store, result.Txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	revisions := make(map[string]string, len(names))
+	for _, name := range names {
+		r, err := bundle.ReadBundleRevisionFromStore(ctx, store, result.Txn, name)
+		if err != nil && !storage.IsNotFound(err) {
+			return err
+		}
+		revisions[name] = r
+	}
+
+	// Check legacy bundle manifest in the store
+	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, result.Txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	result.Revisions = revisions
+	result.Revision = revision
+	return nil
 }
 
 // GetTxn creates a read transaction suitable for the configured EvalResult object

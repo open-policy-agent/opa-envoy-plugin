@@ -651,6 +651,10 @@ func (p *envoyExtAuthzGrpcServer) logDecision(ctx context.Context, input interfa
 		info.NDBuiltinCache = &x
 	}
 
+	if err := result.ReadRevisions(ctx, p.Store()); err != nil {
+		return err
+	}
+
 	return decisionlog.LogDecision(ctx, plugin, info, result, err)
 }
 

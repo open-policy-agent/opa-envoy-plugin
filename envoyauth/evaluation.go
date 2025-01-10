@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/rego"
@@ -51,11 +50,6 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		}
 		defer txnClose(ctx, err)
 		result.Txn = txn
-	}
-
-	err = getRevision(ctx, evalContext.Store(), result.Txn, result)
-	if err != nil {
-		return err
 	}
 
 	result.TxnID = result.Txn.ID()
@@ -121,33 +115,6 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 
 	result.NDBuiltinCache = ndbCache
 	result.Decision = rs[0].Expressions[0].Value
-	return nil
-}
-
-func getRevision(ctx context.Context, store storage.Store, txn storage.Transaction, result *EvalResult) error {
-	revisions := map[string]string{}
-
-	names, err := bundle.ReadBundleNamesFromStore(ctx, store, txn)
-	if err != nil && !storage.IsNotFound(err) {
-		return err
-	}
-
-	for _, name := range names {
-		r, err := bundle.ReadBundleRevisionFromStore(ctx, store, txn, name)
-		if err != nil && !storage.IsNotFound(err) {
-			return err
-		}
-		revisions[name] = r
-	}
-
-	// Check legacy bundle manifest in the store
-	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, txn)
-	if err != nil && !storage.IsNotFound(err) {
-		return err
-	}
-
-	result.Revisions = revisions
-	result.Revision = revision
 	return nil
 }
 
