@@ -433,38 +433,8 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil
 	}
 
-	input, err = envoyauth.RequestToInput(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
-	if err != nil {
-		internalErr = newInternalError(RequestParseErr, err)
-		return &ext_authz_v3.CheckResponse{
-			Status: &rpc_status.Status{
-				Code:    int32(code.Code_PERMISSION_DENIED),
-				Message: internalErr.Error(),
-			},
-			HttpResponse: &ext_authz_v3.CheckResponse_DeniedResponse{
-				DeniedResponse: &ext_authz_v3.DeniedHttpResponse{
-					Status: &ext_type_v3.HttpStatus{
-						Code: ext_type_v3.StatusCode(ext_type_v3.StatusCode_BadRequest),
-					},
-					Body: internalErr.Error(),
-				},
-			},
-			DynamicMetadata: nil,
-		}, stop, nil
-	}
-
-	if ctx.Err() != nil {
-		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
-		internalErr = newInternalError(CheckRequestTimeoutErr, err)
-		return nil, stop, internalErr
-	}
-
 	var inputValue ast.Value
-	inputValue, err = ast.InterfaceToValue(input)
-	if err != nil {
-		internalErr = newInternalError(InputParseErr, err)
-		return nil, stop, internalErr
-	}
+	inputValue, err = envoyauth.RequestToAstValue(req, logger, p.cfg.protoSet, p.cfg.SkipRequestBodyParse)
 
 	if err = envoyauth.Eval(ctx, p, inputValue, result); err != nil {
 		evalErr = err
