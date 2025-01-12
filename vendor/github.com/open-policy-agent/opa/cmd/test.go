@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,21 +18,21 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/open-policy-agent/opa/internal/pathwatcher"
 	initload "github.com/open-policy-agent/opa/internal/runtime/init"
-	"github.com/open-policy-agent/opa/loader"
 	"github.com/spf13/cobra"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/cmd/internal/env"
-	"github.com/open-policy-agent/opa/compile"
-	"github.com/open-policy-agent/opa/cover"
 	"github.com/open-policy-agent/opa/internal/runtime"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
-	"github.com/open-policy-agent/opa/tester"
-	"github.com/open-policy-agent/opa/topdown"
-	"github.com/open-policy-agent/opa/topdown/lineage"
-	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/compile"
+	"github.com/open-policy-agent/opa/v1/cover"
+	"github.com/open-policy-agent/opa/v1/loader"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/tester"
+	"github.com/open-policy-agent/opa/v1/topdown"
+	"github.com/open-policy-agent/opa/v1/topdown/lineage"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 const (
@@ -115,11 +116,17 @@ func opaTest(args []string, testParams testCommandParams) (int, error) {
 	var bundles map[string]*bundle.Bundle
 	var store storage.Store
 
+	popts := ast.ParserOptions{
+		RegoVersion:       testParams.RegoVersion(),
+		Capabilities:      testParams.capabilities.C,
+		ProcessAnnotation: true,
+	}
+
 	if testParams.bundleMode {
-		bundles, err = tester.LoadBundlesWithRegoVersion(args, filter.Apply, testParams.RegoVersion())
+		bundles, err = tester.LoadBundlesWithParserOptions(args, filter.Apply, popts)
 		store = inmem.NewWithOpts(inmem.OptRoundTripOnWrite(false))
 	} else {
-		modules, store, err = tester.LoadWithRegoVersion(args, filter.Apply, testParams.RegoVersion())
+		modules, store, err = tester.LoadWithParserOptions(args, filter.Apply, popts)
 	}
 
 	if err != nil {
@@ -286,7 +293,7 @@ func processWatcherUpdate(ctx context.Context, testParams testCommandParams, pat
 
 	var loadResult *initload.LoadPathsResult
 
-	err := pathwatcher.ProcessWatcherUpdate(ctx, paths, removed, store, filter.Apply, testParams.bundleMode,
+	err := pathwatcher.ProcessWatcherUpdateForRegoVersion(ctx, testParams.RegoVersion(), paths, removed, store, filter.Apply, testParams.bundleMode,
 		func(ctx context.Context, txn storage.Transaction, loaded *initload.LoadPathsResult) error {
 			if len(loaded.Files.Documents) > 0 || removed != "" {
 				if err := store.Write(ctx, txn, storage.AddOp, storage.Path{}, loaded.Files.Documents); err != nil {
@@ -373,7 +380,7 @@ func compileAndSetupTests(ctx context.Context, testParams testCommandParams, sto
 		if testParams.benchmark {
 			errMsg := "coverage reporting is not supported when benchmarking tests"
 			fmt.Fprintln(testParams.errOutput, errMsg)
-			return nil, nil, fmt.Errorf(errMsg)
+			return nil, nil, errors.New(errMsg)
 		}
 		cov = cover.New()
 		coverTracer = cov
@@ -460,8 +467,6 @@ Example policy (example/authz.rego):
 
 	package authz
 
-	import rego.v1
-
 	allow if {
 		input.path == ["users"]
 		input.method == "POST"
@@ -475,8 +480,6 @@ Example policy (example/authz.rego):
 Example test (example/authz_test.rego):
 
 	package authz_test
-
-	import rego.v1
 
 	import data.authz.allow
 

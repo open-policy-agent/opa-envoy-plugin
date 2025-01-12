@@ -5,7 +5,6 @@ import (
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
@@ -21,15 +20,10 @@ func (e *internalError) Error() string {
 }
 
 // LogDecision - Logs a decision log event
-func LogDecision(ctx context.Context, manager *plugins.Manager, info *server.Info, result *envoyauth.EvalResult, err error) error {
-	plugin := logs.Lookup(manager)
-	if plugin == nil {
-		return nil
-	}
-
+func LogDecision(ctx context.Context, plugin *logs.Plugin, info *server.Info, result *envoyauth.EvalResult, err error) error {
 	info.Revision = result.Revision
 
-	bundles := map[string]server.BundleInfo{}
+	bundles := make(map[string]server.BundleInfo, len(result.Revisions))
 	for name, rev := range result.Revisions {
 		bundles[name] = server.BundleInfo{Revision: rev}
 	}

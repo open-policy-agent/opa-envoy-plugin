@@ -33,11 +33,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/config"
 	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/plugins"
+	"github.com/open-policy-agent/opa/plugins/logs"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/server"
 	"github.com/open-policy-agent/opa/storage"
@@ -47,8 +49,6 @@ import (
 	"github.com/open-policy-agent/opa/util"
 
 	"go.opentelemetry.io/otel/trace"
-
-	_structpb "github.com/golang/protobuf/ptypes/struct"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	internal_util "github.com/open-policy-agent/opa-envoy-plugin/internal/util"
@@ -85,6 +85,8 @@ var defaultGRPCRequestDurationSecondsBuckets = []float64{
 	0.1,
 	1,
 }
+
+var checkPromLabels = prometheus.Labels{"handler": "check"}
 
 // Validate receives a slice of bytes representing the plugin's
 // configuration and returns a configuration value that can be used to
@@ -157,8 +159,7 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 			otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}, b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)))),
 		)
 		grpcOpts = append(grpcOpts,
-			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(grpcTracingOption...)),
-			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor(grpcTracingOption...)),
+			grpc.StatsHandler(otelgrpc.NewServerHandler(grpcTracingOption...)),
 		)
 	}
 
@@ -385,7 +386,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	var evalErr error
 	var internalErr *Error
 	start := time.Now()
-	logger := p.manager.Logger()
+	logger := p.Logger()
 
 	result, stopeval, err := envoyauth.NewEvalResult()
 	if err != nil {
@@ -417,10 +418,10 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 				p.metricErrorCounter.With(prometheus.Labels{"reason": internalErr.Code}).Inc()
 			}
 		}
-		logErr := p.log(ctx, input, result, err)
+		logErr := p.logDecision(ctx, input, result, err)
 		if logErr != nil {
 			_ = txnClose(ctx, logErr) // Ignore error
-			p.Logger().WithFields(map[string]interface{}{"err": logErr}).Debug("Error when logging event")
+			logger.WithFields(map[string]interface{}{"err": logErr}).Debug("Error when logging event")
 			if p.cfg.EnablePerformanceMetrics {
 				p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_log_error"}).Inc()
 			}
@@ -442,8 +443,6 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		return nil, stop, internalErr
 	}
 
-	resp := &ext_authz_v3.CheckResponse{}
-
 	var allowed bool
 	allowed, err = result.IsAllowed()
 	if err != nil {
@@ -451,6 +450,8 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		internalErr = newInternalError(EnvoyAuthResultErr, err)
 		return nil, stop, internalErr
 	}
+
+	resp := &ext_authz_v3.CheckResponse{}
 
 	status := int32(code.Code_PERMISSION_DENIED)
 	if allowed {
@@ -468,7 +469,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 			return nil, stop, internalErr
 		}
 
-		var dynamicMetadata *_structpb.Struct
+		var dynamicMetadata *structpb.Struct
 		dynamicMetadata, err = result.GetDynamicMetadata()
 		if err != nil {
 			err = errors.Wrap(err, "failed to get dynamic metadata")
@@ -544,19 +545,21 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	if p.cfg.EnablePerformanceMetrics {
 		p.metricAuthzDuration.
-			With(prometheus.Labels{"handler": "check"}).
-			Observe(float64(totalDecisionTime.Seconds()))
+			With(checkPromLabels).
+			Observe(totalDecisionTime.Seconds())
 	}
 
-	p.manager.Logger().WithFields(map[string]interface{}{
-		"query":               p.cfg.parsedQuery.String(),
-		"dry-run":             p.cfg.DryRun,
-		"decision":            result.Decision,
-		"err":                 err,
-		"txn":                 result.TxnID,
-		"metrics":             result.Metrics.All(),
-		"total_decision_time": totalDecisionTime,
-	}).Debug("Returning policy decision.")
+	if logger.GetLevel() == logging.Debug {
+		logger.WithFields(map[string]interface{}{
+			"query":               p.cfg.parsedQuery.String(),
+			"dry-run":             p.cfg.DryRun,
+			"decision":            result.Decision,
+			"err":                 err,
+			"txn":                 result.TxnID,
+			"metrics":             result.Metrics.All(),
+			"total_decision_time": totalDecisionTime,
+		}).Debug("Returning policy decision.")
+	}
 
 	// If dry-run mode, override the Status code to unconditionally Allow the request
 	// DecisionLogging should reflect what "would" have happened
@@ -571,21 +574,22 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	// Add decision_id to dynamic metadata
 	if resp.DynamicMetadata == nil {
-		resp.DynamicMetadata = &_structpb.Struct{
-			Fields: map[string]*_structpb.Value{},
+		resp.DynamicMetadata = &structpb.Struct{
+			Fields: make(map[string]*structpb.Value, 1),
 		}
 	}
 
-	resp.DynamicMetadata.Fields["decision_id"] = &_structpb.Value{
-		Kind: &_structpb.Value_StringValue{
-			StringValue: result.DecisionID,
-		},
-	}
+	resp.DynamicMetadata.Fields["decision_id"] = structpb.NewStringValue(result.DecisionID)
 
 	return resp, stop, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, result *envoyauth.EvalResult, err error) error {
+func (p *envoyExtAuthzGrpcServer) logDecision(ctx context.Context, input interface{}, result *envoyauth.EvalResult, err error) error {
+	plugin := logs.Lookup(p.manager)
+	if plugin == nil {
+		return nil
+	}
+
 	info := &server.Info{
 		Timestamp: time.Now(),
 		Input:     &input,
@@ -613,7 +617,7 @@ func (p *envoyExtAuthzGrpcServer) log(ctx context.Context, input interface{}, re
 		info.NDBuiltinCache = &x
 	}
 
-	return decisionlog.LogDecision(ctx, p.manager, info, result, err)
+	return decisionlog.LogDecision(ctx, plugin, info, result, err)
 }
 
 func stringPathToDataRef(s string) (r ast.Ref) {

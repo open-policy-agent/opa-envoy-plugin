@@ -130,6 +130,7 @@ func TestEval(t *testing.T) {
 	ctx := context.Background()
 
 	logger := loggingtest.New()
+	logger.SetLevel(logging.Debug)
 	server, err := testAuthzServer(logger)
 	if err != nil {
 		t.Fatal(err)

@@ -17,7 +17,28 @@ import (
 func BenchmarkCheck(b *testing.B) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
-		panic(err)
+		b.Fatal(err)
+	}
+
+	server := testAuthzServer(nil)
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		output, err := server.Check(ctx, &req)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if output.Status.Code != int32(code.Code_OK) {
+			b.Fatal("Expected request to be allowed but got:", output)
+		}
+	}
+}
+
+func BenchmarkCheck_withCustomLogger(b *testing.B) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		b.Fatal(err)
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))

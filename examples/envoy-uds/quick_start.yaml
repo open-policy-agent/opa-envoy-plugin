@@ -206,36 +206,36 @@ data:
 
     default allow = false
 
-    token = {"valid": valid, "payload": payload} {
+    token = {"valid": valid, "payload": payload} if {
         [_, encoded] := split(http_request.headers.authorization, " ")
         [valid, _, payload] := io.jwt.decode_verify(encoded, {"secret": "secret"})
     }
 
-    allow {
+    allow if {
         is_token_valid
         action_allowed
     }
 
-    is_token_valid {
+    is_token_valid if {
       token.valid
       now := time.now_ns() / 1000000000
       token.payload.nbf <= now
       now < token.payload.exp
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "GET"
       token.payload.role == "guest"
       glob.match("/people*", [], http_request.path)
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "GET"
       token.payload.role == "admin"
       glob.match("/people*", [], http_request.path)
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "POST"
       token.payload.role == "admin"
       glob.match("/people", [], http_request.path)

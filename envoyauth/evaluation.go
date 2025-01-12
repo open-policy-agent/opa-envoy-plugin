@@ -60,11 +60,13 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 
 	result.TxnID = result.Txn.ID()
 
-	logger.WithFields(map[string]interface{}{
-		"input": input,
-		"query": evalContext.ParsedQuery().String(),
-		"txn":   result.TxnID,
-	}).Debug("Executing policy query.")
+	if logger.GetLevel() == logging.Debug {
+		logger.WithFields(map[string]interface{}{
+			"input": input,
+			"query": evalContext.ParsedQuery().String(),
+			"txn":   result.TxnID,
+		}).Debug("Executing policy query.")
+	}
 
 	pq, err := evalContext.CreatePreparedQueryOnce(
 		PrepareQueryOpts{

@@ -175,7 +175,7 @@ deploy-ci: docker-login ensure-release-dir start-builder ci-build-linux ci-build
 
 .PHONY: test
 test: generate
-	$(DISABLE_CGO) $(GO) test -v -bench=. $(PACKAGES)
+	$(DISABLE_CGO) $(GO) test -v -bench=. -benchmem $(PACKAGES)
 
 .PHONY: test-e2e
 test-e2e:
