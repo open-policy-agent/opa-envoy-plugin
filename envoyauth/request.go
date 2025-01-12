@@ -2,8 +2,8 @@ package envoyauth
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
+	"github.com/open-policy-agent/opa/ast"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -26,62 +26,67 @@ import (
 var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
 var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
 
-// RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
-func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]interface{}, error) {
-	var err error
-	var input map[string]interface{}
+func RequestToAstValue(req interface{}, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (ast.Value, error) {
+	var (
+		headers         map[string]string
+		body            string
+		rawBody         []byte
+		method          string
+		path            string
+		version         map[string]string
+		parsedPath      []interface{}
+		parsedQuery     map[string]interface{}
+		parsedBody      interface{}
+		isBodyTruncated bool
+		err             error
+	)
 
-	var rawBody []byte
-	var path, body string
-	var headers, version map[string]string
-
-	// NOTE: The path/body/headers blocks look silly, but they allow us to retrieve
-	//       the parts of the incoming request we care about, without having to convert
-	//       the entire v2 message into v3. It's nested, each level has a different type,
-	//       etc -- we only care for its JSON representation as fed into evaluation later.
-	switch req := req.(type) {
+	// Extract fields based on request type
+	switch r := req.(type) {
 	case *ext_authz_v3.CheckRequest:
-		input = protomap(req.ProtoReflect())
-		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
-		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
-		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
-		rawBody = req.GetAttributes().GetRequest().GetHttp().GetRawBody()
+		headers = r.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		body = r.GetAttributes().GetRequest().GetHttp().GetBody()
+		rawBody = r.GetAttributes().GetRequest().GetHttp().GetRawBody()
+		method = r.GetAttributes().GetRequest().GetHttp().GetMethod()
+		path = r.GetAttributes().GetRequest().GetHttp().GetPath()
 		version = v3Info
 	case *ext_authz_v2.CheckRequest:
-		var bs []byte
-		if bs, err = json.Marshal(req); err != nil {
-			return nil, err
-		}
-		if err = util.UnmarshalJSON(bs, &input); err != nil {
-			return nil, err
-		}
-		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
-		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
-		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		headers = r.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		body = r.GetAttributes().GetRequest().GetHttp().GetBody()
+		method = r.GetAttributes().GetRequest().GetHttp().GetMethod()
+		path = r.GetAttributes().GetRequest().GetHttp().GetPath()
 		version = v2Info
+	default:
+		return nil, fmt.Errorf("unsupported request type")
 	}
 
-	input["version"] = version
+	parsedPath, parsedQuery, err = getParsedPathAndQuery(path)
 
-	parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
 	if err != nil {
 		return nil, err
 	}
 
-	input["parsed_path"] = parsedPath
-	input["parsed_query"] = parsedQuery
-
 	if !skipRequestBodyParse {
-		parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
+		parsedBody, isBodyTruncated, err = getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
 		if err != nil {
 			return nil, err
 		}
-
-		input["parsed_body"] = parsedBody
-		input["truncated_body"] = isBodyTruncated
 	}
 
-	return input, nil
+	astObject := ast.NewObject()
+	createRequestHTTP(astObject, headers, method, version, parsedBody, isBodyTruncated, skipRequestBodyParse)
+
+	err = createAstParsedPath(astObject, parsedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = createAstParsedQuery(astObject, parsedQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	return astObject, nil
 }
 
 func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {
@@ -107,6 +112,69 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	}
 
 	return parsedPathInterface, parsedQueryInterface, nil
+}
+
+func createAstParsedPath(astObj ast.Object, parsedPath []interface{}) error {
+	astTerms := make([]*ast.Term, len(parsedPath))
+	for i, segment := range parsedPath {
+		term, err := ast.InterfaceToValue(segment)
+		if err != nil {
+			return fmt.Errorf("failed to convert parsed path to AST at index %d: %w", i, err)
+		}
+		astTerms[i] = ast.NewTerm(term)
+	}
+
+	astArray := ast.NewArray(astTerms...)
+	astTerm := ast.NewTerm(astArray)
+
+	astObj.Insert(ast.StringTerm("parsed_path"), astTerm)
+	return nil
+}
+
+func createAstParsedQuery(astObj ast.Object, parsedQuery map[string]interface{}) error {
+	kvs := make([][2]*ast.Term, 0, len(parsedQuery)*2)
+
+	for key, value := range parsedQuery {
+		termKey, err := ast.InterfaceToValue(key)
+		if err != nil {
+			return fmt.Errorf("failed to convert query param key to AST: %w", err)
+		}
+
+		termValue, err := ast.InterfaceToValue(value)
+		if err != nil {
+			return fmt.Errorf("failed to convert query param value to AST: %w", err)
+		}
+
+		kvs = append(kvs, [2]*ast.Term{ast.NewTerm(termKey), ast.NewTerm(termValue)})
+	}
+
+	astObject := ast.NewObject(kvs...)
+	astTerm := ast.NewTerm(astObject)
+
+	astObj.Insert(ast.StringTerm("parsed_query"), astTerm)
+
+	return nil
+}
+
+func createRequestHTTP(astObj ast.Object, headers map[string]string, method string, version map[string]string, parsedBody interface{}, isBodyTruncated bool, skipBody bool) {
+	httpObj := ast.NewObject()
+	addAstField(httpObj, "headers", headers)
+	addAstField(httpObj, "method", method)
+	addAstField(httpObj, "version", version)
+
+	if !skipBody {
+		addAstField(httpObj, "parsed_body", parsedBody)
+		addAstField(httpObj, "truncated_body", isBodyTruncated)
+	}
+
+	astObj.Insert(ast.StringTerm("request"), ast.NewTerm(httpObj))
+}
+
+func addAstField(astObject ast.Object, key string, value interface{}) {
+	astValue, err := ast.InterfaceToValue(value)
+	if err == nil {
+		astObject.Insert(ast.StringTerm(key), ast.NewTerm(astValue))
+	}
 }
 
 func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []interface{}, protoSet *protoregistry.Files) (interface{}, bool, error) {
