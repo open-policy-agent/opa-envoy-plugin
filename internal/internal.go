@@ -142,8 +142,12 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 	return &cfg, nil
 }
 
-// New returns a Plugin that implements the Envoy ext_authz API.
+// New returns a Plugin that implements the Envoy ext_authz API with the background context.
 func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
+	return newWithContext(context.Background(), m, cfg)
+}
+
+func newWithContext(ctx context.Context, m *plugins.Manager, cfg *Config) plugins.Plugin {
 	grpcOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSize),
 		grpc.MaxSendMsgSize(cfg.GRPCMaxSendMsgSize),
@@ -168,7 +172,7 @@ func New(m *plugins.Manager, cfg *Config) plugins.Plugin {
 		cfg:                    *cfg,
 		server:                 grpc.NewServer(grpcOpts...),
 		preparedQueryDoOnce:    new(sync.Once),
-		interQueryBuiltinCache: iCache.NewInterQueryCache(m.InterQueryBuiltinCacheConfig()),
+		interQueryBuiltinCache: iCache.NewInterQueryCacheWithContext(ctx, m.InterQueryBuiltinCacheConfig()),
 		distributedTracingOpts: distributedTracingOpts,
 	}
 
