@@ -13,7 +13,6 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -164,6 +163,16 @@ func benchMain(args []string, params benchmarkCommandParams, w io.Writer, r benc
 		errRender := renderBenchmarkError(params, err, w)
 		return 1, errRender
 	}
+
+	resultHandler := rego.GenerateJSON(func(*ast.Term, *rego.EvalContext) (interface{}, error) {
+		// Do nothing with the result, as we are only interested in benchmarking evaluation —
+		// not the potentially slow process of rendering the result.
+		// Undefined / empty results will still be handled normally (fail the benchmark unless --fail
+		// is set to false).
+		return nil, nil
+	})
+
+	ectx.regoArgs = append(ectx.regoArgs, resultHandler)
 
 	var benchFunc func(context.Context, ...rego.EvalOption) error
 	rg := rego.New(ectx.regoArgs...)
@@ -608,12 +617,7 @@ func renderBenchmarkResult(params benchmarkCommandParams, br testing.BenchmarkRe
 			})
 		}
 
-		var keys []string
-		for k := range br.Extra {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
+		for _, k := range util.KeysSorted(br.Extra) {
 			data = append(data, []string{k, prettyFormatFloat(br.Extra[k])})
 		}
 
