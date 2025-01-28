@@ -197,10 +197,11 @@ func (p *Plugin) Reconfigure(ctx context.Context, config interface{}) {
 	params.Context = storage.NewContext() // TODO(sr): metrics?
 	err := storage.Txn(ctx, p.manager.Store, params, func(txn storage.Transaction) error {
 		opts := &bundle.DeactivateOpts{
-			Ctx:         ctx,
-			Store:       p.manager.Store,
-			Txn:         txn,
-			BundleNames: deletedBundles,
+			Ctx:           ctx,
+			Store:         p.manager.Store,
+			Txn:           txn,
+			BundleNames:   deletedBundles,
+			ParserOptions: p.manager.ParserOptions(),
 		}
 		err := bundle.Deactivate(opts)
 		if err != nil {
@@ -627,6 +628,10 @@ func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle, is
 
 		compiler = compiler.WithPathConflictsCheck(storage.NonEmpty(ctx, p.manager.Store, txn)).
 			WithEnablePrintStatements(p.manager.EnablePrintStatements())
+
+		if b.Manifest.Roots != nil {
+			compiler = compiler.WithPathConflictsCheckRoots(*b.Manifest.Roots)
+		}
 
 		var activateErr error
 
