@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/storage"
@@ -208,6 +209,120 @@ func TestGetRequestQueryParametersToRemove(t *testing.T) {
 
 				if !reflect.DeepEqual(tc.exp, result) {
 					t.Fatalf("Expected result %v but got %v", tc.exp, result)
+				}
+			}
+		})
+	}
+}
+
+func TestGetQueryParametersToSet(t *testing.T) {
+	tests := map[string]struct {
+		decision interface{}
+		exp      []*ext_core_v3.QueryParameter
+		wantErr  bool
+	}{
+		"bool_eval_result": {
+			true,
+			nil,
+			false,
+		},
+		"empty_map_result": {
+			map[string]interface{}{},
+			nil,
+			false,
+		},
+		"invalid_type": {
+			map[string]interface{}{
+				"query_parameters_to_set": "invalid",
+			},
+			nil,
+			true,
+		},
+		"invalid_param_type": {
+			map[string]interface{}{
+				"query_parameters_to_set": []interface{}{
+					"invalid",
+				},
+			},
+			nil,
+			true,
+		},
+		"invalid_key_type": {
+			map[string]interface{}{
+				"query_parameters_to_set": []interface{}{
+					map[string]interface{}{
+						"key":   123,
+						"value": "test",
+					},
+				},
+			},
+			nil,
+			true,
+		},
+		"invalid_value_type": {
+			map[string]interface{}{
+				"query_parameters_to_set": []interface{}{
+					map[string]interface{}{
+						"key":   "test",
+						"value": 123,
+					},
+				},
+			},
+			nil,
+			true,
+		},
+		"valid_params": {
+			map[string]interface{}{
+				"query_parameters_to_set": []interface{}{
+					map[string]interface{}{
+						"key":   "param1",
+						"value": "value1",
+					},
+					map[string]interface{}{
+						"key":   "param2",
+						"value": "value2",
+					},
+				},
+			},
+			[]*ext_core_v3.QueryParameter{
+				{
+					Key:   "param1",
+					Value: "value1",
+				},
+				{
+					Key:   "param2",
+					Value: "value2",
+				},
+			},
+			false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			er := EvalResult{
+				Decision: tc.decision,
+			}
+
+			result, err := er.GetRequestQueryParametersToSet()
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Expected error but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Unexpected error %v", err)
+				}
+
+				if len(result) != len(tc.exp) {
+					t.Fatalf("Expected %d parameters but got %d", len(tc.exp), len(result))
+				}
+
+				for i, param := range result {
+					if param.Key != tc.exp[i].Key || param.Value != tc.exp[i].Value {
+						t.Fatalf("Parameter mismatch at index %d. Expected %v but got %v", i, tc.exp[i], param)
+					}
 				}
 			}
 		})

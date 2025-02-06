@@ -1562,6 +1562,64 @@ func TestCheckAllowObjectDecisionReqQueryParamsToRemove(t *testing.T) {
 	}
 }
 
+func TestCheckAllowObjectDecisionReqQueryParamsToSet(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+
+		default allow = true
+
+		query_parameters_to_set := [
+			{"key": "foo", "value": "value1"},
+			{"key": "bar", "value": "value2"}
+		]
+
+		result["allowed"] = allow
+		result["query_parameters_to_set"] = query_parameters_to_set`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	queryParams := response.GetQueryParametersToSet()
+	if len(queryParams) != 2 {
+		t.Fatalf("Expected two query params but got %v", len(queryParams))
+	}
+
+	expectedQueryParamsToSet := []*ext_core.QueryParameter{
+		{
+			Key:   "foo",
+			Value: "value1",
+		},
+		{
+			Key:   "bar",
+			Value: "value2",
+		},
+	}
+
+	for i, param := range queryParams {
+		if !reflect.DeepEqual(expectedQueryParamsToSet[i], param) {
+			t.Fatalf("Expected query param %v but got %v", expectedQueryParamsToSet[i], param)
+		}
+	}
+}
+
 func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {

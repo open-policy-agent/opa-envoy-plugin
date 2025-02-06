@@ -394,3 +394,48 @@ func transformHeadersToEnvoy(input any) ([]*ext_core_v3.HeaderValueOption, error
 	}
 	return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
 }
+
+// GetRequestQueryParametersToSet returns the query parameters to set in the request
+func (result *EvalResult) GetRequestQueryParametersToSet() ([]*ext_core_v3.QueryParameter, error) {
+	switch decision := result.Decision.(type) {
+	case bool:
+		return nil, nil
+	case map[string]interface{}:
+		val, ok := decision["query_parameters_to_set"]
+		if !ok {
+			return nil, nil
+		}
+
+		params, ok := val.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("type assertion error, expected query_parameters_to_set to be of type 'array' but got '%T'", val)
+		}
+
+		result := make([]*ext_core_v3.QueryParameter, 0, len(params))
+		for _, param := range params {
+			paramMap, ok := param.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("type assertion error, expected query parameter to be of type 'object' but got '%T'", param)
+			}
+
+			key, ok := paramMap["key"].(string)
+			if !ok {
+				return nil, fmt.Errorf("type assertion error, expected query parameter key to be of type 'string'")
+			}
+
+			value, ok := paramMap["value"].(string)
+			if !ok {
+				return nil, fmt.Errorf("type assertion error, expected query parameter value to be of type 'string'")
+			}
+
+			result = append(result, &ext_core_v3.QueryParameter{
+				Key:   key,
+				Value: value,
+			})
+		}
+
+		return result, nil
+	}
+
+	return nil, result.invalidDecisionErr()
+}
