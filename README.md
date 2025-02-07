@@ -1,6 +1,6 @@
 # opa-envoy-plugin
 
-[![Build Status](https://github.com/open-policy-agent/opa-envoy-plugin/workflows/Post%20Merge/badge.svg?branch=main)](https://github.com/open-policy-agent/opa-envoy-plugin/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/open-policy-agent/opa-envoy-plugin)](https://goreportcard.com/report/github.com/open-policy-agent/opa-envoy-plugin)
+[![Build Status](https://github.com/open-policy-agent/opa-envoy-plugin/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/open-policy-agent/opa-envoy-plugin/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/open-policy-agent/opa-envoy-plugin)](https://goreportcard.com/report/github.com/open-policy-agent/opa-envoy-plugin)
 
 This repository contains an extended version of OPA (**OPA-Envoy**) that allows you to enforce OPA policies with Envoy.
 
