@@ -384,7 +384,7 @@ func getHeadersWithTransformation[T any](
 		}
 		return transformFunc(val)
 	default:
-		return zero, fmt.Errorf("invalid decision type")
+		return zero, fmt.Errorf("illegal value for policy evaluation result: %T", decision)
 	}
 }
 
