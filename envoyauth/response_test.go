@@ -373,7 +373,7 @@ func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
 	}
 }
 
-func TestGetResponseHeaders(t *testing.T) {
+func TestGetResponseHeaderValueOptions(t *testing.T) {
 	input := make(map[string]interface{})
 	er := EvalResult{
 		Decision: input,
@@ -454,6 +454,93 @@ func TestGetResponseHeaders(t *testing.T) {
 
 	if len(result) != 2 {
 		t.Fatalf("Expected two header but got %v", len(result))
+	}
+}
+
+func TestGetResponseHeaders(t *testing.T) {
+	input := make(map[string]interface{})
+	er := EvalResult{
+		Decision: input,
+	}
+
+	result, err := er.GetResponseHTTPHeaders()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Fatal("Expected no headers")
+	}
+
+	badHeader := "test"
+	input["headers"] = badHeader
+
+	_, err = er.GetResponseHTTPHeaders()
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	testHeaders := make(map[string]interface{})
+	testHeaders["foo"] = "bar"
+	input["headers"] = testHeaders
+
+	result, err = er.GetResponseHTTPHeaders()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("Expected one header but got %v", len(result))
+	}
+
+	testHeaders["baz"] = 1
+
+	_, err = er.GetResponseHTTPHeaders()
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	input["headers"] = []interface{}{
+		map[string]interface{}{
+			"foo": "bar",
+		},
+		map[string]interface{}{
+			"foo": "baz",
+		},
+	}
+
+	result, err = er.GetResponseHTTPHeaders()
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result.Values("foo")) != 2 {
+		t.Fatalf("Expected two header values but got %v", result.Values("foo"))
+	}
+
+	seen := map[string]int{}
+	for _, values := range result {
+		for _, value := range values {
+			seen[value]++
+		}
+	}
+
+	if seen["bar"] != 1 || seen["baz"] != 1 {
+		t.Errorf("expected 'bar' and 'baz', got %v", seen)
+	}
+
+	testAddHeaders := make(map[string]interface{})
+	testAddHeaders["foo"] = []string{"bar", "baz"}
+	input["headers"] = testAddHeaders
+
+	result, err = er.GetResponseHTTPHeaders()
+
+	if err != nil {
+		t.Fatalf("Expected no error but got %v", err)
+	}
+
+	if len(result.Values("foo")) != 2 {
+		t.Fatalf("Expected two header but got %v", len(result.Values("foo")))
 	}
 }
 
