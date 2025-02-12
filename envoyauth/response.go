@@ -370,7 +370,7 @@ func (result *EvalResult) getHTTPHeadersFromDecision(fieldName string) (http.Hea
 func getHeadersWithTransformation[T any](
 	decision any,
 	fieldName string,
-	transformFunc func(any) (T, error),
+	transformFunc func([]map[string]interface{}) (T, error),
 ) (T, error) {
 	var zero T
 
@@ -382,41 +382,49 @@ func getHeadersWithTransformation[T any](
 		if !ok {
 			return zero, nil
 		}
-		return transformFunc(val)
+
+		var headersList []map[string]interface{}
+
+		switch v := val.(type) {
+		case map[string]interface{}:
+			headersList = []map[string]interface{}{v}
+		case []interface{}:
+			for _, item := range v {
+				if headers, ok := item.(map[string]interface{}); ok {
+					headersList = append(headersList, headers)
+				} else {
+					return zero, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", item)
+				}
+			}
+		default:
+			return zero, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", v)
+		}
+
+		return transformFunc(headersList)
+
 	default:
 		return zero, fmt.Errorf("illegal value for policy evaluation result: %T", decision)
 	}
 }
 
-func transformHeadersToEnvoy(input any) ([]*ext_core_v3.HeaderValueOption, error) {
-	switch input := input.(type) {
-	case []any:
-		var (
-			hvo []*ext_core_v3.HeaderValueOption
-			err error
-		)
-		for _, val := range input {
-			headers, ok := val.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
-			}
+func transformHeadersToEnvoy(headersList []map[string]interface{}) ([]*ext_core_v3.HeaderValueOption, error) {
+	var hvo []*ext_core_v3.HeaderValueOption
+	var err error
 
-			hvo, err = makeEnvoyHeaderValueOptionsFromHeadersMap(hvo, headers)
-			if err != nil {
-				return nil, err
-			}
+	for _, headers := range headersList {
+		hvo, err = makeEnvoyHeaderValueOptionsFromHeadersMap(hvo, headers)
+		if err != nil {
+			return nil, err
 		}
-		return hvo, nil
-	case map[string]any:
-		return makeEnvoyHeaderValueOptionsFromHeadersMap(nil, input)
 	}
-	return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
+
+	return hvo, nil
 }
 
-func transformToHTTPHeaderFormat(input interface{}) (http.Header, error) {
+func transformToHTTPHeaderFormat(headersList []map[string]interface{}) (http.Header, error) {
 	result := make(http.Header)
 
-	takeResponseHeaders := func(headers map[string]interface{}) error {
+	for _, headers := range headersList {
 		for key, value := range headers {
 			switch values := value.(type) {
 			case string:
@@ -426,39 +434,17 @@ func transformToHTTPHeaderFormat(input interface{}) (http.Header, error) {
 					result.Add(key, v)
 				}
 			case []interface{}:
-				for _, value := range values {
-					if headerVal, ok := value.(string); ok {
+				for _, v := range values {
+					if headerVal, ok := v.(string); ok {
 						result.Add(key, headerVal)
 					} else {
-						return fmt.Errorf("invalid value type for header '%s'", key)
+						return nil, fmt.Errorf("invalid value type for header '%s'", key)
 					}
 				}
 			default:
-				return fmt.Errorf("type assertion error for header '%s'", key)
+				return nil, fmt.Errorf("type assertion error for header '%s'", key)
 			}
 		}
-		return nil
-	}
-
-	switch input := input.(type) {
-	case []interface{}:
-		for _, val := range input {
-			headers, ok := val.(map[string]interface{})
-			if !ok {
-				return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
-			}
-			if err := takeResponseHeaders(headers); err != nil {
-				return nil, err
-			}
-		}
-
-	case map[string]interface{}:
-		if err := takeResponseHeaders(input); err != nil {
-			return nil, err
-		}
-
-	default:
-		return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
 	}
 
 	return result, nil
