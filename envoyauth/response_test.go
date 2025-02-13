@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -238,50 +239,29 @@ func TestGetQueryParametersToSet(t *testing.T) {
 			nil,
 			true,
 		},
-		"invalid_param_type": {
-			map[string]interface{}{
-				"query_parameters_to_set": []interface{}{
-					"invalid",
-				},
-			},
-			nil,
-			true,
-		},
-		"invalid_key_type": {
-			map[string]interface{}{
-				"query_parameters_to_set": []interface{}{
-					map[string]interface{}{
-						"key":   123,
-						"value": "test",
-					},
-				},
-			},
-			nil,
-			true,
-		},
 		"invalid_value_type": {
 			map[string]interface{}{
-				"query_parameters_to_set": []interface{}{
-					map[string]interface{}{
-						"key":   "test",
-						"value": 123,
-					},
+				"query_parameters_to_set": map[string]interface{}{
+					"test": 123,
 				},
 			},
 			nil,
 			true,
 		},
-		"valid_params": {
+		"invalid_array_value_type": {
 			map[string]interface{}{
-				"query_parameters_to_set": []interface{}{
-					map[string]interface{}{
-						"key":   "param1",
-						"value": "value1",
-					},
-					map[string]interface{}{
-						"key":   "param2",
-						"value": "value2",
-					},
+				"query_parameters_to_set": map[string]interface{}{
+					"test": []interface{}{123},
+				},
+			},
+			nil,
+			true,
+		},
+		"single_value": {
+			map[string]interface{}{
+				"query_parameters_to_set": map[string]interface{}{
+					"param1": "value1",
+					"param2": "value2",
 				},
 			},
 			[]*ext_core_v3.QueryParameter{
@@ -292,6 +272,56 @@ func TestGetQueryParametersToSet(t *testing.T) {
 				{
 					Key:   "param2",
 					Value: "value2",
+				},
+			},
+			false,
+		},
+		"array_values": {
+			map[string]interface{}{
+				"query_parameters_to_set": map[string]interface{}{
+					"param1": []interface{}{"value1", "value2"},
+					"param2": []interface{}{"value3", "value4"},
+				},
+			},
+			[]*ext_core_v3.QueryParameter{
+				{
+					Key:   "param1",
+					Value: "value1",
+				},
+				{
+					Key:   "param1",
+					Value: "value2",
+				},
+				{
+					Key:   "param2",
+					Value: "value3",
+				},
+				{
+					Key:   "param2",
+					Value: "value4",
+				},
+			},
+			false,
+		},
+		"mixed_values": {
+			map[string]interface{}{
+				"query_parameters_to_set": map[string]interface{}{
+					"param1": "single",
+					"param2": []interface{}{"multi1", "multi2"},
+				},
+			},
+			[]*ext_core_v3.QueryParameter{
+				{
+					Key:   "param1",
+					Value: "single",
+				},
+				{
+					Key:   "param2",
+					Value: "multi1",
+				},
+				{
+					Key:   "param2",
+					Value: "multi2",
 				},
 			},
 			false,
@@ -318,6 +348,22 @@ func TestGetQueryParametersToSet(t *testing.T) {
 				if len(result) != len(tc.exp) {
 					t.Fatalf("Expected %d parameters but got %d", len(tc.exp), len(result))
 				}
+
+				// sort first by key, then by value
+
+				sort.Slice(result, func(i, j int) bool {
+					if result[i].Key == result[j].Key {
+						return result[i].Value < result[j].Value
+					}
+					return result[i].Key < result[j].Key
+				})
+
+				sort.Slice(tc.exp, func(i, j int) bool {
+					if tc.exp[i].Key == tc.exp[j].Key {
+						return tc.exp[i].Value < tc.exp[j].Value
+					}
+					return tc.exp[i].Key < tc.exp[j].Key
+				})
 
 				for i, param := range result {
 					if param.Key != tc.exp[i].Key || param.Value != tc.exp[i].Value {

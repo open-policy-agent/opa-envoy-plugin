@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -1573,10 +1574,10 @@ func TestCheckAllowObjectDecisionReqQueryParamsToSet(t *testing.T) {
 
 		default allow = true
 
-		query_parameters_to_set := [
-			{"key": "foo", "value": "value1"},
-			{"key": "bar", "value": "value2"}
-		]
+		query_parameters_to_set := {
+			"foo": "value1",
+			"bar": ["value2", "value3"]
+		}
 
 		result["allowed"] = allow
 		result["query_parameters_to_set"] = query_parameters_to_set`
@@ -1598,8 +1599,8 @@ func TestCheckAllowObjectDecisionReqQueryParamsToSet(t *testing.T) {
 	}
 
 	queryParams := response.GetQueryParametersToSet()
-	if len(queryParams) != 2 {
-		t.Fatalf("Expected two query params but got %v", len(queryParams))
+	if len(queryParams) != 3 {
+		t.Fatalf("Expected three query params but got %v", len(queryParams))
 	}
 
 	expectedQueryParamsToSet := []*ext_core.QueryParameter{
@@ -1611,7 +1612,27 @@ func TestCheckAllowObjectDecisionReqQueryParamsToSet(t *testing.T) {
 			Key:   "bar",
 			Value: "value2",
 		},
+		{
+			Key:   "bar",
+			Value: "value3",
+		},
 	}
+
+	// sort first by key, then by value
+
+	sort.Slice(queryParams, func(i, j int) bool {
+		if queryParams[i].Key == queryParams[j].Key {
+			return queryParams[i].Value < queryParams[j].Value
+		}
+		return queryParams[i].Key < queryParams[j].Key
+	})
+
+	sort.Slice(expectedQueryParamsToSet, func(i, j int) bool {
+		if expectedQueryParamsToSet[i].Key == expectedQueryParamsToSet[j].Key {
+			return expectedQueryParamsToSet[i].Value < expectedQueryParamsToSet[j].Value
+		}
+		return expectedQueryParamsToSet[i].Key < expectedQueryParamsToSet[j].Key
+	})
 
 	for i, param := range queryParams {
 		if !reflect.DeepEqual(expectedQueryParamsToSet[i], param) {

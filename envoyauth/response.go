@@ -406,32 +406,34 @@ func (result *EvalResult) GetRequestQueryParametersToSet() ([]*ext_core_v3.Query
 			return nil, nil
 		}
 
-		params, ok := val.([]interface{})
+		params, ok := val.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("type assertion error, expected query_parameters_to_set to be of type 'array' but got '%T'", val)
+			return nil, fmt.Errorf("type assertion error, expected query_parameters_to_set to be a map but got '%T'", val)
 		}
 
-		result := make([]*ext_core_v3.QueryParameter, 0, len(params))
-		for _, param := range params {
-			paramMap, ok := param.(map[string]interface{})
-			if !ok {
-				return nil, fmt.Errorf("type assertion error, expected query parameter to be of type 'object' but got '%T'", param)
-			}
+		var result []*ext_core_v3.QueryParameter
 
-			key, ok := paramMap["key"].(string)
-			if !ok {
-				return nil, fmt.Errorf("type assertion error, expected query parameter key to be of type 'string'")
+		for key, value := range params {
+			switch v := value.(type) {
+			case string:
+				result = append(result, &ext_core_v3.QueryParameter{
+					Key:   key,
+					Value: v,
+				})
+			case []interface{}:
+				for _, item := range v {
+					strItem, ok := item.(string)
+					if !ok {
+						return nil, fmt.Errorf("type assertion error: expected array element to be string but got '%T'", item)
+					}
+					result = append(result, &ext_core_v3.QueryParameter{
+						Key:   key,
+						Value: strItem,
+					})
+				}
+			default:
+				return nil, fmt.Errorf("type assertion error, expected value to be string or array but got '%T'", value)
 			}
-
-			value, ok := paramMap["value"].(string)
-			if !ok {
-				return nil, fmt.Errorf("type assertion error, expected query parameter value to be of type 'string'")
-			}
-
-			result = append(result, &ext_core_v3.QueryParameter{
-				Key:   key,
-				Value: value,
-			})
 		}
 
 		return result, nil
