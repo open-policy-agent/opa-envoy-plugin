@@ -349,41 +349,47 @@ func getHeadersWithTransformation[T any](
 	case bool:
 		return result, nil
 	case map[string]interface{}:
-		val, ok := decision[fieldName]
-		if !ok {
-			return result, nil
-		}
-
-		var headersList []map[string]interface{}
-		switch v := val.(type) {
-		case map[string]interface{}:
-			headersList = []map[string]interface{}{v}
-		case []interface{}:
-			for _, item := range v {
-				if headers, ok := item.(map[string]interface{}); ok {
-					headersList = append(headersList, headers)
-				} else {
-					return result, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", item)
-				}
-			}
-		default:
-			return result, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", v)
+		headersList, err := extractHeadersFromDecision(decision, fieldName)
+		if err != nil {
+			return result, err
 		}
 
 		for _, headers := range headersList {
-			if err := extractHeaders(headers, collector, &result); err != nil {
+			if err := collectHeaderValues(headers, collector, &result); err != nil {
 				return result, err
 			}
 		}
-
 		return result, nil
-
 	default:
 		return result, fmt.Errorf("illegal value for policy evaluation result: %T", decision)
 	}
 }
 
-func extractHeaders[T any](
+func extractHeadersFromDecision(decision map[string]interface{}, fieldName string) ([]map[string]interface{}, error) {
+	val, ok := decision[fieldName]
+	if !ok {
+		return nil, nil
+	}
+
+	switch v := val.(type) {
+	case map[string]interface{}:
+		return []map[string]interface{}{v}, nil
+	case []interface{}:
+		headersList := make([]map[string]interface{}, 0, len(v))
+		for _, item := range v {
+			headers, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", item)
+			}
+			headersList = append(headersList, headers)
+		}
+		return headersList, nil
+	default:
+		return nil, fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", v)
+	}
+}
+
+func collectHeaderValues[T any](
 	headers map[string]interface{},
 	collector func(string, string, *T),
 	result *T,
