@@ -14,6 +14,7 @@ import (
 	"github.com/open-policy-agent/opa/topdown/builtins"
 	"google.golang.org/protobuf/types/known/structpb"
 	"net/http"
+	"slices"
 )
 
 // EvalResult - Captures the result from evaluating a query against an input
@@ -331,16 +332,17 @@ func makeHeaderValueOption(k, v string) *ext_core_v3.HeaderValueOption {
 }
 
 func (result *EvalResult) getHeadersFromDecision(fieldName string) ([]*ext_core_v3.HeaderValueOption, error) {
-	return getHeadersWithTransformation(result.Decision, fieldName, collectEnvoyHeaders)
+	return getHeadersWithTransformation(result.Decision, fieldName, preallocateForEnvoyHeaders, collectEnvoyHeaders)
 }
 
 func (result *EvalResult) getHTTPHeadersFromDecision(fieldName string) (http.Header, error) {
-	return getHeadersWithTransformation(result.Decision, fieldName, collectHTTPHeaders)
+	return getHeadersWithTransformation(result.Decision, fieldName, preallocateForHTTPHeaders, collectHTTPHeaders)
 }
 
 func getHeadersWithTransformation[T any](
 	decision any,
 	fieldName string,
+	preallocate func(*T, int),
 	collector func(string, string, *T),
 ) (T, error) {
 	var result T
@@ -355,7 +357,7 @@ func getHeadersWithTransformation[T any](
 		}
 
 		for _, headers := range headersList {
-			if err := collectHeaderValues(headers, collector, &result); err != nil {
+			if err := collectHeaderValues(headers, preallocate, collector, &result); err != nil {
 				return result, err
 			}
 		}
@@ -391,18 +393,22 @@ func extractHeadersFromDecision(decision map[string]interface{}, fieldName strin
 
 func collectHeaderValues[T any](
 	headers map[string]interface{},
+	preallocate func(*T, int),
 	collector func(string, string, *T),
 	result *T,
 ) error {
 	for key, value := range headers {
 		switch val := value.(type) {
 		case string:
+			preallocate(result, 1)
 			collector(key, val, result)
 		case []string:
+			preallocate(result, len(val))
 			for _, v := range val {
 				collector(key, v, result)
 			}
 		case []interface{}:
+			preallocate(result, len(val))
 			for _, v := range val {
 				s, ok := v.(string)
 				if !ok {
@@ -422,8 +428,15 @@ func collectEnvoyHeaders(key, value string, result *[]*ext_core_v3.HeaderValueOp
 }
 
 func collectHTTPHeaders(key, value string, result *http.Header) {
-	if *result == nil {
-		*result = make(http.Header)
-	}
 	result.Add(key, value)
+}
+
+func preallocateForEnvoyHeaders(result *[]*ext_core_v3.HeaderValueOption, additional int) {
+	*result = slices.Grow(*result, additional)
+}
+
+func preallocateForHTTPHeaders(result *http.Header, additional int) {
+	if *result == nil {
+		*result = make(http.Header, additional)
+	}
 }
