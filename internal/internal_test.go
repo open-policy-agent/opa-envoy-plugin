@@ -282,7 +282,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" ||
+	if event.Error != nil || event.Path != "envoy/authz/result" ||
 		event.Revision != "" || *event.Result == false {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -433,7 +433,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true ||
+	if event.Error != nil || event.Path != "envoy/authz/result" || event.Revision != "" || *event.Result == true ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
@@ -887,7 +887,7 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+	if event.Error == nil || event.Path != "envoy/authz/result" || event.Revision != "" || event.Result != nil ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -1089,7 +1089,7 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+	if event.Error == nil || event.Path != "envoy/authz/result" || event.Revision != "" || event.Result != nil ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -1120,7 +1120,7 @@ func TestCheckDenyWithLoggerV2(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true ||
+	if event.Error != nil || event.Path != "envoy/authz/result" || event.Revision != "" || *event.Result == true ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
@@ -2100,9 +2100,30 @@ func testAuthzServer(customConfig *Config, customPluginFuncs ...customPluginFunc
 				{"method": "GET",  "path": "/productpage"},
 				{"method": "GET",  "path": "/api/v1/products"},
 			],
+		}
+
+		result.allowed = allow
+
+		result.headers = {
+		  "foo": "bar",
+		  "baz": "qux",
+		}
+
+		result.request_headers_to_remove = ["foo", "bar", "baz", "qux"]
+
+		result.query_parameters_to_remove = ["foo", "bar", "baz", "qux"]
+
+		result.query_parameters_to_set = {
+		  "foo": "bar",
+		  "baz": ["qux", "quux"]
+		}
+
+		result.response_headers_to_add = {
+		  "foo": "bar",
+		  "baz": "qux",
 		}`
 
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customConfig, customPluginFuncs...)
+	return testAuthzServerWithModule(module, "envoy/authz/result", customConfig, customPluginFuncs...)
 }
 
 func testAuthzServerWithModule(module string, path string, customConfig *Config, customPluginFuncs ...customPluginFunc) *envoyExtAuthzGrpcServer {
