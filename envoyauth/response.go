@@ -435,8 +435,8 @@ func preallocateForEnvoyHeaders(result *[]*ext_core_v3.HeaderValueOption, additi
 	*result = slices.Grow(*result, additional)
 }
 
-func preallocateForHTTPHeaders(result *http.Header, additional int) {
+func preallocateForHTTPHeaders(result *http.Header, _ int) {
 	if *result == nil {
-		*result = make(http.Header, additional)
+		*result = make(http.Header)
 	}
 }
