@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	_structpb "github.com/golang/protobuf/ptypes/struct"
-	"github.com/open-policy-agent/opa/bundle"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
 	"google.golang.org/protobuf/proto"
 )
 

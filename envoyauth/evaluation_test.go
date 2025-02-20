@@ -6,20 +6,18 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/open-policy-agent/opa/config"
-	"github.com/open-policy-agent/opa/tracing"
-
-	"github.com/open-policy-agent/opa/logging"
-	loggingtest "github.com/open-policy-agent/opa/logging/test"
-	"github.com/open-policy-agent/opa/plugins/logs"
-
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
-	iCache "github.com/open-policy-agent/opa/topdown/cache"
-	"github.com/open-policy-agent/opa/topdown/print"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/config"
+	"github.com/open-policy-agent/opa/v1/logging"
+	loggingtest "github.com/open-policy-agent/opa/v1/logging/test"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	"github.com/open-policy-agent/opa/v1/plugins/logs"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
+	iCache "github.com/open-policy-agent/opa/v1/topdown/cache"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
+	"github.com/open-policy-agent/opa/v1/tracing"
 )
 
 type testPrintHook struct {
@@ -116,7 +114,7 @@ func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_body.firstname == "foo"
 			input.parsed_body.lastname == "bar"
 			print(input.parsed_body)
