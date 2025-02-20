@@ -9,7 +9,7 @@ import (
 
 	"github.com/open-policy-agent/opa-envoy-plugin/plugin"
 	"github.com/open-policy-agent/opa/cmd"
-	"github.com/open-policy-agent/opa/runtime"
+	"github.com/open-policy-agent/opa/v1/runtime"
 )
 
 func main() {

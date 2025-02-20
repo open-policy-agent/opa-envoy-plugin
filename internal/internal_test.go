@@ -27,13 +27,13 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/plugins/logs"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
-	"github.com/open-policy-agent/opa/topdown"
-	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	"github.com/open-policy-agent/opa/v1/plugins/logs"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/topdown"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 const exampleAllowedRequest = `{
@@ -469,7 +469,7 @@ func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
           res := http.send({"url": "%s", "method": "GET"})
           res.status_code == 200
 		}
@@ -952,7 +952,7 @@ func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1150,7 +1150,7 @@ func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
 		package envoy.authz
 
 		default allow = false
-		allow {
+		allow if {
 			resp := http.send({"url": "%s", "method":"GET",
 			  "force_cache": true, "force_cache_duration_seconds": 10})
 			resp.body.count == 1
@@ -1379,7 +1379,7 @@ func TestCheckAllowObjectDecisionDynamicMetadata(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1433,7 +1433,7 @@ func TestCheckAllowObjectDecisionDynamicMetadataDecisionID(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1469,7 +1469,7 @@ func TestCheckAllowBooleanDecisionDynamicMetadata(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 	`
@@ -1499,7 +1499,7 @@ func TestCheckAllowBooleanDecisionDynamicMetadataDecisionID(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 	`
@@ -1573,7 +1573,7 @@ func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1625,7 +1625,7 @@ func TestCheckAllowObjectDecisionResponseHeadersToAdd(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1677,7 +1677,7 @@ func TestCheckAllowObjectDecisionMultiValuedHeaders(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1976,34 +1976,34 @@ func testAuthzServer(customConfig *Config, customPluginFuncs ...customPluginFunc
 
 		default allow = false
 
-		allow {
+		allow if {
 			roles_for_user[r]
 			required_roles[r]
 		}
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 			input.parsed_query.a = ["1", "2"]
 			input.parsed_query.x = ["y"]
 		}
 
-		allow {
+		allow if {
 			input.parsed_body.firstname == "foo"
 			input.parsed_body.lastname == "bar"
 			input.parsed_body.dept.it == "eng"
 		}
 
-		roles_for_user[r] {
+		roles_for_user[r] if {
 			r := user_roles[user_name][_]
 		}
 
-		required_roles[r] {
+		required_roles[r] if {
 			perm := role_perms[r][_]
 			perm.method = http_request.method
 			perm.path = http_request.path
 		}
 
-		user_name = parsed {
+		user_name = parsed if {
 			[_, encoded] := split(http_request.headers.authorization, " ")
 			[parsed, _] := split(base64url.decode(encoded), ":")
 		}
@@ -2080,7 +2080,7 @@ func testAuthzServerWithObjectDecision(customConfig *Config, customPluginFuncs .
 		  "dynamic_metadata": {"test": "foo", "bar": "baz"}
 		}
 
-		allow = response {
+		allow = response if {
 			input.parsed_path = ["my", "test", "path"]
 		    response := {
 				"allowed": true,
@@ -2098,7 +2098,7 @@ func testAuthzServerWithTruncatedBody(customConfig *Config, customPluginFuncs ..
 
 		default allow = false
 
-		allow {
+		allow if {
 			not input.truncated_body
 		}
 		`
@@ -2197,7 +2197,7 @@ func TestVersionInfoInputV3(t *testing.T) {
 	module := `
 		package envoy.authz
 
-		allow {
+		allow if {
 			input.version.ext_authz == "v3"
 			input.version.encoding == "protojson"
 		}
@@ -2224,7 +2224,7 @@ func TestVersionInfoInputV2(t *testing.T) {
 	module := `
 		package envoy.authz
 
-		allow {
+		allow if {
 			input.version.ext_authz == "v2"
 			input.version.encoding == "encoding/json"
 		}
