@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/plugins/logs"
-	"github.com/open-policy-agent/opa/server"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/plugins/logs"
+	"github.com/open-policy-agent/opa/v1/server"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown"
 )
 
 type internalError struct {

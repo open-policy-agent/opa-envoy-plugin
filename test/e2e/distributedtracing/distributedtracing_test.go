@@ -12,10 +12,10 @@ import (
 
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	"github.com/open-policy-agent/opa-envoy-plugin/test/e2e"
-	"github.com/open-policy-agent/opa/logging/test"
-	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/tracing"
-	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/v1/logging/test"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	"github.com/open-policy-agent/opa/v1/tracing"
+	"github.com/open-policy-agent/opa/v1/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -89,7 +89,7 @@ func TestMain(m *testing.M) {
 	moduleFmt := `
 	package envoy.authz
 	default allow = false
-	allow {
+	allow if {
 		resp := http.send({"url": "%s", "method":"GET"})
 		resp.body.count == 1
 		resp.body.b3multiheader == "%s"
