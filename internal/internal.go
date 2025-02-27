@@ -303,7 +303,7 @@ func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
 }
 
 func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
-	p.server.Stop()
+	p.server.GracefulStop()
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 }
 
