@@ -186,15 +186,10 @@ github.com/munnerz/goautoneg
 github.com/olekukonko/tablewriter
 # github.com/open-policy-agent/opa v1.1.0
 ## explicit; go 1.22.7
-github.com/open-policy-agent/opa/ast
-github.com/open-policy-agent/opa/ast/json
-github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/capabilities
 github.com/open-policy-agent/opa/cmd
 github.com/open-policy-agent/opa/cmd/internal/env
 github.com/open-policy-agent/opa/cmd/internal/exec
-github.com/open-policy-agent/opa/config
-github.com/open-policy-agent/opa/hooks
 github.com/open-policy-agent/opa/internal/bundle
 github.com/open-policy-agent/opa/internal/bundle/inspect
 github.com/open-policy-agent/opa/internal/cidr/merge
@@ -257,24 +252,6 @@ github.com/open-policy-agent/opa/internal/wasm/sdk/opa/capabilities
 github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors
 github.com/open-policy-agent/opa/internal/wasm/types
 github.com/open-policy-agent/opa/internal/wasm/util
-github.com/open-policy-agent/opa/loader
-github.com/open-policy-agent/opa/logging
-github.com/open-policy-agent/opa/logging/test
-github.com/open-policy-agent/opa/metrics
-github.com/open-policy-agent/opa/plugins
-github.com/open-policy-agent/opa/plugins/logs
-github.com/open-policy-agent/opa/rego
-github.com/open-policy-agent/opa/resolver/wasm
-github.com/open-policy-agent/opa/runtime
-github.com/open-policy-agent/opa/server
-github.com/open-policy-agent/opa/storage
-github.com/open-policy-agent/opa/storage/inmem
-github.com/open-policy-agent/opa/topdown
-github.com/open-policy-agent/opa/topdown/builtins
-github.com/open-policy-agent/opa/topdown/cache
-github.com/open-policy-agent/opa/topdown/print
-github.com/open-policy-agent/opa/tracing
-github.com/open-policy-agent/opa/util
 github.com/open-policy-agent/opa/v1/ast
 github.com/open-policy-agent/opa/v1/ast/internal/scanner
 github.com/open-policy-agent/opa/v1/ast/internal/tokens
@@ -466,8 +443,8 @@ go.opencensus.io/trace/tracestate
 ## explicit; go 1.22.0
 go.opentelemetry.io/auto/sdk
 go.opentelemetry.io/auto/sdk/internal/telemetry
-# go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0
-## explicit; go 1.21
+# go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0
+## explicit; go 1.22.0
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc/internal
 # go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.59.0
@@ -476,8 +453,8 @@ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/request
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconv
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconvutil
-# go.opentelemetry.io/contrib/propagators/b3 v1.28.0
-## explicit; go 1.21
+# go.opentelemetry.io/contrib/propagators/b3 v1.34.0
+## explicit; go 1.22.0
 go.opentelemetry.io/contrib/propagators/b3
 # go.opentelemetry.io/otel v1.34.0
 ## explicit; go 1.22.0
