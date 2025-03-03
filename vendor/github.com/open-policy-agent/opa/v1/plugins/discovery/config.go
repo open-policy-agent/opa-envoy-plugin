@@ -5,6 +5,7 @@
 package discovery
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -86,7 +87,7 @@ func ParseConfig(bs []byte, services []string) (*Config, error) {
 func (c *Config) validateAndInjectDefaults(services []string, confKeys map[string]*keys.Config) error {
 
 	if c.Resource == nil && c.Name == nil {
-		return fmt.Errorf("missing required discovery.resource field")
+		return errors.New("missing required discovery.resource field")
 	}
 
 	// make a copy of the keys map
@@ -100,10 +101,8 @@ func (c *Config) validateAndInjectDefaults(services []string, confKeys map[strin
 		if err != nil {
 			return fmt.Errorf("invalid configuration for discovery service: %s", err.Error())
 		}
-	} else {
-		if len(confKeys) > 0 {
-			c.Signing = bundle.NewVerificationConfig(cpy, "", "", nil)
-		}
+	} else if len(confKeys) > 0 {
+		c.Signing = bundle.NewVerificationConfig(cpy, "", "", nil)
 	}
 
 	if c.Resource != nil {
@@ -125,9 +124,9 @@ func (c *Config) validateAndInjectDefaults(services []string, confKeys map[strin
 	c.service = service
 
 	if c.Decision != nil {
-		c.query = fmt.Sprintf("%v.%v", ast.DefaultRootDocument, strings.Replace(strings.Trim(*c.Decision, "/"), "/", ".", -1))
+		c.query = fmt.Sprintf("%v.%v", ast.DefaultRootDocument, strings.ReplaceAll(strings.Trim(*c.Decision, "/"), "/", "."))
 	} else if c.Name != nil {
-		c.query = fmt.Sprintf("%v.%v", ast.DefaultRootDocument, strings.Replace(strings.Trim(*c.Name, "/"), "/", ".", -1))
+		c.query = fmt.Sprintf("%v.%v", ast.DefaultRootDocument, strings.ReplaceAll(strings.Trim(*c.Name, "/"), "/", "."))
 	} else {
 		c.query = ast.DefaultRootDocument.String()
 	}
@@ -138,7 +137,7 @@ func (c *Config) validateAndInjectDefaults(services []string, confKeys map[strin
 func (c *Config) getServiceFromList(service string, services []string) (string, error) {
 	if service == "" {
 		if len(services) != 1 {
-			return "", fmt.Errorf("more than one service is defined")
+			return "", errors.New("more than one service is defined")
 		}
 		return services[0], nil
 	}
