@@ -11,6 +11,7 @@ package repl
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -476,7 +477,7 @@ func (r *REPL) cmdTarget(t []string) error {
 
 func (r *REPL) cmdPrettyLimit(s []string) error {
 	if len(s) != 1 {
-		return fmt.Errorf("usage: pretty-limit <n>")
+		return errors.New("usage: pretty-limit <n>")
 	}
 	i64, err := strconv.ParseInt(s[0], 10, 0)
 	if err != nil {
@@ -512,7 +513,7 @@ func (r *REPL) cmdShow(args []string) error {
 		}
 		fmt.Fprint(r.output, string(bs))
 		return nil
-	} else if strings.Compare(args[0], "debug") == 0 {
+	} else if args[0] == "debug" {
 		debug := replDebugState{
 			Explain:             r.explain,
 			Metrics:             r.metricsEnabled(),
@@ -603,7 +604,7 @@ func (r *REPL) cmdTypes() error {
 	return nil
 }
 
-var errUnknownUsage = fmt.Errorf("usage: unknown <input/data reference> [<input/data reference> [...]] (hint: try 'input')")
+var errUnknownUsage = errors.New("usage: unknown <input/data reference> [<input/data reference> [...]] (hint: try 'input')")
 
 func (r *REPL) cmdUnknown(s []string) error {
 
@@ -662,7 +663,7 @@ func (r *REPL) cmdUnsetPackage(ctx context.Context, args []string) error {
 		return newBadArgsErr("unset-package <var>: expects exactly one argument")
 	}
 
-	pkg, err := ast.ParsePackage(fmt.Sprintf("package %s", args[0]))
+	pkg, err := ast.ParsePackage("package " + args[0])
 	if err != nil {
 		return newBadArgsErr("argument must identify a package")
 	}
@@ -706,7 +707,7 @@ func (r *REPL) unsetRule(ctx context.Context, name ast.Var) (bool, error) {
 }
 
 func (r *REPL) unsetPackage(_ context.Context, pkg *ast.Package) (bool, error) {
-	path := fmt.Sprintf("%v", pkg.Path)
+	path := pkg.Path.String()
 	_, ok := r.modules[path]
 	if ok {
 		delete(r.modules, path)
@@ -1417,10 +1418,10 @@ func newCommand(line string) *command {
 		return nil
 	}
 	inputCommand := strings.ToLower(p[0])
-	for _, c := range builtin {
-		if c.name == inputCommand {
+	for i := range builtin {
+		if builtin[i].name == inputCommand {
 			return &command{
-				op:   c.name,
+				op:   builtin[i].name,
 				args: p[1:],
 			}
 		}

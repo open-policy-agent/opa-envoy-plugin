@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -148,7 +149,7 @@ func opaTest(args []string, testParams testCommandParams) (int, error) {
 	}
 
 	success := true
-	for i := 0; i < testParams.count; i++ {
+	for range testParams.count {
 		exitCode, err := runTests(ctx, txn, runner, reporter, testParams)
 		if exitCode != 0 {
 			success = false
@@ -182,6 +183,11 @@ func runTests(ctx context.Context, txn storage.Transaction, runner *tester.Runne
 	var err error
 	var ch chan *tester.Result
 	if testParams.benchmark {
+		// Initialize testing package for benchmarking. This is needed to set default values for some flags that may
+		// otherwise be dereferenced on some code paths causing panics, as reported in:
+		// https://github.com/open-policy-agent/opa/issues/7205
+		testing.Init()
+
 		benchOpts := tester.BenchmarkOptions{
 			ReportAllocations: testParams.benchMem,
 		}
@@ -322,7 +328,7 @@ func processWatcherUpdate(ctx context.Context, testParams testCommandParams, pat
 			return err
 		}
 
-		for i := 0; i < testParams.count; i++ {
+		for range testParams.count {
 			exitCode, err := runTests(ctx, txn, runner, reporter, testParams)
 			if exitCode != 0 {
 				return err
@@ -451,7 +457,7 @@ func init() {
 		Use:   "test <path> [path [...]]",
 		Short: "Execute Rego test cases",
 		Long: `Execute Rego test cases.
-	
+
 The 'test' command takes a file or directory path as input and executes all
 test cases discovered in matching files. Test cases are rules whose names have the prefix "test_".
 
@@ -521,7 +527,7 @@ recommended as some updates might cause them to be dropped by OPA.
 `,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return fmt.Errorf("specify at least one file")
+				return errors.New("specify at least one file")
 			}
 
 			// If an --explain flag was set, turn on verbose output

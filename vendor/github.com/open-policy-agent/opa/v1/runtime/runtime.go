@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	mr "math/rand"
@@ -281,6 +282,15 @@ func NewParams() Params {
 	}
 }
 
+type ServerStatus int
+
+const (
+	ServerNotStarted ServerStatus = iota
+	ServerWaitingForPlugins
+	ServerInitialized
+	ServerStopped
+)
+
 // Runtime represents a single OPA instance.
 type Runtime struct {
 	Params  Params
@@ -294,10 +304,10 @@ type Runtime struct {
 	traceExporter     *otlptrace.Exporter
 	loadedPathsResult *initload.LoadPathsResult
 
-	serverInitialized bool
-	serverInitMtx     sync.RWMutex
-	done              chan struct{}
-	repl              *repl.REPL
+	serverStatus  ServerStatus
+	serverInitMtx sync.RWMutex
+	done          chan struct{}
+	repl          *repl.REPL
 }
 
 // NewRuntime returns a new Runtime object initialized with params. Clients must
@@ -443,7 +453,9 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		plugins.WithPrometheusRegister(metrics),
 		plugins.WithTracerProvider(tracerProvider),
 		plugins.WithEnableTelemetry(params.EnableVersionCheck),
-		plugins.WithParserOptions(params.parserOptions()))
+		plugins.WithParserOptions(params.parserOptions()),
+		plugins.WithDistributedTracingOpts(params.DistributedTracingOpts),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("config error: %w", err)
 	}
@@ -478,7 +490,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		logger:            logger,
 		metrics:           metrics,
 		reporter:          reporter,
-		serverInitialized: false,
+		serverStatus:      ServerNotStarted,
 		traceExporter:     traceExporter,
 		loadedPathsResult: loaded,
 	}
@@ -507,6 +519,18 @@ func extractMetricsConfig(config []byte, params Params) (*metrics_config.Config,
 	return metricsParsedConfig, nil
 }
 
+func (rt *Runtime) setServerStatus(status ServerStatus) {
+	rt.serverInitMtx.Lock()
+	defer rt.serverInitMtx.Unlock()
+	rt.serverStatus = status
+}
+
+func (rt *Runtime) ServerStatus() ServerStatus {
+	rt.serverInitMtx.RLock()
+	defer rt.serverInitMtx.RUnlock()
+	return rt.serverStatus
+}
+
 // StartServer starts the runtime in server mode. This function will block the
 // calling goroutine and will exit the program on error.
 func (rt *Runtime) StartServer(ctx context.Context) {
@@ -521,7 +545,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 // a SIGTERM or SIGKILL signal is sent.
 func (rt *Runtime) Serve(ctx context.Context) error {
 	if rt.Params.Addrs == nil {
-		return fmt.Errorf("at least one address must be configured in runtime parameters")
+		return errors.New("at least one address must be configured in runtime parameters")
 	}
 
 	serverInitializingMessage := "Initializing server."
@@ -649,6 +673,8 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 	rt.server.Handler = NewLoggingHandler(rt.logger, rt.server.Handler)
 	rt.server.DiagnosticHandler = NewLoggingHandler(rt.logger, rt.server.DiagnosticHandler)
 
+	rt.setServerStatus(ServerWaitingForPlugins)
+
 	if err := rt.waitPluginsReady(
 		100*time.Millisecond,
 		time.Second*time.Duration(rt.Params.ReadyTimeout)); err != nil {
@@ -679,12 +705,12 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 	// Note that there is a small chance the socket of the server listener is still
 	// closed by the time this block is executed, due to the serverLoop above
 	// executing in a goroutine.
-	rt.serverInitMtx.Lock()
-	rt.serverInitialized = true
-	rt.serverInitMtx.Unlock()
+	rt.setServerStatus(ServerInitialized)
 	rt.Manager.ServerInitialized()
 
 	rt.logger.Debug("Server initialized.")
+
+	defer rt.setServerStatus(ServerStopped)
 
 	for {
 		select {
@@ -694,7 +720,7 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 			return rt.gracefulServerShutdown(rt.server)
 		case err := <-errc:
 			rt.logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
-			os.Exit(1)
+			os.Exit(1) //nolint:gocritic
 		}
 	}
 }
@@ -705,7 +731,7 @@ func (rt *Runtime) Addrs() []string {
 	rt.serverInitMtx.RLock()
 	defer rt.serverInitMtx.RUnlock()
 
-	if !rt.serverInitialized {
+	if rt.serverStatus < ServerInitialized {
 		return nil
 	}
 
@@ -741,7 +767,7 @@ func (rt *Runtime) StartREPL(ctx context.Context) {
 	if rt.Params.Watch {
 		if err := rt.startWatcher(ctx, rt.Params.Paths, onReloadPrinter(rt.Params.Output)); err != nil {
 			fmt.Fprintln(rt.Params.Output, "error opening watch:", err)
-			os.Exit(1)
+			os.Exit(1) //nolint:gocritic
 		}
 	}
 

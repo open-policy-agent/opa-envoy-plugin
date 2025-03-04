@@ -237,7 +237,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	// wait until each server has finished shutting down
 	var errorList []error
-	for i := 0; i < len(s.httpListeners); i++ {
+	for range s.httpListeners {
 		err := <-errChan
 		if err != nil {
 			errorList = append(errorList, err)
@@ -581,9 +581,9 @@ func (b *baseHTTPListener) Type() httpListenerType {
 	return b.t
 }
 
-func isMinTLSVersionSupported(TLSVersion uint16) bool {
+func isMinTLSVersionSupported(tlsVersion uint16) bool {
 	for _, version := range supportedTLSVersions {
-		if TLSVersion == version {
+		if tlsVersion == version {
 			return true
 		}
 	}
@@ -645,7 +645,7 @@ func (s *Server) getListenerForHTTPServer(u *url.URL, h http.Handler, t httpList
 func (s *Server) getListenerForHTTPSServer(u *url.URL, h http.Handler, t httpListenerType) (Loop, httpListener, error) {
 
 	if s.cert == nil {
-		return nil, nil, fmt.Errorf("TLS certificate required but not supplied")
+		return nil, nil, errors.New("TLS certificate required but not supplied")
 	}
 
 	tlsConfig := tls.Config{
@@ -1318,7 +1318,7 @@ func (s *Server) unversionedGetHealthWithPolicy(w http.ResponseWriter, r *http.R
 
 	vars := mux.Vars(r)
 	urlPath := vars["path"]
-	healthDataPath := fmt.Sprintf("/system/health/%s", urlPath)
+	healthDataPath := "/system/health/" + urlPath
 	healthDataPath = stringPathToDataRef(healthDataPath).String()
 
 	rego := rego.New(
@@ -2722,7 +2722,7 @@ func getBoolParam(url *url.URL, name string, ifEmpty bool) bool {
 	}
 
 	for _, x := range p {
-		if strings.ToLower(x) == "true" {
+		if strings.EqualFold(x, "true") {
 			return true
 		}
 	}
