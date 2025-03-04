@@ -1,6 +1,7 @@
 module github.com/open-policy-agent/opa-envoy-plugin
 
-go 1.22.7
+go 1.23.6
+
 require (
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4
 	github.com/golang/protobuf v1.5.4
