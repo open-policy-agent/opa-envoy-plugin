@@ -11,7 +11,7 @@ on:
 jobs:
   go-build:
     name: Go Build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
 
   go-test:
     name: Go Test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
 
   go-lint:
     name: Go Lint
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
   deploy:
     name: Push Latest Release
     if: github.ref == 'refs/heads/main' # only true for pushes to `main`
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -62,7 +62,7 @@ jobs:
 
   e2e:
     name: Istio End-to-End Test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
 
   e2e-envoy-grpc:
     name: Envoy gRPC End-to-End Test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -115,7 +115,7 @@ jobs:
   proxy-init-build:
     # Make sure that the proxy_init container is able to build successfully.
     name: Build proxy_init container
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
     - name: Check out code
       uses: actions/checkout@v4
