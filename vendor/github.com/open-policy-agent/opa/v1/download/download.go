@@ -232,16 +232,14 @@ func (d *Downloader) loop(ctx context.Context) {
 
 		if err != nil {
 			delay = util.DefaultBackoff(float64(minRetryDelay), float64(*d.config.Polling.MaxDelaySeconds), retry)
-		} else {
-			if !d.longPollingEnabled || d.config.Polling.LongPollingTimeoutSeconds == nil {
-				// revert the response header timeout value on the http client's transport
-				if *d.client.Config().ResponseHeaderTimeoutSeconds == 0 {
-					d.client = d.client.SetResponseHeaderTimeout(&d.respHdrTimeoutSec)
-				}
-				min := float64(*d.config.Polling.MinDelaySeconds)
-				max := float64(*d.config.Polling.MaxDelaySeconds)
-				delay = time.Duration(((max - min) * rand.Float64()) + min)
+		} else if !d.longPollingEnabled || d.config.Polling.LongPollingTimeoutSeconds == nil {
+			// revert the response header timeout value on the http client's transport
+			if *d.client.Config().ResponseHeaderTimeoutSeconds == 0 {
+				d.client = d.client.SetResponseHeaderTimeout(&d.respHdrTimeoutSec)
 			}
+			min := float64(*d.config.Polling.MinDelaySeconds)
+			max := float64(*d.config.Polling.MaxDelaySeconds)
+			delay = time.Duration(((max - min) * rand.Float64()) + min)
 		}
 
 		d.logger.Debug("Waiting %v before next download/retry.", delay)
@@ -291,7 +289,7 @@ func (d *Downloader) download(ctx context.Context, m metrics.Metrics) (*download
 	preferences := []string{fmt.Sprintf("modes=%v,%v", defaultBundleMode, deltaBundleMode)}
 
 	if d.longPollingEnabled && d.config.Polling.LongPollingTimeoutSeconds != nil {
-		wait := fmt.Sprintf("wait=%s", strconv.FormatInt(*d.config.Polling.LongPollingTimeoutSeconds, 10))
+		wait := "wait=" + strconv.FormatInt(*d.config.Polling.LongPollingTimeoutSeconds, 10)
 		preferences = append(preferences, wait)
 
 		// fetch existing response header timeout value on the http client's transport and
@@ -304,7 +302,7 @@ func (d *Downloader) download(ctx context.Context, m metrics.Metrics) (*download
 		}
 	}
 
-	preferValue := fmt.Sprintf("%v", strings.Join(preferences, ";"))
+	preferValue := strings.Join(preferences, ";")
 	d.client = d.client.WithHeader("Prefer", preferValue)
 
 	m.Timer(metrics.BundleRequest).Start()
@@ -441,7 +439,7 @@ type HTTPError struct {
 }
 
 func (e HTTPError) Error() string {
-	return fmt.Sprintf("server replied with %s", http.StatusText(e.StatusCode))
+	return "server replied with " + http.StatusText(e.StatusCode)
 }
 
 func contains(s string, strings []string) bool {
