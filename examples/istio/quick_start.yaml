@@ -206,7 +206,7 @@ data:
         "run",
         "--server",
         "--config-file=/config/config.yaml",
-        "--addr=localhost:8181",
+        "--addr=0.0.0.0:8181",
         "--diagnostic-addr=0.0.0.0:8282",
         "/policy/policy.rego",
       ],
