@@ -384,7 +384,7 @@ func TestGetParsedBody(t *testing.T) {
 
 	logger := logging.NewNoOpLogger()
 	req := createCheckRequest(requestContentTypeJSONInvalid)
-	path := []interface{}{}
+	path := []string{}
 	protoSet := (*protoregistry.Files)(nil)
 	headers, body := req.GetAttributes().GetRequest().GetHttp().GetHeaders(), req.GetAttributes().GetRequest().GetHttp().GetBody()
 	_, _, err := getParsedBody(logger, headers, body, nil, path, protoSet)
@@ -617,38 +617,38 @@ func TestGetParsedBodygRPC(t *testing.T) {
 func TestParsedPathAndQuery(t *testing.T) {
 	var tests = []struct {
 		request       *ext_authz.CheckRequest
-		expectedPath  []interface{}
+		expectedPath  []string
 		expectedQuery map[string]interface{}
 	}{
 		{
 			createExtReqWithPath("/my/test/path"),
-			[]interface{}{"my", "test", "path"},
+			[]string{"my", "test", "path"},
 			map[string]interface{}{},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1"}},
+			[]string{"my", "test", "path"},
+			map[string]interface{}{"a": []string{"1"}},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1&a=2"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "2"}},
+			[]string{"my", "test", "path"},
+			map[string]interface{}{"a": []string{"1", "2"}},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1&b=2"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1"}, "b": []interface{}{"2"}},
+			[]string{"my", "test", "path"},
+			map[string]interface{}{"a": []string{"1"}, "b": []string{"2"}},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1&a=new%0aline"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "new\nline"}},
+			[]string{"my", "test", "path"},
+			map[string]interface{}{"a": []string{"1", "new\nline"}},
 		},
 		{
 			createExtReqWithPath("%2Fmy%2Ftest%2Fpath?a=1&a=new%0aline"),
-			[]interface{}{"my", "test", "path"},
-			map[string]interface{}{"a": []interface{}{"1", "new\nline"}},
+			[]string{"my", "test", "path"},
+			map[string]interface{}{"a": []string{"1", "new\nline"}},
 		},
 	}
 
