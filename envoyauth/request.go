@@ -19,12 +19,19 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
 
+	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/util"
 )
 
-var v2Info = map[string]string{"ext_authz": "v2", "encoding": "encoding/json"}
-var v3Info = map[string]string{"ext_authz": "v3", "encoding": "protojson"}
+var v2Info = ast.NewObject(
+	keyValue("ext_authz", "v2"),
+	keyValue("encoding", "encoding/json"),
+)
+var v3Info = ast.NewObject(
+	keyValue("ext_authz", "v3"),
+	keyValue("encoding", "protojson"),
+)
 
 // RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
 func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]interface{}, error) {
@@ -33,7 +40,8 @@ func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregis
 
 	var rawBody []byte
 	var path, body string
-	var headers, version map[string]string
+	var headers map[string]string
+	var version ast.Value
 
 	// NOTE: The path/body/headers blocks look silly, but they allow us to retrieve
 	//       the parts of the incoming request we care about, without having to convert
@@ -84,32 +92,24 @@ func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregis
 	return input, nil
 }
 
-func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {
+func getParsedPathAndQuery(path string) ([]string, map[string]any, error) {
 	parsedURL, err := url.Parse(path)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	parsedPath := strings.Split(strings.TrimLeft(parsedURL.Path, "/"), "/")
-	parsedPathInterface := make([]interface{}, len(parsedPath))
-	for i, v := range parsedPath {
-		parsedPathInterface[i] = v
-	}
 
 	query := parsedURL.Query()
-	parsedQueryInterface := make(map[string]interface{}, len(query))
+	parsedQueryInterface := make(map[string]any, len(query))
 	for paramKey, paramValues := range query {
-		queryValues := make([]interface{}, len(paramValues))
-		for i, v := range paramValues {
-			queryValues[i] = v
-		}
-		parsedQueryInterface[paramKey] = queryValues
+		parsedQueryInterface[paramKey] = paramValues
 	}
 
-	return parsedPathInterface, parsedQueryInterface, nil
+	return parsedPath, parsedQueryInterface, nil
 }
 
-func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []interface{}, protoSet *protoregistry.Files) (interface{}, bool, error) {
+func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []string, protoSet *protoregistry.Files) (interface{}, bool, error) {
 	var data interface{}
 
 	if val, ok := headers["content-type"]; ok {
@@ -269,7 +269,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 	return data, false, nil
 }
 
-func getGRPCBody(logger logging.Logger, in []byte, parsedPath []interface{}, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
+func getGRPCBody(logger logging.Logger, in []byte, parsedPath []string, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
 
 	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
@@ -294,12 +294,12 @@ func getGRPCBody(logger logging.Logger, in []byte, parsedPath []interface{}, dat
 	in = in[5 : size+5]
 
 	// Note: we've already checked that len(path)>=2
-	svc, err := findService(parsedPath[0].(string), files)
+	svc, err := findService(parsedPath[0], files)
 	if err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find service")
 		return false, false, nil
 	}
-	msgDesc, err := findMessageInputDesc(parsedPath[1].(string), svc)
+	msgDesc, err := findMessageInputDesc(parsedPath[1], svc)
 	if err != nil {
 		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find message")
 		return false, false, nil
