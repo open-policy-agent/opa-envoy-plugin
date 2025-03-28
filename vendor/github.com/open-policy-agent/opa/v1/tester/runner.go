@@ -158,7 +158,7 @@ func newResult(loc *ast.Location, pkg, name string, duration time.Duration, trac
 }
 
 // Pass returns true if the test case passed.
-func (r Result) Pass() bool {
+func (r *Result) Pass() bool {
 	return !r.Fail && !r.Skip && r.Error == nil
 }
 
@@ -518,7 +518,7 @@ func (r *Runner) runTests(ctx context.Context, txn storage.Transaction, enablePr
 	return ch, nil
 }
 
-func (r *Runner) shouldRun(rule *ast.Rule, testRegex *regexp.Regexp) bool {
+func (*Runner) shouldRun(rule *ast.Rule, testRegex *regexp.Regexp) bool {
 	var ref ast.Ref
 
 	for _, term := range rule.Head.Ref().GroundPrefix() {
