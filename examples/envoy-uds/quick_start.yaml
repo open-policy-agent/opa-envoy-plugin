@@ -38,7 +38,7 @@ spec:
           ports:
             - containerPort: 8080
         - name: envoy
-          image: envoyproxy/envoy:v1.20.0
+          image: envoyproxy/envoy:v1.33-latest
           env:
             - name: ENVOY_UID
               value: "1111"
@@ -170,6 +170,8 @@ data:
                       target_uri: unix:///run/opa/sockets/auth.sock
                     timeout: 0.5s
               - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
       clusters:
       - name: service
         connect_timeout: 0.25s
