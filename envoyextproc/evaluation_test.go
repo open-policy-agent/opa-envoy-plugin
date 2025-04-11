@@ -8,16 +8,16 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/config"
-	"github.com/open-policy-agent/opa/logging"
-	loggingtest "github.com/open-policy-agent/opa/logging/test"
-	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
-	iCache "github.com/open-policy-agent/opa/topdown/cache"
-	"github.com/open-policy-agent/opa/tracing"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/config"
+	"github.com/open-policy-agent/opa/v1/logging"
+	loggingtest "github.com/open-policy-agent/opa/v1/logging/test"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
+	iCache "github.com/open-policy-agent/opa/v1/topdown/cache"
+	"github.com/open-policy-agent/opa/v1/tracing"
 )
 
 type evalTestCase struct {
@@ -226,7 +226,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 				"grpc_status": 7,  # PERMISSION_DENIED
 				"details": "Unauthorized access attempt"
 			}
-		} {
+		} if {
 			input.path == "/forbidden"
 		}
 
@@ -239,7 +239,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 					"header_append_action": "OVERWRITE_IF_EXISTS_OR_ADD"
 				}
 			]
-		} {
+		} if {
 			input.path == "/add-headers"
 		}
 
@@ -249,14 +249,14 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 				"X-Remove-Header",
 				"X-Another-Header"
 			]
-		} {
+		} if {
 			input.path == "/remove-headers"
 		}
 
 		# Replace the body of the request or response
 		response = {
 			"body": "This is the new body content"
-		} {
+		} if {
 			input.request_type == "request_body"
 			input.path == "/replace-body"
 		}
@@ -269,7 +269,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 					"session_id": input.headers["x-session-id"]
 				}
 			}
-		} {
+		} if {
 			input.path == "/dynamic-metadata"
 		}
 
@@ -282,7 +282,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 				}
 			],
 			"body": "Combined response with headers and body changes"
-		} {
+		} if {
 			input.path == "/combined"
 		}
 
@@ -294,7 +294,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 					"value": "TrailerValue"
 				}
 			]
-		} {
+		} if {
 			input.request_type == "request_trailers"
 			input.path == "/modify-trailers"
 		}
@@ -307,7 +307,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 					"value": "ResponseHeaderValue"
 				}
 			]
-		} {
+		} if {
 			input.request_type == "response_headers"
 			input.path == "/modify-response-headers"
 		}
@@ -322,7 +322,7 @@ func testExtProcServer(logger logging.Logger) (*mockExtProcServer, error) {
 					{"key": "X-Default-Deny", "value": "True"}
 				]
 			}
-		} {
+		} if {
 			not allowed_paths[input.path]
 		}
 
