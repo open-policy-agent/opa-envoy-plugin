@@ -1205,6 +1205,11 @@ func (p *envoyExtProcGrpcServer) DistributedTracing() tracing.Options {
 
 // Log logs the decision to the decision log.
 func (p *envoyExtProcGrpcServer) log(ctx context.Context, input interface{}, result *envoyextproc.EvalResult, err error) error {
+	plugin := logs.Lookup(p.manager)
+	if plugin == nil {
+		return nil
+	}
+
 	info := &server.Info{
 		Timestamp: time.Now(),
 		Input:     &input,
@@ -1232,5 +1237,9 @@ func (p *envoyExtProcGrpcServer) log(ctx context.Context, input interface{}, res
 		info.NDBuiltinCache = &x
 	}
 
-	return decisionlog.LogDecisionExtProc(ctx, p.manager, info, result, err)
+	if err := result.ReadRevisions(ctx, p.Store()); err != nil {
+		return err
+	}
+
+	return decisionlog.LogDecisionExtProc(ctx, plugin, info, result, err)
 }

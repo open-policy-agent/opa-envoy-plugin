@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	ext_proc_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/open-policy-agent/opa/logging"
-	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/v1/logging"
+	"github.com/open-policy-agent/opa/v1/util"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -26,179 +26,172 @@ import (
 func RequestToInput(req *ext_proc_v3.ProcessingRequest, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool, state *types.StreamState) (map[string]interface{}, error) {
 	input := make(map[string]interface{})
 
+	// Handle different request types using a switch.
 	switch request := req.Request.(type) {
 	case *ext_proc_v3.ProcessingRequest_RequestHeaders:
-		// Log the type of request
-		logger.Info("Processing RequestHeaders")
-		// Handle RequestHeaders
-		input["request_type"] = "request_headers"
-		requestHeaders := request.RequestHeaders
-		headers := requestHeaders.GetHeaders()
-
-		// Log the raw headers
-		logger.Debug(fmt.Sprintf("Raw request headers: %v", headers))
-
-		headerMap := make(map[string]string)
-		for _, header := range headers.GetHeaders() {
-			headerMap[header.GetKey()] = header.GetValue()
-		}
-
-		// Log the extracted headers
-		logger.Debug(fmt.Sprintf("Extracted headers: %v", headerMap))
-
-		path := headerMap[":path"]
-		method := headerMap[":method"]
-		scheme := headerMap[":scheme"]
-		authority := headerMap[":authority"]
-		input["headers"] = headerMap
-		input["path"] = path
-		input["method"] = method
-		input["scheme"] = scheme
-		input["authority"] = authority
-
-		// Log the extracted path and method
-		logger.Debug(fmt.Sprintf("Extracted path: %s, method: %s", path, method))
-
-		// Parse path into parsed_path and parsed_query
-		parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Error parsing path and query: %v", err))
+		// Extract headers and parse path/query
+		if err := handleRequestHeaders(request.RequestHeaders, logger, input, state); err != nil {
 			return nil, err
 		}
-		input["parsed_path"] = parsedPath
-		input["parsed_query"] = parsedQuery
-
-		// Log the parsed path and query
-		logger.Debug(fmt.Sprintf("Parsed path: %v", parsedPath))
-		logger.Debug(fmt.Sprintf("Parsed query: %v", parsedQuery))
-
-		state.Headers = headerMap
-		state.Path = path
-		state.Method = method
 
 	case *ext_proc_v3.ProcessingRequest_RequestBody:
-		// Log the type of request
-		logger.Info("Processing RequestBody")
-		// Handle RequestBody
-		input["request_type"] = "request_body"
-		requestBody := request.RequestBody
-		body := requestBody.GetBody()
-
-		// Log the raw body
-		logger.Debug(fmt.Sprintf("Raw request body: %s", string(body)))
-
-		input["path"] = state.Path
-
-		if !skipRequestBodyParse {
-
-			headers := state.Headers
-
-			// Log parse the body
-			logger.Info("Parsing request body")
-
-			parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, string(body), nil, nil, protoSet)
-			if err != nil {
-				logger.Error(fmt.Sprintf("Error parsing request body: %v", err))
-				return nil, err
-			}
-			input["parsed_body"] = parsedBody
-			input["truncated_body"] = isBodyTruncated
-
-			// Log the parsed body
-			logger.Debug(fmt.Sprintf("Parsed body: %v", parsedBody))
-			logger.Debug(fmt.Sprintf("Is body truncated: %v", isBodyTruncated))
+		// Extract and parse the request body if needed
+		if err := handleRequestBody(request.RequestBody, logger, input, state, protoSet, skipRequestBodyParse); err != nil {
+			return nil, err
 		}
 
 	case *ext_proc_v3.ProcessingRequest_ResponseHeaders:
-		// Log the type of request
-		logger.Info("Processing ResponseHeaders")
-		// Handle ResponseHeaders
-		input["request_type"] = "response_headers"
-		responseHeaders := request.ResponseHeaders
-		headers := responseHeaders.GetHeaders()
-
-		// Log the raw response headers
-		logger.Debug(fmt.Sprintf("Raw response headers: %v", headers))
-
-		headerMap := make(map[string]string)
-		for _, header := range headers.GetHeaders() {
-			headerMap[header.GetKey()] = header.GetValue()
+		if err := handleResponseHeaders(request.ResponseHeaders, logger, input, state); err != nil {
+			return nil, err
 		}
-		input["response_headers"] = headerMap
-
-		// Extract and set 'path' from response_headers
-		if path, exists := headerMap[":path"]; exists {
-			input["path"] = path
-		} else {
-			logger.Warn("Path not found in response_headers during ResponseHeaders processing")
-		}
-
-		// Log the extracted response headers
-		logger.Debug(fmt.Sprintf("Extracted response headers: %v", headerMap))
 
 	case *ext_proc_v3.ProcessingRequest_ResponseBody:
-		// Handle ResponseBody
-		input["request_type"] = "response_body"
-		responseBody := request.ResponseBody
-		body := responseBody.GetBody()
-		if !skipRequestBodyParse {
-			headers := state.Headers
-			parsedBody, isBodyTruncated, err := getParsedBody(logger, headers, string(body), nil, nil, protoSet)
-			if err != nil {
-				return nil, err
-			}
-			input["response_parsed_body"] = parsedBody
-			input["response_truncated_body"] = isBodyTruncated
+		if err := handleResponseBody(request.ResponseBody, logger, input, state, protoSet, skipRequestBodyParse); err != nil {
+			return nil, err
 		}
 
 	case *ext_proc_v3.ProcessingRequest_RequestTrailers:
-		// Handle RequestTrailers
-		input["request_type"] = "request_trailers"
-		requestTrailers := request.RequestTrailers
-		trailers := requestTrailers.GetTrailers()
-		trailerMap := make(map[string]string)
-		for _, trailer := range trailers.GetHeaders() {
-			trailerMap[trailer.GetKey()] = trailer.GetValue()
-		}
-		input["request_trailers"] = trailerMap
-
-		// Use the stored headers from the state
-		if state.Headers != nil {
-			input["headers"] = state.Headers
-			input["path"] = state.Path
-			input["method"] = state.Method
-		} else {
-			logger.Warn("Headers not available in state during RequestTrailers processing")
-		}
+		handleRequestTrailers(request.RequestTrailers, logger, input, state)
 
 	case *ext_proc_v3.ProcessingRequest_ResponseTrailers:
-		// Handle ResponseTrailers
-		input["request_type"] = "response_trailers"
-		responseTrailers := request.ResponseTrailers
-		trailers := responseTrailers.GetTrailers()
-		trailerMap := make(map[string]string)
-		for _, trailer := range trailers.GetHeaders() {
-			trailerMap[trailer.GetKey()] = trailer.GetValue()
-		}
-		input["response_trailers"] = trailerMap
-
-		// Use the stored headers from the state
-		if state.Headers != nil {
-			input["headers"] = state.Headers
-			input["path"] = state.Path
-			input["method"] = state.Method
-		} else {
-			logger.Warn("Headers not available in state during ResponseTrailers processing")
-		}
+		handleResponseTrailers(request.ResponseTrailers, logger, input, state)
 
 	default:
 		logger.Error("Unknown request type in ProcessingRequest")
 		return nil, fmt.Errorf("unknown request type in ProcessingRequest")
 	}
-	// Log the final input map
-	logger.Info(fmt.Sprintf("Final input map: %v", input))
 
+	logger.Info(fmt.Sprintf("Final input map: %v", input))
 	return input, nil
+}
+
+// handleRequestHeaders processes the request headers, updates input and state.
+func handleRequestHeaders(requestHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]interface{}, state *types.StreamState) error {
+	input["request_type"] = "request_headers"
+	headers := requestHeaders.GetHeaders()
+
+	headerMap := make(map[string]string)
+	for _, h := range headers.GetHeaders() {
+		headerMap[h.GetKey()] = h.GetValue()
+	}
+
+	path := headerMap[":path"]
+	method := headerMap[":method"]
+	scheme := headerMap[":scheme"]
+	authority := headerMap[":authority"]
+
+	input["headers"] = headerMap
+	input["path"] = path
+	input["method"] = method
+	input["scheme"] = scheme
+	input["authority"] = authority
+
+	parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error parsing path and query: %v", err))
+		return err
+	}
+
+	input["parsed_path"] = parsedPath
+	input["parsed_query"] = parsedQuery
+
+	state.Headers = headerMap
+	state.Path = path
+	state.Method = method
+	return nil
+}
+
+// handleRequestBody processes the request body if parsing is not skipped.
+func handleRequestBody(requestBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]interface{}, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
+	input["request_type"] = "request_body"
+	body := requestBody.GetBody()
+
+	input["path"] = state.Path
+
+	if !skip {
+		logger.Info("Parsing request body")
+		parsedBody, isBodyTruncated, err := getParsedBody(logger, state.Headers, string(body), nil, nil, protoSet)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error parsing request body: %v", err))
+			return err
+		}
+		input["parsed_body"] = parsedBody
+		input["truncated_body"] = isBodyTruncated
+	}
+	return nil
+}
+
+// handleResponseHeaders processes the response headers.
+func handleResponseHeaders(responseHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]interface{}, state *types.StreamState) error {
+	input["request_type"] = "response_headers"
+	headers := responseHeaders.GetHeaders()
+
+	headerMap := make(map[string]string)
+	for _, h := range headers.GetHeaders() {
+		headerMap[h.GetKey()] = h.GetValue()
+	}
+	input["response_headers"] = headerMap
+
+	if path, exists := headerMap[":path"]; exists {
+		input["path"] = path
+	} else {
+		logger.Warn("Path not found in response_headers")
+	}
+
+	return nil
+}
+
+// handleResponseBody processes the response body if parsing is not skipped.
+func handleResponseBody(responseBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]interface{}, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
+	input["request_type"] = "response_body"
+	body := responseBody.GetBody()
+	if !skip {
+		parsedBody, isBodyTruncated, err := getParsedBody(logger, state.Headers, string(body), nil, nil, protoSet)
+		if err != nil {
+			return err
+		}
+		input["response_parsed_body"] = parsedBody
+		input["response_truncated_body"] = isBodyTruncated
+	}
+	return nil
+}
+
+// handleRequestTrailers processes request trailers.
+func handleRequestTrailers(requestTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]interface{}, state *types.StreamState) {
+	input["request_type"] = "request_trailers"
+	trailers := requestTrailers.GetTrailers()
+	trailerMap := make(map[string]string)
+	for _, t := range trailers.GetHeaders() {
+		trailerMap[t.GetKey()] = t.GetValue()
+	}
+	input["request_trailers"] = trailerMap
+
+	if state.Headers != nil {
+		input["headers"] = state.Headers
+		input["path"] = state.Path
+		input["method"] = state.Method
+	} else {
+		logger.Warn("Headers not available in state during RequestTrailers processing")
+	}
+}
+
+// handleResponseTrailers processes response trailers.
+func handleResponseTrailers(responseTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]interface{}, state *types.StreamState) {
+	input["request_type"] = "response_trailers"
+	trailers := responseTrailers.GetTrailers()
+	trailerMap := make(map[string]string)
+	for _, t := range trailers.GetHeaders() {
+		trailerMap[t.GetKey()] = t.GetValue()
+	}
+	input["response_trailers"] = trailerMap
+
+	if state.Headers != nil {
+		input["headers"] = state.Headers
+		input["path"] = state.Path
+		input["method"] = state.Method
+	} else {
+		logger.Warn("Headers not available in state during ResponseTrailers processing")
+	}
 }
 
 func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {

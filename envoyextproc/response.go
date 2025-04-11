@@ -9,12 +9,12 @@ import (
 	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_proc_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	"github.com/open-policy-agent/opa/metrics"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown/builtins"
+	"github.com/google/uuid"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/metrics"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown/builtins"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
 )
 
 // EvalResult captures the result from evaluating a query against an input.
@@ -37,8 +37,6 @@ type TransactionCloser func(ctx context.Context, err error) error
 
 // NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics.
 func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
-	var err error
-
 	er := &EvalResult{
 		Metrics: metrics.New(),
 	}
@@ -48,11 +46,7 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	}
 
 	if er.DecisionID == "" {
-		er.DecisionID, err = util.UUID4()
-	}
-
-	if err != nil {
-		return nil, nil, err
+		er.DecisionID = uuid.NewString()
 	}
 
 	er.Metrics.Timer(metrics.ServerHandler).Start()
@@ -62,6 +56,36 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	}
 
 	return er, stop, nil
+}
+
+// ReadRevisions adds bundle revisions to the result.
+func (result *EvalResult) ReadRevisions(ctx context.Context, store storage.Store) error {
+	if result.Txn == nil {
+		return nil
+	}
+	names, err := bundle.ReadBundleNamesFromStore(ctx, store, result.Txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	revisions := make(map[string]string, len(names))
+	for _, name := range names {
+		r, err := bundle.ReadBundleRevisionFromStore(ctx, store, result.Txn, name)
+		if err != nil && !storage.IsNotFound(err) {
+			return err
+		}
+		revisions[name] = r
+	}
+
+	// Check legacy bundle manifest in the store
+	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, result.Txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	result.Revisions = revisions
+	result.Revision = revision
+	return nil
 }
 
 // GetTxn creates a read transaction suitable for the configured EvalResult object.
@@ -342,9 +366,10 @@ func (result *EvalResult) GetDynamicMetadata() (*structpb.Struct, error) {
 
 // GetTrailerMutation constructs a HeaderMutation from the policy decision for trailers.
 func (result *EvalResult) GetTrailerMutation() (*ext_proc_v3.HeaderMutation, error) {
+	// Instead of erroring out if the decision is not a map, return nil to be consistent.
 	decisionMap, ok := result.Decision.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("decision is not a map")
+		return nil, nil
 	}
 
 	// Initialize slices for set and remove trailers

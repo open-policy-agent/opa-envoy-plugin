@@ -63,15 +63,10 @@ func LogDecision(ctx context.Context, plugin *logs.Plugin, info *server.Info, re
 }
 
 // LogDecision - Logs a decision log event
-func LogDecisionExtProc(ctx context.Context, manager *plugins.Manager, info *server.Info, result *envoyextproc.EvalResult, err error) error {
-	plugin := logs.Lookup(manager)
-	if plugin == nil {
-		return nil
-	}
-
+func LogDecisionExtProc(ctx context.Context, plugin *logs.Plugin, info *server.Info, result *envoyextproc.EvalResult, err error) error {
 	info.Revision = result.Revision
 
-	bundles := map[string]server.BundleInfo{}
+	bundles := make(map[string]server.BundleInfo, len(result.Revisions))
 	for name, rev := range result.Revisions {
 		bundles[name] = server.BundleInfo{Revision: rev}
 	}
