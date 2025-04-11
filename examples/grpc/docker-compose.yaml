@@ -1,7 +1,7 @@
 version: '3'
 services:
   envoy:
-    image: envoyproxy/envoy:v1.31-latest
+    image: envoyproxy/envoy:v1.33-latest
     ports:
       - "9901:9901"
       - "51051:51051"

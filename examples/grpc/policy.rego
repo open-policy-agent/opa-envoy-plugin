@@ -2,12 +2,12 @@ package envoy.authz
 
 default allow = false
 
-allow {
+allow if {
   # for test.KitchenSink/Ping, we don't require anything
   input.parsed_path = ["test.KitchenSink", "Ping"]
 }
 
-allow {
+allow if {
   input.parsed_path = ["test.KitchenSink", "Exchange"]
   input.parsed_body = {
     "neededNumA": 1.23,

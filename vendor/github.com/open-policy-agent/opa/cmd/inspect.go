@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,13 +14,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/cmd/internal/env"
 	ib "github.com/open-policy-agent/opa/internal/bundle/inspect"
 	pr "github.com/open-policy-agent/opa/internal/presentation"
 	iStrs "github.com/open-policy-agent/opa/internal/strings"
-	"github.com/open-policy-agent/opa/util"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/util"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
@@ -31,14 +32,18 @@ const pageWidth = 80
 type inspectCommandParams struct {
 	outputFormat    *util.EnumFlag
 	listAnnotations bool
+	v0Compatible    bool
 	v1Compatible    bool
 }
 
 func (p *inspectCommandParams) regoVersion() ast.RegoVersion {
+	if p.v0Compatible {
+		return ast.RegoV0
+	}
 	if p.v1Compatible {
 		return ast.RegoV1
 	}
-	return ast.RegoV0
+	return ast.DefaultRegoVersion
 }
 
 func newInspectCommandParams() inspectCommandParams {
@@ -77,7 +82,7 @@ Example:
     bundle.tar.gz
     $ opa inspect bundle.tar.gz
 
-You can provide exactly one OPA bundle, path to a bundle directory, or direct path to a Rego file to the 'inspect' command 
+You can provide exactly one OPA bundle, path to a bundle directory, or direct path to a Rego file to the 'inspect' command
 on the command-line. If you provide a path referring to a directory, the 'inspect' command will load that path as a bundle
 and summarize its structure and contents. If you provide a path referring to a Rego file, the 'inspect' command will load
 that file and summarize its structure and contents.
@@ -98,6 +103,7 @@ that file and summarize its structure and contents.
 
 	addOutputFormat(inspectCommand.Flags(), params.outputFormat)
 	addListAnnotations(inspectCommand.Flags(), &params.listAnnotations)
+	addV0CompatibleFlag(inspectCommand.Flags(), &params.v0Compatible, false)
 	addV1CompatibleFlag(inspectCommand.Flags(), &params.v1Compatible, false)
 	RootCommand.AddCommand(inspectCommand)
 }
@@ -145,14 +151,14 @@ func hasManifest(info *ib.Info) bool {
 
 func validateInspectParams(p *inspectCommandParams, args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("specify exactly one OPA bundle or path")
+		return errors.New("specify exactly one OPA bundle or path")
 	}
 
 	of := p.outputFormat.String()
 	if of == evalJSONOutput || of == evalPrettyOutput {
 		return nil
 	}
-	return fmt.Errorf("invalid output format for inspect command")
+	return errors.New("invalid output format for inspect command")
 }
 
 func populateManifest(out io.Writer, m *bundle.Manifest) error {
@@ -205,13 +211,7 @@ func populateNamespaces(out io.Writer, n map[string][]string) error {
 	t.SetAutoMergeCellsByColumnIndex([]int{0})
 	var lines [][]string
 
-	keys := make([]string, 0, len(n))
-	for k := range n {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
+	for _, k := range util.KeysSorted(n) {
 		for _, file := range n[k] {
 			lines = append(lines, []string{k, truncateFileName(file)})
 		}
@@ -242,7 +242,7 @@ func populateAnnotations(out io.Writer, refs []*ast.AnnotationsRef) error {
 				fmt.Fprintln(out, "Package: ", dropDataPrefix(p.Path))
 			}
 			if r := ref.GetRule(); r != nil {
-				fmt.Fprintln(out, "Rule:    ", r.Head.Name)
+				fmt.Fprintln(out, "Rule:    ", r.Head.Ref().String())
 			}
 			if loc := ref.Location; loc != nil {
 				fmt.Fprintln(out, "Location:", loc.String())

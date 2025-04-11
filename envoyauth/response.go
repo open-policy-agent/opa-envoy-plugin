@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	ext_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	_structpb "github.com/golang/protobuf/ptypes/struct"
-	"github.com/open-policy-agent/opa-envoy-plugin/internal/util"
-	"github.com/open-policy-agent/opa/metrics"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown/builtins"
+	"github.com/google/uuid"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/metrics"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown/builtins"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -34,10 +36,12 @@ type StopFunc = func()
 // TransactionCloser should be called to abort the transaction
 type TransactionCloser func(ctx context.Context, err error) error
 
+func noopTransactionCloser(context.Context, error) error {
+	return nil // no-op default
+}
+
 // NewEvalResult creates a new EvalResult and a StopFunc that is used to stop the timer for metrics
 func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
-	var err error
-
 	er := &EvalResult{
 		Metrics: metrics.New(),
 	}
@@ -47,11 +51,7 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	}
 
 	if er.DecisionID == "" {
-		er.DecisionID, err = util.UUID4()
-	}
-
-	if err != nil {
-		return nil, nil, err
+		er.DecisionID = uuid.NewString()
 	}
 
 	er.Metrics.Timer(metrics.ServerHandler).Start()
@@ -63,17 +63,43 @@ func NewEvalResult(opts ...func(*EvalResult)) (*EvalResult, StopFunc, error) {
 	return er, stop, nil
 }
 
+// ReadRevisions adds bundle revisions to the result.
+func (result *EvalResult) ReadRevisions(ctx context.Context, store storage.Store) error {
+	if result.Txn == nil {
+		return nil
+	}
+	names, err := bundle.ReadBundleNamesFromStore(ctx, store, result.Txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	revisions := make(map[string]string, len(names))
+	for _, name := range names {
+		r, err := bundle.ReadBundleRevisionFromStore(ctx, store, result.Txn, name)
+		if err != nil && !storage.IsNotFound(err) {
+			return err
+		}
+		revisions[name] = r
+	}
+
+	// Check legacy bundle manifest in the store
+	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, result.Txn)
+	if err != nil && !storage.IsNotFound(err) {
+		return err
+	}
+
+	result.Revisions = revisions
+	result.Revision = revision
+	return nil
+}
+
 // GetTxn creates a read transaction suitable for the configured EvalResult object
 func (result *EvalResult) GetTxn(ctx context.Context, store storage.Store) (storage.Transaction, TransactionCloser, error) {
 	params := storage.TransactionParams{}
 
-	noopCloser := func(ctx context.Context, err error) error {
-		return nil // no-op default
-	}
-
 	txn, err := store.NewTransaction(ctx, params)
 	if err != nil {
-		return nil, noopCloser, err
+		return nil, noopTransactionCloser, err
 	}
 
 	// Setup a closer function that will abort the transaction.
@@ -114,105 +140,117 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 	return false, result.invalidDecisionErr()
 }
 
-// GetRequestHTTPHeadersToRemove - returns the http headers to remove from the original request before dispatching
-// it to the upstream
-func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
-	headersToRemove := []string{}
-
+func (result *EvalResult) getStringSliceFromDecision(fieldName string) ([]string, error) {
 	switch decision := result.Decision.(type) {
 	case bool:
-		return headersToRemove, nil
+		return nil, nil
 	case map[string]interface{}:
 		var ok bool
 		var val interface{}
 
-		if val, ok = decision["request_headers_to_remove"]; !ok {
-			return headersToRemove, nil
+		if val, ok = decision[fieldName]; !ok {
+			return nil, nil
 		}
 
 		switch val := val.(type) {
 		case []string:
 			return val, nil
 		case []interface{}:
-			for _, vval := range val {
-				header, ok := vval.(string)
+			ss := make([]string, len(val))
+			for i, v := range val {
+				s, ok := v.(string)
 				if !ok {
-					return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove value to be of type 'string' but got '%T'", vval)
+					return nil, fmt.Errorf("type assertion error, expected %s value to be of type 'string' but got '%T'", fieldName, v)
 				}
-
-				headersToRemove = append(headersToRemove, header)
+				ss[i] = s
 			}
-			return headersToRemove, nil
+			return ss, nil
 		default:
-			return nil, fmt.Errorf("type assertion error, expected request_headers_to_remove to be of type '[]string' but got '%T'", val)
+			return nil, fmt.Errorf("type assertion error, expected %s to be of type '[]string' but got '%T'", fieldName, val)
 		}
 	}
 
 	return nil, result.invalidDecisionErr()
 }
 
-// GetResponseHTTPHeaders - returns the http headers to return if they are part of the decision
-func (result *EvalResult) GetResponseHTTPHeaders() (http.Header, error) {
-	var responseHeaders = make(http.Header)
+// GetRequestQueryParametersToRemove - returns the query parameters to remove from the original request before dispatching
+// it to the upstream
+func (result *EvalResult) GetRequestQueryParametersToRemove() ([]string, error) {
+	return result.getStringSliceFromDecision("query_parameters_to_remove")
+}
 
+// GetRequestHTTPHeadersToRemove - returns the http headers to remove from the original request before dispatching
+// it to the upstream
+func (result *EvalResult) GetRequestHTTPHeadersToRemove() ([]string, error) {
+	return result.getStringSliceFromDecision("request_headers_to_remove")
+}
+
+func (result *EvalResult) makeHeadersFromDecision(fieldName string, hb headersBag) error {
 	switch decision := result.Decision.(type) {
 	case bool:
-		return responseHeaders, nil
-	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["headers"]; !ok {
-			return responseHeaders, nil
+		return nil
+	case map[string]any:
+		val, ok := decision[fieldName]
+		if !ok {
+			return nil
 		}
 
-		err := transformToHTTPHeaderFormat(val, &responseHeaders)
-		if err != nil {
-			return nil, err
-		}
-
-		return responseHeaders, nil
+		return transformAnyInputToHeadersBag(val, hb)
+	default:
+		return result.invalidDecisionErr()
 	}
+}
 
-	return nil, result.invalidDecisionErr()
+type headersBag interface {
+	allocate(n int)
+	add(k, v string)
+}
+
+type envoyHeaders []*ext_core_v3.HeaderValueOption
+
+func (h *envoyHeaders) add(k, v string) {
+	*h = append(*h, &ext_core_v3.HeaderValueOption{
+		Header: &ext_core_v3.HeaderValue{
+			Key:   k,
+			Value: v,
+		},
+	})
+}
+
+func (h *envoyHeaders) allocate(n int) {
+	*h = slices.Grow(*h, n)
+}
+
+type httpHeaders struct {
+	http.Header
+}
+
+func (h *httpHeaders) add(k, v string) {
+	h.Add(k, v)
+}
+
+func (h *httpHeaders) allocate(n int) {
+	if h.Header == nil {
+		h.Header = make(http.Header, n)
+	}
+}
+
+// GetResponseHTTPHeaders - returns the http headers to return if they are part of the decision as http header
+func (result *EvalResult) GetResponseHTTPHeaders() (http.Header, error) {
+	var h httpHeaders
+	return h.Header, result.makeHeadersFromDecision("headers", &h)
 }
 
 // GetResponseEnvoyHeaderValueOptions - returns the http headers to return if they are part of the decision as envoy header value options
 func (result *EvalResult) GetResponseEnvoyHeaderValueOptions() ([]*ext_core_v3.HeaderValueOption, error) {
-	headers, err := result.GetResponseHTTPHeaders()
-	if err != nil {
-		return nil, err
-	}
-
-	return transformHTTPHeaderToEnvoyHeaderValueOption(headers)
+	var h envoyHeaders
+	return h, result.makeHeadersFromDecision("headers", &h)
 }
 
 // GetResponseHTTPHeadersToAdd - returns the http headers to send to the downstream client
 func (result *EvalResult) GetResponseHTTPHeadersToAdd() ([]*ext_core_v3.HeaderValueOption, error) {
-	var responseHeaders = make(http.Header)
-
-	finalHeaders := []*ext_core_v3.HeaderValueOption{}
-
-	switch decision := result.Decision.(type) {
-	case bool:
-		return finalHeaders, nil
-	case map[string]interface{}:
-		var ok bool
-		var val interface{}
-
-		if val, ok = decision["response_headers_to_add"]; !ok {
-			return finalHeaders, nil
-		}
-
-		err := transformToHTTPHeaderFormat(val, &responseHeaders)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, result.invalidDecisionErr()
-	}
-
-	return transformHTTPHeaderToEnvoyHeaderValueOption(responseHeaders)
+	var h envoyHeaders
+	return h, result.makeHeadersFromDecision("response_headers_to_add", &h)
 }
 
 // HasResponseBody returns true if the decision defines a body (only true for structured decisions)
@@ -291,16 +329,16 @@ func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 
 // GetDynamicMetadata returns the dynamic metadata to return if part of the decision
 func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
-	var (
-		val interface{}
-		ok  bool
-	)
 	switch decision := result.Decision.(type) {
 	case bool:
 		if decision {
 			return nil, fmt.Errorf("dynamic metadata undefined for boolean decision")
 		}
 	case map[string]interface{}:
+		var (
+			val interface{}
+			ok  bool
+		)
 		if val, ok = decision["dynamic_metadata"]; !ok {
 			return nil, nil
 		}
@@ -338,74 +376,97 @@ func (result *EvalResult) GetResponseEnvoyHTTPStatus() (*ext_type_v3.HttpStatus,
 	return status, nil
 }
 
-func transformToHTTPHeaderFormat(input interface{}, result *http.Header) error {
-
-	takeResponseHeaders := func(headers map[string]interface{}, targetHeaders *http.Header) error {
-		for key, value := range headers {
-			switch values := value.(type) {
-			case string:
-				targetHeaders.Add(key, values)
-			case []string:
-				for _, v := range values {
-					targetHeaders.Add(key, v)
-				}
-			case []interface{}:
-				for _, value := range values {
-					if headerVal, ok := value.(string); ok {
-						targetHeaders.Add(key, headerVal)
-					} else {
-						return fmt.Errorf("invalid value type for header '%s'", key)
-					}
-				}
-			default:
-				return fmt.Errorf("type assertion error for header '%s'", key)
+func transformHeadersMapToHeadersBag(headers map[string]any, hb headersBag) error {
+	hb.allocate(len(headers))
+	for key, value := range headers {
+		switch val := value.(type) {
+		case string:
+			hb.add(key, val)
+		case []string:
+			hb.allocate(len(val))
+			for _, v := range val {
+				hb.add(key, v)
 			}
+		case []interface{}:
+			hb.allocate(len(val))
+			for _, v := range val {
+				s, ok := v.(string)
+				if !ok {
+					return fmt.Errorf("invalid value type %T for header '%s'", v, key)
+				}
+				hb.add(key, s)
+			}
+		default:
+			return fmt.Errorf("type assertion error for header '%s'", key)
 		}
-		return nil
 	}
+	return nil
+}
 
+func transformAnyInputToHeadersBag(input any, hb headersBag) error {
 	switch input := input.(type) {
-	case []interface{}:
+	case []any:
 		for _, val := range input {
-			headers, ok := val.(map[string]interface{})
+			headers, ok := val.(map[string]any)
 			if !ok {
 				return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", val)
 			}
 
-			err := takeResponseHeaders(headers, result)
-			if err != nil {
+			if err := transformHeadersMapToHeadersBag(headers, hb); err != nil {
 				return err
 			}
 		}
-
-	case map[string]interface{}:
-		err := takeResponseHeaders(input, result)
-		if err != nil {
-			return err
-		}
-
-	default:
-		return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
+		return nil
+	case map[string]any:
+		return transformHeadersMapToHeadersBag(input, hb)
 	}
-
-	return nil
+	return fmt.Errorf("type assertion error, expected headers to be of type 'object' but got '%T'", input)
 }
 
-func transformHTTPHeaderToEnvoyHeaderValueOption(headers http.Header) ([]*ext_core_v3.HeaderValueOption, error) {
-	responseHeaders := []*ext_core_v3.HeaderValueOption{}
-
-	for key, values := range headers {
-		for idx := range values {
-			headerValue := &ext_core_v3.HeaderValue{
-				Key:   key,
-				Value: values[idx],
-			}
-			headerValueOption := &ext_core_v3.HeaderValueOption{
-				Header: headerValue,
-			}
-			responseHeaders = append(responseHeaders, headerValueOption)
+// GetRequestQueryParametersToSet returns the query parameters to set in the request
+func (result *EvalResult) GetRequestQueryParametersToSet() ([]*ext_core_v3.QueryParameter, error) {
+	switch decision := result.Decision.(type) {
+	case bool:
+		return nil, nil
+	case map[string]interface{}:
+		val, ok := decision["query_parameters_to_set"]
+		if !ok {
+			return nil, nil
 		}
+
+		params, ok := val.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("type assertion error, expected query_parameters_to_set to be a map but got '%T'", val)
+		}
+
+		result := make([]*ext_core_v3.QueryParameter, 0, len(params))
+
+		for key, value := range params {
+			switch v := value.(type) {
+			case string:
+				result = append(result, &ext_core_v3.QueryParameter{
+					Key:   key,
+					Value: v,
+				})
+			case []interface{}:
+				result = slices.Grow(result, len(v))
+				for _, item := range v {
+					strItem, ok := item.(string)
+					if !ok {
+						return nil, fmt.Errorf("type assertion error: expected array element to be string but got '%T'", item)
+					}
+					result = append(result, &ext_core_v3.QueryParameter{
+						Key:   key,
+						Value: strItem,
+					})
+				}
+			default:
+				return nil, fmt.Errorf("type assertion error, expected value to be string or array but got '%T'", value)
+			}
+		}
+
+		return result, nil
 	}
 
-	return responseHeaders, nil
+	return nil, result.invalidDecisionErr()
 }

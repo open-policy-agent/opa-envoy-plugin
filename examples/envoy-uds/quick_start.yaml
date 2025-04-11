@@ -38,7 +38,7 @@ spec:
           ports:
             - containerPort: 8080
         - name: envoy
-          image: envoyproxy/envoy:v1.20.0
+          image: envoyproxy/envoy:v1.33-latest
           env:
             - name: ENVOY_UID
               value: "1111"
@@ -73,7 +73,7 @@ spec:
             - "run"
             - "--server"
             - "--config-file=/config/config.yaml"
-            - "--addr=localhost:8181"
+            - "--addr=0.0.0.0:8181"
             - "--diagnostic-addr=0.0.0.0:8282"
             - "--ignore=.*"
             - "/policy/policy.rego"
@@ -170,6 +170,8 @@ data:
                       target_uri: unix:///run/opa/sockets/auth.sock
                     timeout: 0.5s
               - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
       clusters:
       - name: service
         connect_timeout: 0.25s
@@ -206,36 +208,36 @@ data:
 
     default allow = false
 
-    token = {"valid": valid, "payload": payload} {
+    token = {"valid": valid, "payload": payload} if {
         [_, encoded] := split(http_request.headers.authorization, " ")
         [valid, _, payload] := io.jwt.decode_verify(encoded, {"secret": "secret"})
     }
 
-    allow {
+    allow if {
         is_token_valid
         action_allowed
     }
 
-    is_token_valid {
+    is_token_valid if {
       token.valid
       now := time.now_ns() / 1000000000
       token.payload.nbf <= now
       now < token.payload.exp
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "GET"
       token.payload.role == "guest"
       glob.match("/people*", [], http_request.path)
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "GET"
       token.payload.role == "admin"
       glob.match("/people*", [], http_request.path)
     }
 
-    action_allowed {
+    action_allowed if {
       http_request.method == "POST"
       token.payload.role == "admin"
       glob.match("/people", [], http_request.path)

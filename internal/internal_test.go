@@ -11,31 +11,30 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
-	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
+	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/plugins/logs"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
-	"github.com/open-policy-agent/opa/topdown"
-	"github.com/open-policy-agent/opa/util"
-
 	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	"github.com/open-policy-agent/opa/v1/plugins/logs"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/topdown"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 const exampleAllowedRequest = `{
@@ -283,7 +282,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" ||
+	if event.Error != nil || event.Path != "envoy/authz/result" ||
 		event.Revision != "" || *event.Result == false {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -434,7 +433,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true ||
+	if event.Error != nil || event.Path != "envoy/authz/result" || event.Revision != "" || *event.Result == true ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
@@ -471,7 +470,7 @@ func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
           res := http.send({"url": "%s", "method": "GET"})
           res.status_code == 200
 		}
@@ -888,7 +887,7 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+	if event.Error == nil || event.Path != "envoy/authz/result" || event.Revision != "" || event.Result != nil ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -954,7 +953,7 @@ func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1090,7 +1089,7 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error == nil || event.Path != "envoy/authz/allow" || event.Revision != "" || event.Result != nil ||
+	if event.Error == nil || event.Path != "envoy/authz/result" || event.Revision != "" || event.Result != nil ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
@@ -1121,7 +1120,7 @@ func TestCheckDenyWithLoggerV2(t *testing.T) {
 
 	event := customLogger.events[0]
 
-	if event.Error != nil || event.Path != "envoy/authz/allow" || event.Revision != "" || *event.Result == true ||
+	if event.Error != nil || event.Path != "envoy/authz/result" || event.Revision != "" || *event.Result == true ||
 		event.DecisionID == "" || event.Metrics == nil {
 		t.Fatal("Unexpected events:", customLogger.events)
 	}
@@ -1152,7 +1151,7 @@ func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
 		package envoy.authz
 
 		default allow = false
-		allow {
+		allow if {
 			resp := http.send({"url": "%s", "method":"GET",
 			  "force_cache": true, "force_cache_duration_seconds": 10})
 			resp.body.count == 1
@@ -1381,7 +1380,7 @@ func TestCheckAllowObjectDecisionDynamicMetadata(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1435,7 +1434,7 @@ func TestCheckAllowObjectDecisionDynamicMetadataDecisionID(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1471,7 +1470,7 @@ func TestCheckAllowBooleanDecisionDynamicMetadata(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 	`
@@ -1501,7 +1500,7 @@ func TestCheckAllowBooleanDecisionDynamicMetadataDecisionID(t *testing.T) {
 	
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 	`
@@ -1520,6 +1519,128 @@ func TestCheckAllowBooleanDecisionDynamicMetadataDecisionID(t *testing.T) {
 	assertDynamicMetadataDecisionID(t, output.GetDynamicMetadata())
 }
 
+func TestCheckAllowObjectDecisionReqQueryParamsToRemove(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+
+		default allow = true
+
+		query_parameters_to_remove := ["foo", "bar"]
+
+		result["allowed"] = allow
+		result["query_parameters_to_remove"] = query_parameters_to_remove`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	queryParams := response.GetQueryParametersToRemove()
+	if len(queryParams) != 2 {
+		t.Fatalf("Expected two query params but got %v", len(queryParams))
+	}
+
+	expectedQueryParams := []string{"foo", "bar"}
+
+	if !reflect.DeepEqual(expectedQueryParams, queryParams) {
+		t.Fatalf("Expected query params %v but got %v", expectedQueryParams, queryParams)
+	}
+}
+
+func TestCheckAllowObjectDecisionReqQueryParamsToSet(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	module := `
+		package envoy.authz
+
+		default allow = true
+
+		query_parameters_to_set := {
+			"foo": "value1",
+			"bar": ["value2", "value3"]
+		}
+
+		result["allowed"] = allow
+		result["query_parameters_to_set"] = query_parameters_to_set`
+
+	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatalf("Expected request to be allowed but got: %v", output)
+	}
+
+	response := output.GetOkResponse()
+	if response == nil {
+		t.Fatal("Expected OkHttpResponse struct but got nil")
+	}
+
+	queryParams := response.GetQueryParametersToSet()
+	if len(queryParams) != 3 {
+		t.Fatalf("Expected three query params but got %v", len(queryParams))
+	}
+
+	expectedQueryParamsToSet := []*ext_core.QueryParameter{
+		{
+			Key:   "foo",
+			Value: "value1",
+		},
+		{
+			Key:   "bar",
+			Value: "value2",
+		},
+		{
+			Key:   "bar",
+			Value: "value3",
+		},
+	}
+
+	// sort first by key, then by value
+
+	sort.Slice(queryParams, func(i, j int) bool {
+		if queryParams[i].Key == queryParams[j].Key {
+			return queryParams[i].Value < queryParams[j].Value
+		}
+		return queryParams[i].Key < queryParams[j].Key
+	})
+
+	sort.Slice(expectedQueryParamsToSet, func(i, j int) bool {
+		if expectedQueryParamsToSet[i].Key == expectedQueryParamsToSet[j].Key {
+			return expectedQueryParamsToSet[i].Value < expectedQueryParamsToSet[j].Value
+		}
+		return expectedQueryParamsToSet[i].Key < expectedQueryParamsToSet[j].Key
+	})
+
+	for i, param := range queryParams {
+		if !reflect.DeepEqual(expectedQueryParamsToSet[i], param) {
+			t.Fatalf("Expected query param %v but got %v", expectedQueryParamsToSet[i], param)
+		}
+	}
+}
+
 func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedPath), &req); err != nil {
@@ -1531,7 +1652,7 @@ func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1583,7 +1704,7 @@ func TestCheckAllowObjectDecisionResponseHeadersToAdd(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1635,7 +1756,7 @@ func TestCheckAllowObjectDecisionMultiValuedHeaders(t *testing.T) {
 
 		default allow = false
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 		}
 
@@ -1666,15 +1787,29 @@ func TestCheckAllowObjectDecisionMultiValuedHeaders(t *testing.T) {
 		t.Fatalf("Expected two headers to add but got %v", headersToAdd)
 	}
 
+	expected := []*ext_core.HeaderValueOption{
+		{
+			Header: &ext_core.HeaderValue{
+				Key:   "x",
+				Value: "hello",
+			},
+		},
+		{
+			Header: &ext_core.HeaderValue{
+				Key:   "x",
+				Value: "world",
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(expected, headersToAdd) {
+		t.Fatal("Unexpected response_headers_to_add")
+	}
+
 	headers := response.GetHeaders()
 	if len(headers) != 0 {
 		t.Fatalf("Expected no headers but got %v", len(headers))
 	}
-
-	expectedHeaders := http.Header{}
-	expectedHeaders.Set("x", "hello")
-	expectedHeaders.Add("x", "world")
-	assertHeaderValues(t, expectedHeaders, headersToAdd)
 }
 
 func TestCheckAllowObjectDecision(t *testing.T) {
@@ -1920,34 +2055,34 @@ func testAuthzServer(customConfig *Config, customPluginFuncs ...customPluginFunc
 
 		default allow = false
 
-		allow {
+		allow if {
 			roles_for_user[r]
 			required_roles[r]
 		}
 
-		allow {
+		allow if {
 			input.parsed_path = ["my", "test", "path"]
 			input.parsed_query.a = ["1", "2"]
 			input.parsed_query.x = ["y"]
 		}
 
-		allow {
+		allow if {
 			input.parsed_body.firstname == "foo"
 			input.parsed_body.lastname == "bar"
 			input.parsed_body.dept.it == "eng"
 		}
 
-		roles_for_user[r] {
+		roles_for_user[r] if {
 			r := user_roles[user_name][_]
 		}
 
-		required_roles[r] {
+		required_roles[r] if {
 			perm := role_perms[r][_]
 			perm.method = http_request.method
 			perm.path = http_request.path
 		}
 
-		user_name = parsed {
+		user_name = parsed if {
 			[_, encoded] := split(http_request.headers.authorization, " ")
 			[parsed, _] := split(base64url.decode(encoded), ":")
 		}
@@ -1965,9 +2100,30 @@ func testAuthzServer(customConfig *Config, customPluginFuncs ...customPluginFunc
 				{"method": "GET",  "path": "/productpage"},
 				{"method": "GET",  "path": "/api/v1/products"},
 			],
+		}
+
+		result.allowed = allow
+
+		result.headers = {
+		  "foo": "bar",
+		  "baz": "qux",
+		}
+
+		result.request_headers_to_remove = ["foo", "bar", "baz", "qux"]
+
+		result.query_parameters_to_remove = ["foo", "bar", "baz", "qux"]
+
+		result.query_parameters_to_set = {
+		  "foo": "bar",
+		  "baz": ["qux", "quux"]
+		}
+
+		result.response_headers_to_add = {
+		  "foo": "bar",
+		  "baz": "qux",
 		}`
 
-	return testAuthzServerWithModule(module, "envoy/authz/allow", customConfig, customPluginFuncs...)
+	return testAuthzServerWithModule(module, "envoy/authz/result", customConfig, customPluginFuncs...)
 }
 
 func testAuthzServerWithModule(module string, path string, customConfig *Config, customPluginFuncs ...customPluginFunc) *envoyExtAuthzGrpcServer {
@@ -2024,7 +2180,7 @@ func testAuthzServerWithObjectDecision(customConfig *Config, customPluginFuncs .
 		  "dynamic_metadata": {"test": "foo", "bar": "baz"}
 		}
 
-		allow = response {
+		allow = response if {
 			input.parsed_path = ["my", "test", "path"]
 		    response := {
 				"allowed": true,
@@ -2042,7 +2198,7 @@ func testAuthzServerWithTruncatedBody(customConfig *Config, customPluginFuncs ..
 
 		default allow = false
 
-		allow {
+		allow if {
 			not input.truncated_body
 		}
 		`
@@ -2096,7 +2252,7 @@ func TestPrometheusMetrics(t *testing.T) {
 
 func TestLogWithASTError(t *testing.T) {
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	err := server.log(context.Background(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
+	err := server.logDecision(context.Background(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
 	if err != nil {
 		panic(err)
 	}
@@ -2107,7 +2263,7 @@ func TestLogWithCancelError(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(nil, withCustomLogger(customLogger))
-	err := server.log(context.Background(), nil, &envoyauth.EvalResult{}, &topdown.Error{
+	err := server.logDecision(context.Background(), nil, &envoyauth.EvalResult{}, &topdown.Error{
 		Code:    topdown.CancelErr,
 		Message: "caller cancelled query execution",
 	})
@@ -2141,7 +2297,7 @@ func TestVersionInfoInputV3(t *testing.T) {
 	module := `
 		package envoy.authz
 
-		allow {
+		allow if {
 			input.version.ext_authz == "v3"
 			input.version.encoding == "protojson"
 		}
@@ -2168,7 +2324,7 @@ func TestVersionInfoInputV2(t *testing.T) {
 	module := `
 		package envoy.authz
 
-		allow {
+		allow if {
 			input.version.ext_authz == "v2"
 			input.version.encoding == "encoding/json"
 		}
@@ -2241,31 +2397,6 @@ func assertHeaders(t *testing.T, actualHeaders []*ext_core.HeaderValueOption, ex
 			if expVal != value {
 				t.Fatalf("Expected value for header \"%v\" is \"%v\" but got \"%v\"", key, expVal, value)
 			}
-		}
-	}
-}
-
-func assertHeaderValues(t *testing.T, expectedHeaders http.Header, headersToAdd []*ext_core.HeaderValueOption) {
-	t.Helper()
-	for _, header := range headersToAdd {
-		key := header.GetHeader().GetKey()
-		value := header.GetHeader().GetValue()
-
-		expectedValues := expectedHeaders[key]
-		if expectedValues == nil {
-			t.Fatalf("unexpected header '%s'", key)
-		}
-
-		found := false
-		for _, expectedValue := range expectedValues {
-			if expectedValue == value {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			t.Fatalf("unexpected value '%s' for header '%s'", value, key)
 		}
 	}
 }

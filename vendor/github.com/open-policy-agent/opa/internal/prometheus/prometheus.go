@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/open-policy-agent/opa/metrics"
+	"github.com/open-policy-agent/opa/v1/metrics"
 )
 
 // Provider wraps a metrics.Metrics provider with a Prometheus registry that can
@@ -94,7 +94,7 @@ func (p *Provider) InstrumentHandler(handler http.Handler, label string) http.Ha
 }
 
 // Info returns attributes that describe the metric provider.
-func (p *Provider) Info() metrics.Info {
+func (*Provider) Info() metrics.Info {
 	return metrics.Info{
 		Name: "prometheus",
 	}
@@ -211,7 +211,7 @@ func allocHandler(rsp http.ResponseWriter, req *http.Request) {
 	if req.URL.Query().Get("pretty") == "true" {
 		alloc = prettyByteSize(total)
 	} else {
-		alloc = fmt.Sprintf("%d", total)
+		alloc = strconv.FormatUint(total, 10)
 	}
 
 	rsp.WriteHeader(200)

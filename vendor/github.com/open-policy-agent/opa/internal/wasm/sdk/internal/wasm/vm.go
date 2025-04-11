@@ -16,14 +16,14 @@ import (
 
 	wasmtime "github.com/bytecodealliance/wasmtime-go/v3"
 
-	"github.com/open-policy-agent/opa/ast"
 	sdk_errors "github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors"
 	"github.com/open-policy-agent/opa/internal/wasm/util"
-	"github.com/open-policy-agent/opa/metrics"
-	"github.com/open-policy-agent/opa/topdown"
-	"github.com/open-policy-agent/opa/topdown/builtins"
-	"github.com/open-policy-agent/opa/topdown/cache"
-	"github.com/open-policy-agent/opa/topdown/print"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/metrics"
+	"github.com/open-policy-agent/opa/v1/topdown"
+	"github.com/open-policy-agent/opa/v1/topdown/builtins"
+	"github.com/open-policy-agent/opa/v1/topdown/cache"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
 )
 
 // VM is a wrapper around a Wasm VM instance
@@ -276,7 +276,7 @@ func getABIVersion(i *wasmtime.Instance, store wasmtime.Storelike) (int32, int32
 			return majorVal.I32(), minorVal.I32(), nil
 		}
 	}
-	return 0, 0, fmt.Errorf("failed to read ABI version")
+	return 0, 0, errors.New("failed to read ABI version")
 }
 
 // Eval performs an evaluation of the specified entrypoint, with any provided

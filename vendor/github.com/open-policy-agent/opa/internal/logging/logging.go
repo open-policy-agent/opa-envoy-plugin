@@ -12,7 +12,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/open-policy-agent/opa/logging"
+	"github.com/open-policy-agent/opa/v1/logging"
 )
 
 func GetLevel(level string) (logging.Level, error) {
@@ -50,7 +50,7 @@ func spaces(num int) string {
 	return strings.Repeat(" ", num)
 }
 
-func (p *prettyFormatter) Format(e *logrus.Entry) ([]byte, error) {
+func (*prettyFormatter) Format(e *logrus.Entry) ([]byte, error) {
 	b := new(bytes.Buffer)
 
 	level := strings.ToUpper(e.Level.String())

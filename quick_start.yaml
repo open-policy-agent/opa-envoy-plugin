@@ -38,7 +38,7 @@ spec:
           ports:
             - containerPort: 8080
         - name: envoy
-          image: envoyproxy/envoy:v1.10.0
+          image: envoyproxy/envoy:v1.33-latest
           securityContext:
             runAsUser: 1111
           volumeMounts:
@@ -155,8 +155,9 @@ data:
                       target_uri: 127.0.0.1:9191
                       stat_prefix: ext_authz
                     timeout: 0.5s
-              - name: envoy.router
-                typed_config: {}
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
       clusters:
       - name: service
         connect_timeout: 0.25s

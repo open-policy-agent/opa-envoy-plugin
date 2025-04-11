@@ -13,7 +13,7 @@ import (
 
 	"github.com/open-policy-agent/opa/internal/wasm/sdk/opa/errors"
 	"github.com/open-policy-agent/opa/internal/wasm/util"
-	"github.com/open-policy-agent/opa/metrics"
+	"github.com/open-policy-agent/opa/v1/metrics"
 )
 
 var errNotReady = errors.New(errors.NotReadyErr, "")
@@ -44,7 +44,7 @@ func NewPool(poolSize, memoryMinPages, memoryMaxPages uint32) *Pool {
 	cfg.SetEpochInterruption(true)
 
 	available := make(chan struct{}, poolSize)
-	for i := uint32(0); i < poolSize; i++ {
+	for range poolSize {
 		available <- struct{}{}
 	}
 
