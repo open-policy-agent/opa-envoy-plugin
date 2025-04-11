@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -20,14 +21,15 @@ import (
 	ext_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ext_authz_v2 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v2"
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	ext_proc_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	ext_type_v2 "github.com/envoyproxy/go-control-plane/envoy/type"
 	ext_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	_structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/plugins"
 	"github.com/open-policy-agent/opa/v1/plugins/logs"
@@ -35,6 +37,8 @@ import (
 	"github.com/open-policy-agent/opa/v1/storage/inmem"
 	"github.com/open-policy-agent/opa/v1/topdown"
 	"github.com/open-policy-agent/opa/v1/util"
+
+	"github.com/open-policy-agent/opa-envoy-plugin/envoyauth"
 )
 
 const exampleAllowedRequest = `{
@@ -2496,4 +2500,1503 @@ func (p *testPluginError) Reconfigure(context.Context, interface{}) {
 func (p *testPluginError) Log(_ context.Context, event logs.EventV1) error {
 	p.events = append(p.events, event)
 	return fmt.Errorf("Bad Logger Error")
+}
+
+// mockExtProcStream is a mock implementation of the ProcessServer interface
+type mockExtProcStream struct {
+	ctx              context.Context
+	t                *testing.T
+	requestsToSend   []*ext_proc_v3.ProcessingRequest
+	receivedIndex    int
+	receivedMessages []*ext_proc_v3.ProcessingResponse
+	sendError        error
+	recvError        error
+}
+
+func (m *mockExtProcStream) Send(resp *ext_proc_v3.ProcessingResponse) error {
+	if m.sendError != nil {
+		return m.sendError
+	}
+	m.receivedMessages = append(m.receivedMessages, resp)
+	return nil
+}
+
+func (m *mockExtProcStream) Recv() (*ext_proc_v3.ProcessingRequest, error) {
+	if m.recvError != nil {
+		return nil, m.recvError
+	}
+
+	if m.receivedIndex >= len(m.requestsToSend) {
+		return nil, io.EOF
+	}
+
+	req := m.requestsToSend[m.receivedIndex]
+	m.receivedIndex++
+	return req, nil
+}
+
+// Additional methods required by the interface
+func (m *mockExtProcStream) SetHeader(metadata.MD) error {
+	return nil // No-op for tests
+}
+
+func (m *mockExtProcStream) SendHeader(metadata.MD) error {
+	return nil // No-op for tests
+}
+
+func (m *mockExtProcStream) SetTrailer(metadata.MD) {
+	// No-op for tests
+}
+
+func (m *mockExtProcStream) SendMsg(msg interface{}) error {
+	resp, ok := msg.(*ext_proc_v3.ProcessingResponse)
+	if !ok {
+		return fmt.Errorf("expected ProcessingResponse")
+	}
+	return m.Send(resp)
+}
+
+func (m *mockExtProcStream) RecvMsg(msg interface{}) error {
+	req, ok := msg.(*ext_proc_v3.ProcessingRequest)
+	if !ok {
+		return fmt.Errorf("expected ProcessingRequest")
+	}
+
+	received, err := m.Recv()
+	if err != nil {
+		return err
+	}
+
+	*req = *received
+	return nil
+}
+
+func (m *mockExtProcStream) Context() context.Context {
+	return m.ctx
+}
+
+func buildHeaders(m map[string]string) *ext_proc_v3.HttpHeaders {
+	var kv []*ext_core.HeaderValue
+	for k, v := range m {
+		kv = append(kv, &ext_core.HeaderValue{Key: k, Value: v})
+	}
+	return &ext_proc_v3.HttpHeaders{
+		Headers: &ext_core.HeaderMap{
+			Headers: kv,
+		},
+	}
+}
+
+func buildBody(body string) *ext_proc_v3.HttpBody {
+	return &ext_proc_v3.HttpBody{
+		Body:        []byte(body),
+		EndOfStream: true,
+	}
+}
+
+func buildTrailers(m map[string]string) *ext_proc_v3.HttpTrailers {
+	var kv []*ext_core.HeaderValue
+	for k, v := range m {
+		kv = append(kv, &ext_core.HeaderValue{Key: k, Value: v})
+	}
+	return &ext_proc_v3.HttpTrailers{
+		Trailers: &ext_core.HeaderMap{
+			Headers: kv,
+		},
+	}
+}
+
+func TestProcessRequestHeaders(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"headers_to_add": [
+				{"key": "X-Added-Header", "value": "TestValue"}
+			]
+		} if {
+			input.path == "/test-path"
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test request with headers
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":      "/test-path",
+						":method":    "GET",
+						":scheme":    "http",
+						":authority": "example.com",
+						"user-agent": "test-agent",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check that headers were added properly
+	response := mockStream.receivedMessages[0]
+	reqHeaders := response.GetRequestHeaders()
+
+	if reqHeaders == nil {
+		t.Fatal("Expected RequestHeaders in response, got nil")
+	}
+
+	headerMutation := reqHeaders.GetResponse().GetHeaderMutation()
+	if headerMutation == nil {
+		t.Fatal("Expected HeaderMutation in response, got nil")
+	}
+
+	if len(headerMutation.GetSetHeaders()) != 1 {
+		t.Fatalf("Expected 1 header to be added, got %d", len(headerMutation.GetSetHeaders()))
+	}
+
+	addedHeader := headerMutation.GetSetHeaders()[0]
+	if addedHeader.GetHeader().GetKey() != "X-Added-Header" || addedHeader.GetHeader().GetValue() != "TestValue" {
+		t.Fatalf("Expected header X-Added-Header: TestValue, got %s: %s",
+			addedHeader.GetHeader().GetKey(),
+			addedHeader.GetHeader().GetValue())
+	}
+}
+
+func TestProcessRequestBody(t *testing.T) {
+	ctx := context.Background()
+	module := `
+        package ext_proc
+
+        # Default empty response
+        default response = {}
+
+        # Rule for request headers
+        response = {} if {
+            input.request_type == "request_headers"
+        }
+
+        # Rule for request body
+        response = body_response if {
+            input.request_type == "request_body"
+        }
+
+        # Determine body response based on action
+        body_response = {
+            "body": "Modified body content"
+        } if {
+            input.parsed_body.action == "read"
+        } else = {
+            "body": "Default body response"
+        }
+    `
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test request with body
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        "/api/data",
+						":method":      "POST",
+						"content-type": "application/json",
+					}),
+				},
+			},
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"action":"read","resource":"document1"}`),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check body modification
+	bodyResponse := mockStream.receivedMessages[1].GetRequestBody()
+	if bodyResponse == nil {
+		t.Fatal("Expected RequestBody in response, got nil")
+	}
+
+	if bodyResponse.GetResponse() == nil {
+		t.Fatal("Expected CommonResponse in RequestBody, got nil")
+	}
+
+	bodyMutation := bodyResponse.GetResponse().GetBodyMutation()
+	if bodyMutation == nil {
+		t.Fatal("Expected BodyMutation in response, got nil")
+	}
+
+	modifiedBody := string(bodyMutation.GetBody())
+	if modifiedBody != "Modified body content" {
+		t.Fatalf("Expected modified body content, got %s", modifiedBody)
+	}
+}
+
+func TestProcessImmediateResponse(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"immediate_response": {
+				"status": 403,
+				"body": "Access Denied",
+				"headers": [
+					{"key": "Content-Type", "value": "text/plain"},
+					{"key": "X-Denied-Reason", "value": "Unauthorized"}
+				]
+			}
+		} if {
+			input.path == "/forbidden"
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test request that should trigger immediate response
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":      "/forbidden",
+						":method":    "GET",
+						":authority": "example.com",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(mockStream.receivedMessages))
+	}
+
+	response := mockStream.receivedMessages[0]
+	immediateResponse := response.GetImmediateResponse()
+	if immediateResponse == nil {
+		t.Fatal("Expected ImmediateResponse, got nil")
+	}
+
+	// Check status
+	if immediateResponse.GetStatus().GetCode() != ext_type_v3.StatusCode_Forbidden {
+		t.Fatalf("Expected Forbidden status, got %v", immediateResponse.GetStatus().GetCode())
+	}
+
+	// Check body
+	if string(immediateResponse.GetBody()) != "Access Denied" {
+		t.Fatalf("Expected 'Access Denied' body, got '%s'", string(immediateResponse.GetBody()))
+	}
+
+	// Check headers
+	headers := immediateResponse.GetHeaders().GetSetHeaders()
+	if len(headers) != 2 {
+		t.Fatalf("Expected 2 headers, got %d", len(headers))
+	}
+
+	foundContentType := false
+	foundDeniedReason := false
+
+	for _, h := range headers {
+		if h.GetHeader().GetKey() == "Content-Type" && h.GetHeader().GetValue() == "text/plain" {
+			foundContentType = true
+		}
+		if h.GetHeader().GetKey() == "X-Denied-Reason" && h.GetHeader().GetValue() == "Unauthorized" {
+			foundDeniedReason = true
+		}
+	}
+
+	if !foundContentType {
+		t.Error("Missing expected Content-Type header")
+	}
+	if !foundDeniedReason {
+		t.Error("Missing expected X-Denied-Reason header")
+	}
+}
+
+func TestProcessDynamicMetadata(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"dynamic_metadata": {
+				"filter_metadata": {
+					"user_id": "12345",
+					"roles": ["admin", "user"]
+				}
+			}
+		} if {
+			input.path == "/metadata"
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test request for dynamic metadata
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":      "/metadata",
+						":method":    "GET",
+						":authority": "example.com",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(mockStream.receivedMessages))
+	}
+
+	response := mockStream.receivedMessages[0]
+	dynamicMetadata := response.GetDynamicMetadata()
+	if dynamicMetadata == nil {
+		t.Fatal("Expected DynamicMetadata, got nil")
+	}
+
+	filterMetadata, ok := dynamicMetadata.GetFields()["filter_metadata"]
+	if !ok {
+		t.Fatal("Expected filter_metadata field in dynamic metadata")
+	}
+
+	structValue := filterMetadata.GetStructValue()
+	if structValue == nil {
+		t.Fatal("Expected struct value for filter_metadata")
+	}
+
+	userId, ok := structValue.GetFields()["user_id"]
+	if !ok || userId.GetStringValue() != "12345" {
+		t.Fatalf("Expected user_id: 12345, got %v", userId)
+	}
+
+	roles, ok := structValue.GetFields()["roles"]
+	if !ok {
+		t.Fatal("Expected roles field")
+	}
+
+	listValue := roles.GetListValue()
+	if listValue == nil || len(listValue.GetValues()) != 2 {
+		t.Fatalf("Expected list with 2 values, got %v", listValue)
+	}
+
+	if listValue.GetValues()[0].GetStringValue() != "admin" ||
+		listValue.GetValues()[1].GetStringValue() != "user" {
+		t.Fatalf("Expected roles [admin, user], got %v", listValue)
+	}
+}
+
+func TestProcessResponseHeaders(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"headers_to_add": [
+				{"key": "X-Response-Header", "value": "ResponseValue"}
+			]
+		} if {
+			input.request_type == "response_headers"
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test response headers processing
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_ResponseHeaders{
+					ResponseHeaders: buildHeaders(map[string]string{
+						":status":      "200",
+						"content-type": "application/json",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(mockStream.receivedMessages))
+	}
+
+	response := mockStream.receivedMessages[0]
+	respHeaders := response.GetResponseHeaders()
+	if respHeaders == nil {
+		t.Fatal("Expected ResponseHeaders in response, got nil")
+	}
+
+	headerMutation := respHeaders.GetResponse().GetHeaderMutation()
+	if headerMutation == nil {
+		t.Fatal("Expected HeaderMutation in response, got nil")
+	}
+
+	if len(headerMutation.GetSetHeaders()) != 1 {
+		t.Fatalf("Expected 1 header to be added, got %d", len(headerMutation.GetSetHeaders()))
+	}
+
+	addedHeader := headerMutation.GetSetHeaders()[0]
+	if addedHeader.GetHeader().GetKey() != "X-Response-Header" || addedHeader.GetHeader().GetValue() != "ResponseValue" {
+		t.Fatalf("Expected header X-Response-Header: ResponseValue, got %s: %s",
+			addedHeader.GetHeader().GetKey(),
+			addedHeader.GetHeader().GetValue())
+	}
+}
+
+func TestProcessResponseTrailers(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"trailers_to_add": [
+				{"key": "X-Trailer-Added", "value": "TrailerValue"}
+			]
+		} if {
+			input.request_type == "response_trailers"
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test response trailers processing
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_ResponseTrailers{
+					ResponseTrailers: buildTrailers(map[string]string{
+						"grpc-status": "0",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(mockStream.receivedMessages))
+	}
+
+	response := mockStream.receivedMessages[0]
+	respTrailers := response.GetResponseTrailers()
+	if respTrailers == nil {
+		t.Fatal("Expected ResponseTrailers in response, got nil")
+	}
+
+	headerMutation := respTrailers.GetHeaderMutation()
+	if headerMutation == nil {
+		t.Fatal("Expected HeaderMutation in response, got nil")
+	}
+
+	if len(headerMutation.GetSetHeaders()) != 1 {
+		t.Fatalf("Expected 1 trailer to be added, got %d", len(headerMutation.GetSetHeaders()))
+	}
+
+	addedTrailer := headerMutation.GetSetHeaders()[0]
+	if addedTrailer.GetHeader().GetKey() != "X-Trailer-Added" || addedTrailer.GetHeader().GetValue() != "TrailerValue" {
+		t.Fatalf("Expected trailer X-Trailer-Added: TrailerValue, got %s: %s",
+			addedTrailer.GetHeader().GetKey(),
+			addedTrailer.GetHeader().GetValue())
+	}
+}
+
+func TestProcessContextTimeout(t *testing.T) {
+	// Create a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	defer cancel()
+
+	module := `
+		package ext_proc
+
+		# Add a deliberate delay to force timeout
+		response = {
+			"headers_to_add": [
+				{"key": "X-Test", "value": "Test"}
+			]
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":   "/test",
+						":method": "GET",
+					}),
+				},
+			},
+		},
+	}
+
+	// Sleep to ensure the context times out
+	time.Sleep(time.Millisecond * 20)
+
+	err = server.Process(mockStream)
+	if err == nil {
+		t.Fatal("Expected context timeout error, got nil")
+	}
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Expected DeadlineExceeded error, got: %v", err)
+	}
+}
+
+func TestProcessSendError(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"headers_to_add": [
+				{"key": "X-Test", "value": "Test"}
+			]
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":   "/test",
+						":method": "GET",
+					}),
+				},
+			},
+		},
+		sendError: fmt.Errorf("send error"),
+	}
+
+	err = server.Process(mockStream)
+	if err == nil {
+		t.Fatal("Expected send error, got nil")
+	}
+
+	if err.Error() != "send error" {
+		t.Fatalf("Expected 'send error', got: %v", err)
+	}
+}
+
+func TestProcessReceiveError(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"headers_to_add": [
+				{"key": "X-Test", "value": "Test"}
+			]
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	mockStream := &mockExtProcStream{
+		ctx:       ctx,
+		t:         t,
+		recvError: fmt.Errorf("receive error"),
+	}
+
+	err = server.Process(mockStream)
+	if err == nil {
+		t.Fatal("Expected receive error, got nil")
+	}
+
+	if err.Error() != "receive error" {
+		t.Fatalf("Expected 'receive error', got: %v", err)
+	}
+}
+
+func TestProcessMultipleRequests(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		# Rule for request headers
+		response = {
+			"headers_to_add": [
+				{"key": "X-Request-Header", "value": "RequestValue"}
+			]
+		} if {
+			input.request_type == "request_headers"
+		}
+
+		# Rule for request body
+		response = {
+			"body": "Modified body"
+		} if {
+			input.request_type == "request_body"
+		}
+
+		# Rule for response headers
+		response = {
+			"headers_to_add": [
+				{"key": "X-Response-Header", "value": "ResponseValue"}
+			]
+		} if {
+			input.request_type == "response_headers"
+		}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test complete request-response flow
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			// Request headers
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        "/api/resource",
+						":method":      "POST",
+						"content-type": "application/json",
+					}),
+				},
+			},
+			// Request body
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"action":"update"}`),
+				},
+			},
+			// Response headers
+			{
+				Request: &ext_proc_v3.ProcessingRequest_ResponseHeaders{
+					ResponseHeaders: buildHeaders(map[string]string{
+						":status":      "200",
+						"content-type": "application/json",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 3 {
+		t.Fatalf("Expected 3 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check first response - request headers
+	reqHeadersResp := mockStream.receivedMessages[0].GetRequestHeaders()
+	if reqHeadersResp == nil {
+		t.Fatal("Expected RequestHeaders in first response")
+	}
+
+	reqHeader := reqHeadersResp.GetResponse().GetHeaderMutation().GetSetHeaders()[0]
+	if reqHeader.GetHeader().GetKey() != "X-Request-Header" || reqHeader.GetHeader().GetValue() != "RequestValue" {
+		t.Fatalf("Unexpected request header: %s: %s", reqHeader.GetHeader().GetKey(), reqHeader.GetHeader().GetValue())
+	}
+
+	// Check second response - request body
+	reqBodyResp := mockStream.receivedMessages[1].GetRequestBody()
+	if reqBodyResp == nil {
+		t.Fatal("Expected RequestBody in second response")
+	}
+
+	modifiedBody := string(reqBodyResp.GetResponse().GetBodyMutation().GetBody())
+	if modifiedBody != "Modified body" {
+		t.Fatalf("Expected modified body 'Modified body', got '%s'", modifiedBody)
+	}
+
+	// Check third response - response headers
+	respHeadersResp := mockStream.receivedMessages[2].GetResponseHeaders()
+	if respHeadersResp == nil {
+		t.Fatal("Expected ResponseHeaders in third response")
+	}
+
+	respHeader := respHeadersResp.GetResponse().GetHeaderMutation().GetSetHeaders()[0]
+	if respHeader.GetHeader().GetKey() != "X-Response-Header" || respHeader.GetHeader().GetValue() != "ResponseValue" {
+		t.Fatalf("Unexpected response header: %s: %s", respHeader.GetHeader().GetKey(), respHeader.GetHeader().GetValue())
+	}
+}
+
+func TestProcessEvalError(t *testing.T) {
+	ctx := context.Background()
+	// Create a module with an error that will occur during evaluation
+	module := `
+		package ext_proc
+
+		default response = {"headers_to_add": "this will fail as it's not an array"}
+	`
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":   "/test",
+						":method": "GET",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err == nil {
+		t.Fatal("Expected evaluation error, got nil")
+	}
+
+	// Check that the error message contains the expected text
+	if !strings.Contains(err.Error(), "headers_to_add") {
+		t.Errorf("Expected error about headers_to_add, got: %v", err)
+	}
+}
+
+func TestStreamStateManagement(t *testing.T) {
+	ctx := context.Background()
+	module := `
+        package ext_proc
+
+        # Default response to avoid undefined decision errors
+        default response = {}
+
+        # For request headers: store the path
+        response = {} if {
+            input.request_type == "request_headers"
+        }
+
+        # For request body: verify state contains correct path
+        response = {
+            "headers_to_add": [
+                {"key": "X-Path-Seen", "value": input.path}
+            ]
+        } if {
+            input.request_type == "request_body"
+        }
+
+        # For response headers: handle case when path might be missing
+        response = {
+            "headers_to_add": [
+                {"key": "X-Response-Processed", "value": "true"}
+            ]
+        } if {
+            input.request_type == "response_headers"
+        }
+    `
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	testPath := "/test/state/management"
+
+	// Test state management across multiple request types
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			// 1. Request headers
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        testPath,
+						":method":      "GET",
+						"content-type": "application/json",
+					}),
+				},
+			},
+			// 2. Request body
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"test":"value"}`),
+				},
+			},
+			// 3. Response headers
+			{
+				Request: &ext_proc_v3.ProcessingRequest_ResponseHeaders{
+					ResponseHeaders: buildHeaders(map[string]string{
+						":status": "200",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 3 {
+		t.Fatalf("Expected 3 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check if path from state was correctly used in request body processing
+	bodyResp := mockStream.receivedMessages[1].GetRequestBody()
+	if bodyResp == nil {
+		t.Fatal("Expected RequestBody in second response")
+	}
+
+	headerMutation := bodyResp.GetResponse().GetHeaderMutation()
+	if headerMutation == nil {
+		t.Fatal("Expected HeaderMutation in second response")
+	}
+
+	found := false
+	for _, header := range headerMutation.GetSetHeaders() {
+		if header.GetHeader().GetKey() == "X-Path-Seen" && header.GetHeader().GetValue() == testPath {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("Expected header X-Path-Seen: %s in request body response", testPath)
+	}
+
+	// For response headers, we are just checking if we got a response
+	respHeadersResp := mockStream.receivedMessages[2].GetResponseHeaders()
+	if respHeadersResp == nil {
+		t.Fatal("Expected ResponseHeaders in third response")
+	}
+}
+
+func TestProcessSkipRequestBodyParse(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"body": "Parsed JSON"
+		} if {
+			input.parsed_body.action == "read"
+		}
+
+		response = {
+			"body": "No parsed body"
+		} if {
+			not input.parsed_body
+		}
+	`
+
+	// Create server with SkipRequestBodyParse enabled
+	skipParseServer, err := testExtProcServerWithConfig(module, t, &Config{
+		Addr:                 ":0",
+		Path:                 "ext_proc/response",
+		SkipRequestBodyParse: true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create skip-parse server: %v", err)
+	}
+
+	// Create a regular server with parsing enabled
+	parseServer, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create regular server: %v", err)
+	}
+
+	// Test with body parsing skipped
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        "/api/data",
+						":method":      "POST",
+						"content-type": "application/json",
+					}),
+				},
+			},
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"action":"read","resource":"document1"}`),
+				},
+			},
+		},
+	}
+
+	err = skipParseServer.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check that no parsing occurred
+	bodyResponse := mockStream.receivedMessages[1].GetRequestBody()
+	if bodyResponse == nil {
+		t.Fatal("Expected RequestBody in response, got nil")
+	}
+
+	bodyMutation := bodyResponse.GetResponse().GetBodyMutation()
+	if bodyMutation == nil {
+		t.Fatal("Expected BodyMutation in response, got nil")
+	}
+
+	modifiedBody := string(bodyMutation.GetBody())
+	if modifiedBody != "No parsed body" {
+		t.Fatalf("Expected 'No parsed body', got '%s'", modifiedBody)
+	}
+
+	// Now test with normal parsing
+	mockStream = &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        "/api/data",
+						":method":      "POST",
+						"content-type": "application/json",
+					}),
+				},
+			},
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"action":"read","resource":"document1"}`),
+				},
+			},
+		},
+	}
+
+	err = parseServer.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check that parsing did occur
+	bodyResponse = mockStream.receivedMessages[1].GetRequestBody()
+	if bodyResponse == nil {
+		t.Fatal("Expected RequestBody in response, got nil")
+	}
+
+	bodyMutation = bodyResponse.GetResponse().GetBodyMutation()
+	if bodyMutation == nil {
+		t.Fatal("Expected BodyMutation in response, got nil")
+	}
+
+	modifiedBody = string(bodyMutation.GetBody())
+	if modifiedBody != "Parsed JSON" {
+		t.Fatalf("Expected 'Parsed JSON', got '%s'", modifiedBody)
+	}
+}
+
+func TestProcessInvalidJSON(t *testing.T) {
+	ctx := context.Background()
+	module := `
+        package ext_proc
+
+        # Default response to avoid undefined decision errors
+        default response = {}
+
+        # Handle request headers
+        response = {} if {
+            input.request_type == "request_headers"
+        }
+
+        # Handle request body
+        response = {
+            "body": "Valid JSON"
+        } if {
+            input.request_type == "request_body"
+        }
+    `
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test with invalid JSON
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        "/api/data",
+						":method":      "POST",
+						"content-type": "application/json",
+					}),
+				},
+			},
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"this is invalid json`),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err == nil {
+		t.Fatal("Expected error for invalid JSON, got nil")
+	}
+
+	// Check that the error message contains expected text related to JSON parsing
+	if !strings.Contains(err.Error(), "EOF") &&
+		!strings.Contains(err.Error(), "JSON") &&
+		!strings.Contains(err.Error(), "parse") {
+		t.Fatalf("Expected JSON parsing error, got: %v", err)
+	}
+
+	// We should have at least received one response for the headers
+	if len(mockStream.receivedMessages) < 1 {
+		t.Fatalf("Expected at least 1 response, got %d", len(mockStream.receivedMessages))
+	}
+}
+
+func TestProcessTruncatedBody(t *testing.T) {
+	ctx := context.Background()
+	module := `
+        package ext_proc
+
+        # Default response to avoid undefined decision errors
+        default response = {}
+
+        # Handle request headers
+        response = {} if {
+            input.request_type == "request_headers"
+        }
+
+        # Handle truncated body
+        response = {
+            "immediate_response": {
+                "status": 413,
+                "body": "Payload Too Large"
+            }
+        } if {
+            input.truncated_body == true
+        }
+
+        # Handle non-truncated body
+        response = {
+            "body": "Normal response"
+        } if {
+            input.request_type == "request_body"
+            not input.truncated_body
+        }
+    `
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test with truncated body (content-length mismatch)
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":          "/api/data",
+						":method":        "POST",
+						"content-type":   "application/json",
+						"content-length": "1000", // Much larger than actual body
+					}),
+				},
+			},
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`{"small":"body"}`),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	if len(mockStream.receivedMessages) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// The second response should be an immediate response with payload too large
+	immediateResponse := mockStream.receivedMessages[1].GetImmediateResponse()
+	if immediateResponse == nil {
+		t.Fatal("Expected ImmediateResponse for truncated body, got nil")
+	}
+
+	if immediateResponse.GetStatus().GetCode() != ext_type_v3.StatusCode_PayloadTooLarge {
+		t.Fatalf("Expected Payload Too Large status, got %v", immediateResponse.GetStatus().GetCode())
+	}
+
+	if string(immediateResponse.GetBody()) != "Payload Too Large" {
+		t.Fatalf("Expected 'Payload Too Large' body, got '%s'", string(immediateResponse.GetBody()))
+	}
+}
+
+func TestProcessUnsupportedContentType(t *testing.T) {
+	ctx := context.Background()
+	module := `
+        package ext_proc
+
+        # Default response to avoid undefined decision errors
+        default response = {}
+
+        # Handle request headers
+        response = {} if {
+            input.request_type == "request_headers"
+        }
+
+        # Handle request body - both for JSON and non-JSON
+        response = {} if {
+            input.request_type == "request_body"
+        }
+    `
+
+	server, err := testExtProcServer(module, t)
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	// Test with unsupported content type
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":        "/api/data",
+						":method":      "POST",
+						"content-type": "text/plain", // Not JSON
+					}),
+				},
+			},
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestBody{
+					RequestBody: buildBody(`This is plain text, not JSON`),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	// Check that we got responses without errors
+	if len(mockStream.receivedMessages) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(mockStream.receivedMessages))
+	}
+
+	// Check that the first response is for request headers
+	headersResp := mockStream.receivedMessages[0].GetRequestHeaders()
+	if headersResp == nil {
+		t.Fatal("Expected RequestHeaders in first response")
+	}
+
+	// Check that the second response is for request body
+	bodyResp := mockStream.receivedMessages[1].GetRequestBody()
+	if bodyResp == nil {
+		t.Fatal("Expected RequestBody in second response")
+	}
+}
+
+func TestProcessPerformanceMetrics(t *testing.T) {
+	ctx := context.Background()
+	module := `
+		package ext_proc
+
+		response = {
+			"headers_to_add": [
+				{"key": "X-Test", "value": "Test"}
+			]
+		}
+	`
+
+	// Create server with metrics enabled
+	server, err := testExtProcServerWithConfig(module, t, &Config{
+		Addr:                     ":0",
+		Path:                     "ext_proc/response",
+		EnablePerformanceMetrics: true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+
+	mockStream := &mockExtProcStream{
+		ctx: ctx,
+		t:   t,
+		requestsToSend: []*ext_proc_v3.ProcessingRequest{
+			{
+				Request: &ext_proc_v3.ProcessingRequest_RequestHeaders{
+					RequestHeaders: buildHeaders(map[string]string{
+						":path":   "/test",
+						":method": "GET",
+					}),
+				},
+			},
+		},
+	}
+
+	err = server.Process(mockStream)
+	if err != nil {
+		t.Fatalf("Process returned an error: %v", err)
+	}
+
+	// Check that the method completes without error
+	if len(mockStream.receivedMessages) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(mockStream.receivedMessages))
+	}
+}
+
+// Helper function to create a test server with custom config
+func testExtProcServerWithConfig(module string, t *testing.T, customConfig *Config) (*envoyExtProcGrpcServer, error) {
+	ctx := context.Background()
+	store := inmem.New()
+	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
+
+	// Insert the module into storage
+	err := store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert policy: %w", err)
+	}
+
+	err = store.Commit(ctx, txn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Create a plugin manager
+	m, err := plugins.New([]byte{}, "test", store)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
+	// Start the plugin manager
+	if err := m.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start plugin manager: %w", err)
+	}
+
+	// Set up the query path for external processor
+	path := customConfig.Path
+	if path == "" {
+		path = "ext_proc/response"
+	}
+
+	query := "data." + strings.Replace(path, "/", ".", -1)
+	parsedQuery, err := ast.ParseBody(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse query: %w", err)
+	}
+
+	// Create default config and merge with custom config
+	cfg := Config{
+		Addr:                     ":0",
+		Path:                     path,
+		parsedQuery:              parsedQuery,
+		DryRun:                   false,
+		EnableReflection:         false,
+		GRPCMaxRecvMsgSize:       4 * 1024 * 1024,
+		GRPCMaxSendMsgSize:       4 * 1024 * 1024,
+		SkipRequestBodyParse:     false,
+		EnablePerformanceMetrics: false,
+	}
+
+	// Override with custom config values
+	if customConfig != nil {
+		if customConfig.SkipRequestBodyParse {
+			cfg.SkipRequestBodyParse = true
+		}
+		if customConfig.EnablePerformanceMetrics {
+			cfg.EnablePerformanceMetrics = true
+		}
+		if customConfig.DryRun {
+			cfg.DryRun = true
+		}
+	}
+
+	// Create the ext_proc server
+	server := &envoyExtProcGrpcServer{
+		cfg:                 cfg,
+		manager:             m,
+		preparedQueryDoOnce: new(sync.Once),
+		metricErrorCounter:  *prometheus.NewCounterVec(prometheus.CounterOpts{Name: "error_counter"}, []string{"reason"}),
+	}
+
+	if cfg.EnablePerformanceMetrics {
+		server.metricExtProcDuration = *prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "grpc_request_duration_seconds",
+			Help:    "A histogram of duration for grpc extproc requests.",
+			Buckets: []float64{0.001, 0.01, 0.1, 0.5, 1.0},
+		}, []string{"handler"})
+	}
+
+	return server, nil
+}
+
+// testExtProcServer creates a test server with the given OPA module
+func testExtProcServer(module string, t *testing.T) (*envoyExtProcGrpcServer, error) {
+	ctx := context.Background()
+	store := inmem.New()
+	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
+
+	// Insert the module into storage
+	err := store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert policy: %w", err)
+	}
+
+	err = store.Commit(ctx, txn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Create a plugin manager
+	m, err := plugins.New([]byte{}, "test", store)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
+	// Start the plugin manager
+	if err := m.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start plugin manager: %w", err)
+	}
+
+	// Set up the query path for external processor
+	path := "ext_proc/response"
+	query := "data." + strings.Replace(path, "/", ".", -1)
+	parsedQuery, err := ast.ParseBody(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse query: %w", err)
+	}
+
+	// Create the server config
+	cfg := Config{
+		Addr:                     ":0",
+		Path:                     path,
+		parsedQuery:              parsedQuery,
+		DryRun:                   false,
+		EnableReflection:         false,
+		GRPCMaxRecvMsgSize:       4 * 1024 * 1024,
+		GRPCMaxSendMsgSize:       4 * 1024 * 1024,
+		SkipRequestBodyParse:     false,
+		EnablePerformanceMetrics: false,
+	}
+
+	// Create the ext_proc server
+	server := &envoyExtProcGrpcServer{
+		cfg:                 cfg,
+		manager:             m,
+		preparedQueryDoOnce: new(sync.Once),
+		metricErrorCounter:  *prometheus.NewCounterVec(prometheus.CounterOpts{Name: "error_counter"}, []string{"reason"}),
+	}
+
+	return server, nil
 }
