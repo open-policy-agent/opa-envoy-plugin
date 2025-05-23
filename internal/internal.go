@@ -307,17 +307,8 @@ func (p *envoyExtAuthzGrpcServer) Start(ctx context.Context) error {
 }
 
 func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
-<<<<<<< HEAD
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
 	p.server.GracefulStop()
-=======
-	p.server.Stop()
-<<<<<<< HEAD
-	p.manager.UpdatePluginStatus(AuthZPluginName, &plugins.Status{State: plugins.StateNotReady})
->>>>>>> db9929d1 (Updating internal code for the ext_proc feature)
-=======
-	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateNotReady})
->>>>>>> c0220b73 (Moving back to original Factory and PluginName for authz backwards compatibility)
 }
 
 func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
