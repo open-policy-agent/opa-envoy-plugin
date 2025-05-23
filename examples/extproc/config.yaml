@@ -1,0 +1,19 @@
+plugins:
+  envoy_ext_authz_grpc:
+    addr: "0.0.0.0:9191"
+    path: "envoy/authz/allow"
+    dry-run: false
+    enable-reflection: false
+    skip-request-body-parse: false
+    enable-performance-metrics: false
+
+  envoy_ext_proc_grpc:
+    addr: "0.0.0.0:9292"
+    path: "ext_proc/response"
+    dry-run: false
+    enable-reflection: false
+    skip-request-body-parse: false
+    enable-performance-metrics: false
+
+logging:
+  level: "debug"
