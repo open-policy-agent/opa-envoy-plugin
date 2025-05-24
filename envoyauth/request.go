@@ -34,9 +34,9 @@ var v3Info = ast.NewObject(
 )
 
 // RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
-func RequestToInput(req interface{}, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]interface{}, error) {
+func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]any, error) {
 	var err error
-	var input map[string]interface{}
+	var input map[string]any
 
 	var rawBody []byte
 	var path, body string
@@ -109,8 +109,8 @@ func getParsedPathAndQuery(path string) ([]string, map[string]any, error) {
 	return parsedPath, parsedQueryInterface, nil
 }
 
-func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []string, protoSet *protoregistry.Files) (interface{}, bool, error) {
-	var data interface{}
+func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []string, protoSet *protoregistry.Files) (any, bool, error) {
+	var data any
 
 	if val, ok := headers["content-type"]; ok {
 		if strings.Contains(val, "application/json") {
@@ -224,7 +224,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 				return nil, false, nil
 			}
 
-			values := map[string][]interface{}{}
+			values := map[string][]any{}
 
 			mr := multipart.NewReader(strings.NewReader(payload), boundary)
 			for {
@@ -248,7 +248,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 
 				switch {
 				case strings.Contains(p.Header.Get("Content-Type"), "application/json"):
-					var jsonValue interface{}
+					var jsonValue any
 					if err := util.UnmarshalJSON(value, &jsonValue); err != nil {
 						return nil, false, err
 					}
@@ -269,7 +269,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 	return data, false, nil
 }
 
-func getGRPCBody(logger logging.Logger, in []byte, parsedPath []string, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
+func getGRPCBody(logger logging.Logger, in []byte, parsedPath []string, data any, files *protoregistry.Files) (found, truncated bool, _ error) {
 
 	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
@@ -296,12 +296,12 @@ func getGRPCBody(logger logging.Logger, in []byte, parsedPath []string, data int
 	// Note: we've already checked that len(path)>=2
 	svc, err := findService(parsedPath[0], files)
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find service")
+		logger.WithFields(map[string]any{"err": err}).Debug("could not find service")
 		return false, false, nil
 	}
 	msgDesc, err := findMessageInputDesc(parsedPath[1], svc)
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find message")
+		logger.WithFields(map[string]any{"err": err}).Debug("could not find message")
 		return false, false, nil
 	}
 

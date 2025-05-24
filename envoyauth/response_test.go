@@ -18,7 +18,7 @@ import (
 
 func TestIsAllowed(t *testing.T) {
 
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -150,7 +150,7 @@ func TestReadRevisionsMulti(t *testing.T) {
 
 func TestGetRequestQueryParametersToRemove(t *testing.T) {
 	tests := map[string]struct {
-		decision interface{}
+		decision any
 		exp      []string
 		wantErr  bool
 	}{
@@ -165,27 +165,27 @@ func TestGetRequestQueryParametersToRemove(t *testing.T) {
 			true,
 		},
 		"empty_map_result": {
-			map[string]interface{}{},
+			map[string]any{},
 			nil,
 			false,
 		},
 		"bad_param_value": {
-			map[string]interface{}{"query_parameters_to_remove": "test"},
+			map[string]any{"query_parameters_to_remove": "test"},
 			nil,
 			true,
 		},
 		"string_array_param_value": {
-			map[string]interface{}{"query_parameters_to_remove": []string{"foo", "bar"}},
+			map[string]any{"query_parameters_to_remove": []string{"foo", "bar"}},
 			[]string{"foo", "bar"},
 			false,
 		},
 		"interface_array_param_value": {
-			map[string]interface{}{"query_parameters_to_remove": []interface{}{"foo", "bar", "fuz"}},
+			map[string]any{"query_parameters_to_remove": []any{"foo", "bar", "fuz"}},
 			[]string{"foo", "bar", "fuz"},
 			false,
 		},
 		"interface_array_bad_param_value": {
-			map[string]interface{}{"query_parameters_to_remove": []interface{}{1}},
+			map[string]any{"query_parameters_to_remove": []any{1}},
 			nil,
 			true,
 		},
@@ -218,7 +218,7 @@ func TestGetRequestQueryParametersToRemove(t *testing.T) {
 
 func TestGetQueryParametersToSet(t *testing.T) {
 	tests := map[string]struct {
-		decision interface{}
+		decision any
 		exp      []*ext_core_v3.QueryParameter
 		wantErr  bool
 	}{
@@ -228,20 +228,20 @@ func TestGetQueryParametersToSet(t *testing.T) {
 			false,
 		},
 		"empty_map_result": {
-			map[string]interface{}{},
+			map[string]any{},
 			nil,
 			false,
 		},
 		"invalid_type": {
-			map[string]interface{}{
+			map[string]any{
 				"query_parameters_to_set": "invalid",
 			},
 			nil,
 			true,
 		},
 		"invalid_value_type": {
-			map[string]interface{}{
-				"query_parameters_to_set": map[string]interface{}{
+			map[string]any{
+				"query_parameters_to_set": map[string]any{
 					"test": 123,
 				},
 			},
@@ -249,17 +249,17 @@ func TestGetQueryParametersToSet(t *testing.T) {
 			true,
 		},
 		"invalid_array_value_type": {
-			map[string]interface{}{
-				"query_parameters_to_set": map[string]interface{}{
-					"test": []interface{}{123},
+			map[string]any{
+				"query_parameters_to_set": map[string]any{
+					"test": []any{123},
 				},
 			},
 			nil,
 			true,
 		},
 		"single_value": {
-			map[string]interface{}{
-				"query_parameters_to_set": map[string]interface{}{
+			map[string]any{
+				"query_parameters_to_set": map[string]any{
 					"param1": "value1",
 					"param2": "value2",
 				},
@@ -277,10 +277,10 @@ func TestGetQueryParametersToSet(t *testing.T) {
 			false,
 		},
 		"array_values": {
-			map[string]interface{}{
-				"query_parameters_to_set": map[string]interface{}{
-					"param1": []interface{}{"value1", "value2"},
-					"param2": []interface{}{"value3", "value4"},
+			map[string]any{
+				"query_parameters_to_set": map[string]any{
+					"param1": []any{"value1", "value2"},
+					"param2": []any{"value3", "value4"},
 				},
 			},
 			[]*ext_core_v3.QueryParameter{
@@ -304,10 +304,10 @@ func TestGetQueryParametersToSet(t *testing.T) {
 			false,
 		},
 		"mixed_values": {
-			map[string]interface{}{
-				"query_parameters_to_set": map[string]interface{}{
+			map[string]any{
+				"query_parameters_to_set": map[string]any{
 					"param1": "single",
-					"param2": []interface{}{"multi1", "multi2"},
+					"param2": []any{"multi1", "multi2"},
 				},
 			},
 			[]*ext_core_v3.QueryParameter{
@@ -377,7 +377,7 @@ func TestGetQueryParametersToSet(t *testing.T) {
 
 func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 	tests := map[string]struct {
-		decision interface{}
+		decision any
 		exp      []string
 		wantErr  bool
 	}{
@@ -392,27 +392,27 @@ func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 			true,
 		},
 		"empty_map_result": {
-			map[string]interface{}{},
+			map[string]any{},
 			nil,
 			false,
 		},
 		"bad_header_value": {
-			map[string]interface{}{"request_headers_to_remove": "test"},
+			map[string]any{"request_headers_to_remove": "test"},
 			nil,
 			true,
 		},
 		"string_array_header_value": {
-			map[string]interface{}{"request_headers_to_remove": []string{"foo", "bar"}},
+			map[string]any{"request_headers_to_remove": []string{"foo", "bar"}},
 			[]string{"foo", "bar"},
 			false,
 		},
 		"interface_array_header_value": {
-			map[string]interface{}{"request_headers_to_remove": []interface{}{"foo", "bar", "fuz"}},
+			map[string]any{"request_headers_to_remove": []any{"foo", "bar", "fuz"}},
 			[]string{"foo", "bar", "fuz"},
 			false,
 		},
 		"interface_array_bad_header_value": {
-			map[string]interface{}{"request_headers_to_remove": []interface{}{1}},
+			map[string]any{"request_headers_to_remove": []any{1}},
 			nil,
 			true,
 		},
@@ -444,7 +444,7 @@ func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 
 	t.Run("type_assertion_error", func(t *testing.T) {
 		er := EvalResult{
-			Decision: map[string]interface{}{"request_headers_to_remove": 1},
+			Decision: map[string]any{"request_headers_to_remove": 1},
 		}
 
 		_, err := er.GetRequestHTTPHeadersToRemove()
@@ -459,7 +459,7 @@ func TestGetRequestHTTPHeadersToRemove(t *testing.T) {
 }
 
 func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -481,7 +481,7 @@ func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	testHeaders := make(map[string]interface{})
+	testHeaders := make(map[string]any)
 	testHeaders["foo"] = "bar"
 	input["response_headers_to_add"] = testHeaders
 
@@ -501,11 +501,11 @@ func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	input["response_headers_to_add"] = []interface{}{
-		map[string]interface{}{
+	input["response_headers_to_add"] = []any{
+		map[string]any{
 			"foo": "bar",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"foo": "baz",
 		},
 	}
@@ -519,7 +519,7 @@ func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
 		t.Fatalf("Expected two headers but got %v", len(result))
 	}
 
-	testAddHeaders := make(map[string]interface{})
+	testAddHeaders := make(map[string]any)
 	testAddHeaders["foo"] = []string{"bar", "baz"}
 	input["response_headers_to_add"] = testAddHeaders
 
@@ -535,7 +535,7 @@ func TestGetResponseHTTPHeadersToAdd(t *testing.T) {
 }
 
 func TestGetResponseHeaderValueOptions(t *testing.T) {
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -557,7 +557,7 @@ func TestGetResponseHeaderValueOptions(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	testHeaders := make(map[string]interface{})
+	testHeaders := make(map[string]any)
 	testHeaders["foo"] = "bar"
 	input["headers"] = testHeaders
 
@@ -577,11 +577,11 @@ func TestGetResponseHeaderValueOptions(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	input["headers"] = []interface{}{
-		map[string]interface{}{
+	input["headers"] = []any{
+		map[string]any{
 			"foo": "bar",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"foo": "baz",
 		},
 	}
@@ -603,7 +603,7 @@ func TestGetResponseHeaderValueOptions(t *testing.T) {
 		t.Errorf("expected 'bar' and 'baz', got %v", seen)
 	}
 
-	testAddHeaders := make(map[string]interface{})
+	testAddHeaders := make(map[string]any)
 	testAddHeaders["foo"] = []string{"bar", "baz"}
 	input["headers"] = testAddHeaders
 
@@ -617,7 +617,7 @@ func TestGetResponseHeaderValueOptions(t *testing.T) {
 		t.Fatalf("Expected two header but got %v", len(result))
 	}
 
-	testAddHeaders["foo"] = []interface{}{"bar", "baz"}
+	testAddHeaders["foo"] = []any{"bar", "baz"}
 	input["headers"] = testAddHeaders
 
 	result, err = er.GetResponseEnvoyHeaderValueOptions()
@@ -636,7 +636,7 @@ func TestGetResponseHeaderValueOptions(t *testing.T) {
 }
 
 func TestGetResponseHeaders(t *testing.T) {
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -658,7 +658,7 @@ func TestGetResponseHeaders(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	testHeaders := make(map[string]interface{})
+	testHeaders := make(map[string]any)
 	testHeaders["foo"] = "bar"
 	input["headers"] = testHeaders
 
@@ -678,11 +678,11 @@ func TestGetResponseHeaders(t *testing.T) {
 		t.Fatal("Expected error but got nil")
 	}
 
-	input["headers"] = []interface{}{
-		map[string]interface{}{
+	input["headers"] = []any{
+		map[string]any{
 			"foo": "bar",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"foo": "baz",
 		},
 	}
@@ -707,7 +707,7 @@ func TestGetResponseHeaders(t *testing.T) {
 		t.Errorf("expected 'bar' and 'baz', got %v", seen)
 	}
 
-	testAddHeaders := make(map[string]interface{})
+	testAddHeaders := make(map[string]any)
 	testAddHeaders["foo"] = []string{"bar", "baz"}
 	input["headers"] = testAddHeaders
 
@@ -721,7 +721,7 @@ func TestGetResponseHeaders(t *testing.T) {
 		t.Fatalf("Expected two header but got %v", len(result.Values("foo")))
 	}
 
-	testAddHeaders["foo"] = []interface{}{"bar", "baz"}
+	testAddHeaders["foo"] = []any{"bar", "baz"}
 	input["headers"] = testAddHeaders
 
 	result, err = er.GetResponseHTTPHeaders()
@@ -740,7 +740,7 @@ func TestGetResponseHeaders(t *testing.T) {
 }
 
 func TestGetResponseBody(t *testing.T) {
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -776,7 +776,7 @@ func TestGetResponseBody(t *testing.T) {
 }
 
 func TestGetResponseHttpStatus(t *testing.T) {
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -824,7 +824,7 @@ func TestGetResponseHttpStatus(t *testing.T) {
 }
 
 func TestGetDynamicMetadata(t *testing.T) {
-	input := make(map[string]interface{})
+	input := make(map[string]any)
 	er := EvalResult{
 		Decision: input,
 	}
@@ -838,7 +838,7 @@ func TestGetDynamicMetadata(t *testing.T) {
 		t.Fatalf("Expected no dynamic metadata but got %v", result)
 	}
 
-	input["dynamic_metadata"] = map[string]interface{}{
+	input["dynamic_metadata"] = map[string]any{
 		"foo": "bar",
 	}
 	result, err = er.GetDynamicMetadata()

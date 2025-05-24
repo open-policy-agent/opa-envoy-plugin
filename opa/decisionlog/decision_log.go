@@ -50,7 +50,7 @@ func LogDecision(ctx context.Context, plugin *logs.Plugin, info *server.Info, re
 		}
 		info.Error = err
 	} else {
-		var x interface{}
+		var x any
 		if result != nil {
 			x = result.Decision
 		}
