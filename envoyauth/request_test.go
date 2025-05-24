@@ -291,7 +291,7 @@ func TestGetParsedBody(t *testing.T) {
 		}
 	}`
 	expectedNumber := json.Number("42")
-	expectedObject := map[string]interface{}{
+	expectedObject := map[string]any{
 		"firstname": "foo",
 		"lastname":  "bar",
 	}
@@ -303,25 +303,25 @@ func TestGetParsedBody(t *testing.T) {
 		"firstname": {"foo"},
 		"lastname":  {"bar", "foobar"},
 	}
-	expectedArray := []interface{}{"hello", "opa"}
-	expectedJSONSpecialChars := []interface{}{`"`, `\`, "/", "/", "\b", "\f", "\n", "\r", "\t", "A"}
-	expectedMultipartFormData := map[string][]interface{}{
+	expectedArray := []any{"hello", "opa"}
+	expectedJSONSpecialChars := []any{`"`, `\`, "/", "/", "\b", "\f", "\n", "\r", "\t", "A"}
+	expectedMultipartFormData := map[string][]any{
 		"foo": {"bar"},
 	}
-	expectedMultipartFormDataWithJSON := map[string][]interface{}{
+	expectedMultipartFormDataWithJSON := map[string][]any{
 		"foo": {"bar"},
 		"bar": {
-			map[string]interface{}{"name": "bar"},
+			map[string]any{"name": "bar"},
 		},
 	}
-	expectedContentTypeJSONRawBody := map[string]interface{}{
+	expectedContentTypeJSONRawBody := map[string]any{
 		"firstname": "foo",
 		"lastname":  "bar",
 	}
 
 	tests := map[string]struct {
 		input           *ext_authz.CheckRequest
-		want            interface{}
+		want            any
 		isBodyTruncated bool
 		err             error
 	}{
@@ -552,17 +552,17 @@ func TestGetParsedBodygRPC(t *testing.T) {
 }
 `
 
-	expectedObject := map[string]interface{}{
-		"Data": map[string]interface{}{
+	expectedObject := map[string]any{
+		"Data": map[string]any{
 			"Body": "Body value",
 			"Name": "Name Value",
 		},
-		"Metadata": map[string]interface{}{
+		"Metadata": map[string]any{
 			"SeverityNumber": "SecNumber",
 			"SeverityText":   "ERROR",
 		},
 	}
-	expectedObjectExampleBook := map[string]interface{}{"author": "John"}
+	expectedObjectExampleBook := map[string]any{"author": "John"}
 	protoDescriptorPath := "../test/files/combined.pb"
 	protoSet, err := internal_util.ReadProtoSet(protoDescriptorPath)
 	if err != nil {
@@ -571,7 +571,7 @@ func TestGetParsedBodygRPC(t *testing.T) {
 
 	tests := map[string]struct {
 		input           *ext_authz.CheckRequest
-		want            interface{}
+		want            any
 		isBodyTruncated bool
 		err             error
 	}{
@@ -581,7 +581,7 @@ func TestGetParsedBodygRPC(t *testing.T) {
 		"valid_parsed_book":    {input: createCheckRequest(requestValidBook), want: expectedObjectExampleBook, isBodyTruncated: false, err: nil},
 		"unknown_service":      {input: createCheckRequest(requestUnknownService), want: nil, isBodyTruncated: false, err: nil},
 		"unknown_method":       {input: createCheckRequest(requestUnknownMethod), want: nil, isBodyTruncated: false, err: nil},
-		"empty_request":        {input: createCheckRequest(requestEmpty), want: map[string]interface{}{}, isBodyTruncated: false, err: nil},
+		"empty_request":        {input: createCheckRequest(requestEmpty), want: map[string]any{}, isBodyTruncated: false, err: nil},
 		"compressed_payload":   {input: createCheckRequest(requestCompressedPayload), want: nil, isBodyTruncated: false, err: nil},
 		"truncated_payload":    {input: createCheckRequest(requestTruncatedPayload), want: nil, isBodyTruncated: true, err: nil},
 	}
@@ -618,37 +618,37 @@ func TestParsedPathAndQuery(t *testing.T) {
 	var tests = []struct {
 		request       *ext_authz.CheckRequest
 		expectedPath  []string
-		expectedQuery map[string]interface{}
+		expectedQuery map[string]any
 	}{
 		{
 			createExtReqWithPath("/my/test/path"),
 			[]string{"my", "test", "path"},
-			map[string]interface{}{},
+			map[string]any{},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1"),
 			[]string{"my", "test", "path"},
-			map[string]interface{}{"a": []string{"1"}},
+			map[string]any{"a": []string{"1"}},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1&a=2"),
 			[]string{"my", "test", "path"},
-			map[string]interface{}{"a": []string{"1", "2"}},
+			map[string]any{"a": []string{"1", "2"}},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1&b=2"),
 			[]string{"my", "test", "path"},
-			map[string]interface{}{"a": []string{"1"}, "b": []string{"2"}},
+			map[string]any{"a": []string{"1"}, "b": []string{"2"}},
 		},
 		{
 			createExtReqWithPath("/my/test/path?a=1&a=new%0aline"),
 			[]string{"my", "test", "path"},
-			map[string]interface{}{"a": []string{"1", "new\nline"}},
+			map[string]any{"a": []string{"1", "new\nline"}},
 		},
 		{
 			createExtReqWithPath("%2Fmy%2Ftest%2Fpath?a=1&a=new%0aline"),
 			[]string{"my", "test", "path"},
-			map[string]interface{}{"a": []string{"1", "new\nline"}},
+			map[string]any{"a": []string{"1", "new\nline"}},
 		},
 	}
 

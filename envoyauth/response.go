@@ -24,7 +24,7 @@ type EvalResult struct {
 	Revisions      map[string]string
 	DecisionID     string
 	TxnID          uint64
-	Decision       interface{}
+	Decision       any
 	Metrics        metrics.Metrics
 	Txn            storage.Transaction
 	NDBuiltinCache builtins.NDBCache
@@ -122,8 +122,8 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 	switch decision := result.Decision.(type) {
 	case bool:
 		return decision, nil
-	case map[string]interface{}:
-		var val interface{}
+	case map[string]any:
+		var val any
 		var ok, allowed bool
 
 		if val, ok = decision["allowed"]; !ok {
@@ -144,9 +144,9 @@ func (result *EvalResult) getStringSliceFromDecision(fieldName string) ([]string
 	switch decision := result.Decision.(type) {
 	case bool:
 		return nil, nil
-	case map[string]interface{}:
+	case map[string]any:
 		var ok bool
-		var val interface{}
+		var val any
 
 		if val, ok = decision[fieldName]; !ok {
 			return nil, nil
@@ -155,7 +155,7 @@ func (result *EvalResult) getStringSliceFromDecision(fieldName string) ([]string
 		switch val := val.(type) {
 		case []string:
 			return val, nil
-		case []interface{}:
+		case []any:
 			ss := make([]string, len(val))
 			for i, v := range val {
 				s, ok := v.(string)
@@ -255,7 +255,7 @@ func (result *EvalResult) GetResponseHTTPHeadersToAdd() ([]*ext_core_v3.HeaderVa
 
 // HasResponseBody returns true if the decision defines a body (only true for structured decisions)
 func (result *EvalResult) HasResponseBody() bool {
-	decision, ok := result.Decision.(map[string]interface{})
+	decision, ok := result.Decision.(map[string]any)
 
 	if !ok {
 		return false
@@ -269,11 +269,11 @@ func (result *EvalResult) HasResponseBody() bool {
 // GetResponseBody returns the http body to return if they are part of the decision
 func (result *EvalResult) GetResponseBody() (string, error) {
 	var ok bool
-	var val interface{}
+	var val any
 	var body string
-	var decision map[string]interface{}
+	var decision map[string]any
 
-	if decision, ok = result.Decision.(map[string]interface{}); !ok {
+	if decision, ok = result.Decision.(map[string]any); !ok {
 		return "", nil
 	}
 
@@ -291,7 +291,7 @@ func (result *EvalResult) GetResponseBody() (string, error) {
 // GetResponseHTTPStatus returns the http status to return if they are part of the decision
 func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 	var ok bool
-	var val interface{}
+	var val any
 	var statusCode json.Number
 
 	status := http.StatusForbidden
@@ -303,7 +303,7 @@ func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 		}
 
 		return status, nil
-	case map[string]interface{}:
+	case map[string]any:
 		if val, ok = decision["http_status"]; !ok {
 			return status, nil
 		}
@@ -334,16 +334,16 @@ func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
 		if decision {
 			return nil, fmt.Errorf("dynamic metadata undefined for boolean decision")
 		}
-	case map[string]interface{}:
+	case map[string]any:
 		var (
-			val interface{}
+			val any
 			ok  bool
 		)
 		if val, ok = decision["dynamic_metadata"]; !ok {
 			return nil, nil
 		}
 
-		metadata, ok := val.(map[string]interface{})
+		metadata, ok := val.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("type assertion error, expected dynamic_metadata to be of type 'object' but got '%T'", val)
 		}
@@ -387,7 +387,7 @@ func transformHeadersMapToHeadersBag(headers map[string]any, hb headersBag) erro
 			for _, v := range val {
 				hb.add(key, v)
 			}
-		case []interface{}:
+		case []any:
 			hb.allocate(len(val))
 			for _, v := range val {
 				s, ok := v.(string)
@@ -428,13 +428,13 @@ func (result *EvalResult) GetRequestQueryParametersToSet() ([]*ext_core_v3.Query
 	switch decision := result.Decision.(type) {
 	case bool:
 		return nil, nil
-	case map[string]interface{}:
+	case map[string]any:
 		val, ok := decision["query_parameters_to_set"]
 		if !ok {
 			return nil, nil
 		}
 
-		params, ok := val.(map[string]interface{})
+		params, ok := val.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("type assertion error, expected query_parameters_to_set to be a map but got '%T'", val)
 		}
@@ -448,7 +448,7 @@ func (result *EvalResult) GetRequestQueryParametersToSet() ([]*ext_core_v3.Query
 					Key:   key,
 					Value: v,
 				})
-			case []interface{}:
+			case []any:
 				result = slices.Grow(result, len(v))
 				for _, item := range v {
 					strItem, ok := item.(string)
