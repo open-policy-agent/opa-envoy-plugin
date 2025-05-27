@@ -6,7 +6,7 @@ This repository contains an extended version of OPA (**OPA-Envoy**) that allows 
 
 ## Issue Management
 
-Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
+Use [GitHub Issues](https://github.com/open-policy-agent/opa-envoy-plugin/issues) to request features or file bugs.
 
 ## Examples with Envoy-based service meshes
 
