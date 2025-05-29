@@ -311,7 +311,7 @@ func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 	p.server.GracefulStop()
 }
 
-func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config interface{}) {
+func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config any) {
 	return
 }
 
@@ -328,7 +328,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 
 	parsedURL, err := url.Parse(addr)
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to parse url.")
+		logger.WithFields(map[string]any{"err": err}).Error("Unable to parse url.")
 		return
 	}
 
@@ -353,11 +353,11 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	}
 
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to create listener.")
+		logger.WithFields(map[string]any{"err": err}).Error("Unable to create listener.")
 		return
 	}
 
-	logger.WithFields(map[string]interface{}{
+	logger.WithFields(map[string]any{
 		"addr":              p.cfg.Addr,
 		"query":             p.cfg.Query,
 		"path":              p.cfg.Path,
@@ -368,7 +368,7 @@ func (p *envoyExtAuthzGrpcServer) listen() {
 	p.manager.UpdatePluginStatus(PluginName, &plugins.Status{State: plugins.StateOK})
 
 	if err := p.server.Serve(l); err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Error("Listener failed.")
+		logger.WithFields(map[string]any{"err": err}).Error("Listener failed.")
 		return
 	}
 
@@ -389,7 +389,7 @@ func (p *envoyExtAuthzGrpcServer) Check(ctx context.Context, req *ext_authz_v3.C
 	return resp, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*ext_authz_v3.CheckResponse, func() *rpc_status.Status, *Error) {
+func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req any) (*ext_authz_v3.CheckResponse, func() *rpc_status.Status, *Error) {
 	var err error
 	var evalErr error
 	var internalErr *Error
@@ -398,23 +398,23 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 
 	result, stopeval, err := envoyauth.NewEvalResult()
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new evaluation.")
+		logger.WithFields(map[string]any{"err": err}).Error("Unable to start new evaluation.")
 		internalErr = newInternalError(StartCheckErr, err)
 		return nil, func() *rpc_status.Status { return nil }, internalErr
 	}
 
 	txn, txnClose, err := result.GetTxn(ctx, p.Store())
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
+		logger.WithFields(map[string]any{"err": err}).Error("Unable to start new storage transaction.")
 		internalErr = newInternalError(StartTxnErr, err)
 		return nil, func() *rpc_status.Status { return nil }, internalErr
 	}
 
 	result.Txn = txn
 
-	logger = logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})
+	logger = logger.WithFields(map[string]any{"decision-id": result.DecisionID})
 
-	var input map[string]interface{}
+	var input map[string]any
 
 	stop := func() *rpc_status.Status {
 		stopeval()
@@ -429,7 +429,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 		logErr := p.logDecision(ctx, input, result, err)
 		if logErr != nil {
 			_ = txnClose(ctx, logErr) // Ignore error
-			logger.WithFields(map[string]interface{}{"err": logErr}).Debug("Error when logging event")
+			logger.WithFields(map[string]any{"err": logErr}).Debug("Error when logging event")
 			if p.cfg.EnablePerformanceMetrics {
 				p.metricErrorCounter.With(prometheus.Labels{"reason": "unknown_log_error"}).Inc()
 			}
@@ -498,7 +498,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	resp.Status = &rpc_status.Status{Code: status}
 
 	switch result.Decision.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		var responseHeaders []*ext_core_v3.HeaderValueOption
 		responseHeaders, err = result.GetResponseEnvoyHeaderValueOptions()
 		if err != nil {
@@ -597,7 +597,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	}
 
 	if logger.GetLevel() == logging.Debug {
-		logger.WithFields(map[string]interface{}{
+		logger.WithFields(map[string]any{
 			"query":               p.cfg.parsedQuery.String(),
 			"dry-run":             p.cfg.DryRun,
 			"decision":            result.Decision,
@@ -631,7 +631,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req interface{}) (*
 	return resp, stop, nil
 }
 
-func (p *envoyExtAuthzGrpcServer) logDecision(ctx context.Context, input interface{}, result *envoyauth.EvalResult, err error) error {
+func (p *envoyExtAuthzGrpcServer) logDecision(ctx context.Context, input any, result *envoyauth.EvalResult, err error) error {
 	plugin := logs.Lookup(p.manager)
 	if plugin == nil {
 		return nil
