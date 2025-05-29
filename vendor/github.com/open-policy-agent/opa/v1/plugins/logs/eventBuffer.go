@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/metrics"
 	"github.com/open-policy-agent/opa/v1/plugins/rest"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 type bufferItem struct {
@@ -27,6 +28,7 @@ type eventBuffer struct {
 	client               rest.Client      // client is used to upload the data to the configured service
 	uploadPath           string           // uploadPath is the configured HTTP resource path for upload
 	uploadSizeLimitBytes int64            // uploadSizeLimitBytes will enforce a maximum payload size to be uploaded
+	enc                  *chunkEncoder    // encoder appends events into the gzip compressed JSON array
 	metrics              metrics.Metrics
 	logger               logging.Logger
 }
@@ -37,11 +39,13 @@ func newEventBuffer(bufferSizeLimitEvents int64, client rest.Client, uploadPath 
 		client:               client,
 		uploadPath:           uploadPath,
 		uploadSizeLimitBytes: uploadSizeLimitBytes,
+		enc:                  newChunkEncoder(uploadSizeLimitBytes),
 	}
 }
 
 func (b *eventBuffer) WithMetrics(m metrics.Metrics) *eventBuffer {
 	b.metrics = m
+	b.enc.metrics = m
 	return b
 }
 
@@ -56,7 +60,7 @@ func (b *eventBuffer) incrMetric(name string) {
 	}
 }
 
-func (b *eventBuffer) logError(fmt string, a ...interface{}) {
+func (b *eventBuffer) logError(fmt string, a ...any) {
 	if b.logger != nil {
 		b.logger.Error(fmt, a)
 	}
@@ -69,6 +73,7 @@ func (b *eventBuffer) Reconfigure(bufferSizeLimitEvents int64, client rest.Clien
 	b.client = client
 	b.uploadPath = uploadPath
 	b.uploadSizeLimitBytes = uploadSizeLimitBytes
+	b.enc.Reconfigure(uploadSizeLimitBytes)
 
 	if int64(cap(b.buffer)) == bufferSizeLimitEvents {
 		return
@@ -94,26 +99,7 @@ func (b *eventBuffer) Push(event *EventV1) {
 }
 
 func (b *eventBuffer) push(event *bufferItem) {
-	// This prevents getting blocked forever writing to a full buffer, in case another routine fills the last space.
-	// Retrying maxEventRetry times to drop the oldest event. Dropping the incoming event if there still isn't room.
-	maxEventRetry := 1000
-
-	for range maxEventRetry {
-		// non-blocking send to the buffer, to prevent blocking if buffer is full so room can be made.
-		select {
-		case b.buffer <- event:
-			return
-		default:
-		}
-
-		// non-blocking drop from the buffer to make room for incoming event.
-		// the buffer could have emptied due to an upload.
-		select {
-		case <-b.buffer:
-			b.incrMetric(logBufferEventDropCounterName)
-		default:
-		}
-	}
+	util.PushFIFO(b.buffer, event, b.metrics, logBufferEventDropCounterName)
 }
 
 // Upload reads events from the buffer and uploads them to the configured client.
@@ -127,8 +113,6 @@ func (b *eventBuffer) Upload(ctx context.Context) error {
 	if eventLen == 0 {
 		return &bufferEmpty{}
 	}
-
-	encoder := newChunkEncoder(b.uploadSizeLimitBytes)
 
 	for range eventLen {
 		event := b.readEvent()
@@ -146,7 +130,7 @@ func (b *eventBuffer) Upload(ctx context.Context) error {
 				continue
 			}
 
-			result, err = encoder.WriteBytes(serialized)
+			result, err = b.enc.WriteBytes(serialized)
 			if err != nil {
 				b.incrMetric(logEncodingFailureCounterName)
 				b.logError("encoding failure: %v, dropping event with decision ID: %v", err, event.DecisionID)
@@ -160,7 +144,7 @@ func (b *eventBuffer) Upload(ctx context.Context) error {
 	}
 
 	// flush any chunks that didn't hit the upload limit
-	result, err := encoder.Flush()
+	result, err := b.enc.Flush()
 	if err != nil {
 		b.incrMetric(logEncodingFailureCounterName)
 		b.logError("encoding failure: %v", err)
