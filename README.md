@@ -6,7 +6,7 @@ This repository contains an extended version of OPA (**OPA-Envoy**) that allows 
 
 ## Issue Management
 
-Use [OPA GitHub Issues](https://github.com/open-policy-agent/opa/issues) to request features or file bugs.
+Use [GitHub Issues](https://github.com/open-policy-agent/opa-envoy-plugin/issues) to request features or file bugs.
 
 ## Examples with Envoy-based service meshes
 
@@ -24,7 +24,7 @@ You can use this version of OPA to enforce fine-grained, context-aware access
 control policies with Envoy _without_ modifying your microservice.
 
 More information about the OPA-Envoy plugin including performance benchmarks, debugging tips, detailed usage examples
-can be found [here](https://www.openpolicyagent.org/docs/edge/envoy-introduction/).
+can be found in the [OPA documentation](https://www.openpolicyagent.org/docs/edge/envoy).
 
 ## Quick Start
 
@@ -147,7 +147,7 @@ volumes:
 ### Example Bundle Configuration
 
 In the [Quick Start](#quick-start) section an OPA policy is loaded via a volume-mounted ConfigMap. For production
-deployments, we recommend serving policy [Bundles](http://www.openpolicyagent.org/docs/bundles.html) from a remote HTTP server.
+deployments, we recommend serving policy [Bundles](https://www.openpolicyagent.org/docs/management-bundles) from a remote HTTP server.
 
 Using the configuration shown below, OPA will download a sample bundle from [https://www.openpolicyagent.org](https://www.openpolicyagent.org).
 The sample bundle contains the exact same policy that was loaded into OPA via the volume-mounted ConfigMap.

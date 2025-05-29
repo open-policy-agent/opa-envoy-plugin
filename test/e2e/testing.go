@@ -24,7 +24,7 @@ func (*testPlugin) Start(context.Context) error {
 func (*testPlugin) Stop(context.Context) {
 }
 
-func (*testPlugin) Reconfigure(context.Context, interface{}) {
+func (*testPlugin) Reconfigure(context.Context, any) {
 }
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {

@@ -23,21 +23,21 @@ const (
 )
 
 // New returns the object initialized with a valid plugin configuration.
-func (Factory) New(m *plugins.Manager, config interface{}) plugins.Plugin {
+func (Factory) New(m *plugins.Manager, config any) plugins.Plugin {
 	return internal.New(m, config.(*internal.Config))
 }
 
 // Validate returns a valid configuration to instantiate the plugin.
-func (Factory) Validate(m *plugins.Manager, configBytes []byte) (interface{}, error) {
-	return internal.Validate(m, configBytes)
+func (Factory) Validate(m *plugins.Manager, config []byte) (any, error) {
+	return internal.Validate(m, config)
 }
 
 // New returns the object initialized with a valid plugin configuration.
-func (ExtProcFactory) New(m *plugins.Manager, config interface{}) plugins.Plugin {
+func (ExtProcFactory) New(m *plugins.Manager, config any) plugins.Plugin {
 	return internal.NewExtProc(m, config.(*internal.Config))
 }
 
 // Validate returns a valid configuration to instantiate the plugin.
-func (ExtProcFactory) Validate(m *plugins.Manager, configBytes []byte) (interface{}, error) {
-	return internal.Validate(m, configBytes)
+func (ExtProcFactory) Validate(m *plugins.Manager, config []byte) (any, error) {
+	return internal.Validate(m, config)
 }

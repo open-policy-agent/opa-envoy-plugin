@@ -502,7 +502,7 @@ func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 	}
 
 	cache := *event.NDBuiltinCache
-	nd, ok := cache.(map[string]interface{})
+	nd, ok := cache.(map[string]any)
 	if !ok {
 		t.Errorf("bad type assertion")
 	}
@@ -552,7 +552,7 @@ func TestCheckContextTimeout(t *testing.T) {
 		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
 	}
 
-	if len((*event.Input).(map[string]interface{})) == 0 {
+	if len((*event.Input).(map[string]any)) == 0 {
 		t.Fatalf("Expected non empty input but got %v", *event.Input)
 	}
 
@@ -598,7 +598,7 @@ func TestCheckContextTimeoutMetricsDisabled(t *testing.T) {
 		t.Fatalf("Expected error message %v but got %v", expectedErrMsg, event.Error.Error())
 	}
 
-	if len((*event.Input).(map[string]interface{})) == 0 {
+	if len((*event.Input).(map[string]any)) == 0 {
 		t.Fatalf("Expected non empty input but got %v", *event.Input)
 	}
 }
@@ -698,7 +698,7 @@ func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	input := *event.Input
-	inputMap, _ := input.(map[string]interface{})
+	inputMap, _ := input.(map[string]any)
 	isTruncated, _ := inputMap["truncated_body"].(bool)
 
 	if !isTruncated {
@@ -738,7 +738,7 @@ func TestCheckAllowDecisionWithSkipRequestBodyParse(t *testing.T) {
 	}
 
 	input := *event.Input
-	inputMap, _ := input.(map[string]interface{})
+	inputMap, _ := input.(map[string]any)
 
 	if _, ok := inputMap["truncated_body"]; ok {
 		t.Fatal("Unexpected key \"truncated_body\" in input")
@@ -814,7 +814,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	input := *event.Input
-	inputMap, _ := input.(map[string]interface{})
+	inputMap, _ := input.(map[string]any)
 	isTruncated, _ := inputMap["truncated_body"].(bool)
 
 	if !isTruncated {
@@ -848,7 +848,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	}
 
 	input = *event.Input
-	inputMap, _ = input.(map[string]interface{})
+	inputMap, _ = input.(map[string]any)
 	isTruncated, _ = inputMap["truncated_body"].(bool)
 
 	if isTruncated {
@@ -2475,7 +2475,7 @@ func (p *testPlugin) Start(context.Context) error {
 func (p *testPlugin) Stop(context.Context) {
 }
 
-func (p *testPlugin) Reconfigure(context.Context, interface{}) {
+func (p *testPlugin) Reconfigure(context.Context, any) {
 }
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
@@ -2494,7 +2494,7 @@ func (p *testPluginError) Start(context.Context) error {
 func (p *testPluginError) Stop(context.Context) {
 }
 
-func (p *testPluginError) Reconfigure(context.Context, interface{}) {
+func (p *testPluginError) Reconfigure(context.Context, any) {
 }
 
 func (p *testPluginError) Log(_ context.Context, event logs.EventV1) error {

@@ -45,7 +45,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		var txnClose TransactionCloser
 		txn, txnClose, err = result.GetTxn(ctx, evalContext.Store())
 		if err != nil {
-			logger.WithFields(map[string]interface{}{"err": err}).Error("Unable to start new storage transaction.")
+			logger.WithFields(map[string]any{"err": err}).Error("Unable to start new storage transaction.")
 			return err
 		}
 		defer txnClose(ctx, err)
@@ -55,7 +55,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 	result.TxnID = result.Txn.ID()
 
 	if logger.GetLevel() == logging.Debug {
-		logger.WithFields(map[string]interface{}{
+		logger.WithFields(map[string]any{
 			"input": input,
 			"query": evalContext.ParsedQuery().String(),
 			"txn":   result.TxnID,
@@ -79,7 +79,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 		return err
 	}
 
-	ph := hook{logger: logger.WithFields(map[string]interface{}{"decision-id": result.DecisionID})}
+	ph := hook{logger: logger.WithFields(map[string]any{"decision-id": result.DecisionID})}
 
 	var ndbCache builtins.NDBCache
 	if evalContext.Config().NDBuiltinCacheEnabled() {
