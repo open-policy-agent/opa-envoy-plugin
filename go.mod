@@ -18,7 +18,7 @@ require (
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/tools v0.33.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250519155744-55703ea1f237
-	google.golang.org/grpc v1.72.1
+	google.golang.org/grpc v1.72.2
 	google.golang.org/protobuf v1.36.6
 )
 
