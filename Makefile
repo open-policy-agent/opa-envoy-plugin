@@ -17,6 +17,9 @@ CGO_ENABLED ?= 1
 WASM_ENABLED ?= 1
 GOARCH ?= $(shell go env GOARCH)
 
+DOCKER_RUNNING ?= $(shell docker ps >/dev/null 2>&1 && echo 1 || echo 0)
+GOLANGCI_LINT_VERSION := v1.64.5
+
 # GOPROXY=off: Don't pull anything off the network
 # see https://github.com/thepudds/go-module-knobs/blob/master/README.md
 GO := CGO_ENABLED=$(CGO_ENABLED) GOARCH=$(GOARCH) GO111MODULE=on GOFLAGS=-mod=vendor GOPROXY=off go
@@ -192,19 +195,20 @@ clean:
 	rm -f *.so
 
 .PHONY: check
-check: check-fmt check-vet check-lint
+check:
+ifeq ($(DOCKER_RUNNING), 1)
+	docker run --rm -v $(shell pwd):/app:ro,Z -w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} golangci-lint run -v
+else
+	@echo "Docker not installed or running. Skipping golangci run."
+endif
 
-.PHONY: check-fmt
-check-fmt:
-	./build/check-fmt.sh
-
-.PHONY: check-vet
-check-vet:
-	./build/check-vet.sh
-
-.PHONY: check-lint
-check-lint:
-	./build/check-lint.sh
+.PHONY: fmt
+fmt:
+ifeq ($(DOCKER_RUNNING), 1)
+	docker run --rm -v $(shell pwd):/app:Z -w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} golangci-lint run -v --fix
+else
+	@echo "Docker not installed or running. Skipping golangci run."
+endif
 
 .PHONY: generatepb
 generatepb:

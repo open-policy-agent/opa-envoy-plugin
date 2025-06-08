@@ -39,8 +39,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Golang Style and Lint Check
-        run: make ci-go-check
-        timeout-minutes: 15
+        run: make check
+        timeout-minutes: 30
 
   deploy:
     name: Push Latest Release
