@@ -37,13 +37,24 @@ var errInvalidPath = errors.New("invalid parsed path")
 
 // RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
 func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]any, error) {
-	var err error
-	var input map[string]any
+	// we anticipate sending at most 6 items to the request, so if we hint the size of the map,
+	// we are less likely to have to grow the map at runtime which can introduce more allocations.
+	input := make(map[string]any, 6)
+	var (
+		err error
 
-	var rawBody []byte
-	var path, body string
-	var headers map[string]string
-	var version ast.Value
+		rawBody    []byte
+		path, body string
+		headers    map[string]string
+		version    ast.Value
+
+		// set the easily retrieved attributes of the source peer, per
+		// https://www.envoyproxy.io/docs/envoy/v1.34.0/api-v3/service/auth/v3/attribute_context.proto#envoy-v3-api-msg-service-auth-v3-attributecontext-peer
+		//
+		// All of these parameters are available in the full `input` proto representation, but we will pull out the source.principal field here so that
+		// users can easily find it and reference it in policies.
+		sourcePrincipal string
+	)
 
 	// NOTE: The path/body/headers blocks look silly, but they allow us to retrieve
 	//       the parts of the incoming request we care about, without having to convert
@@ -56,6 +67,7 @@ func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.File
 		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
 		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
 		rawBody = req.GetAttributes().GetRequest().GetHttp().GetRawBody()
+		sourcePrincipal = req.GetAttributes().GetSource().GetPrincipal()
 		version = v3Info
 	case *ext_authz_v2.CheckRequest:
 		var bs []byte
@@ -68,6 +80,7 @@ func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.File
 		path = req.GetAttributes().GetRequest().GetHttp().GetPath()
 		body = req.GetAttributes().GetRequest().GetHttp().GetBody()
 		headers = req.GetAttributes().GetRequest().GetHttp().GetHeaders()
+		sourcePrincipal = req.GetAttributes().GetSource().GetPrincipal()
 		version = v2Info
 	}
 
@@ -89,6 +102,10 @@ func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.File
 
 		input["parsed_body"] = parsedBody
 		input["truncated_body"] = isBodyTruncated
+	}
+
+	if sourcePrincipal != "" {
+		input["source_principal"] = sourcePrincipal
 	}
 
 	return input, nil
