@@ -663,3 +663,62 @@ func TestParsedPathAndQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestSourcePeerAttributes(t *testing.T) {
+	var tests = []struct {
+		input                   string
+		expectedSourcePrincipal string
+	}{
+		{
+			input: `{
+  "attributes": {
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAAA="
+      }
+    }
+  }
+}`,
+			expectedSourcePrincipal: "",
+		},
+		{
+			input: `{
+  "attributes": {
+    "source": {
+	  "service": "",
+	  "principal": "spiffe://test-domain/path",
+	  "certificate": ""
+	},
+    "request": {
+      "http": {
+        "headers": {
+          "content-type": "application/grpc"
+        },
+        "method": "POST",
+        "path": "/com.book.BookService/GetBooksViaAuthor",
+        "protocol": "HTTP/2",
+        "raw_body": "AAAAAAA="
+      }
+    }
+  }
+}`,
+			expectedSourcePrincipal: "spiffe://test-domain/path",
+		},
+	}
+
+	for i, tt := range tests {
+		parsed, err := RequestToInput(createCheckRequest(tt.input), nil, nil, false)
+		if err != nil {
+			t.Errorf("Unexpected error in test %d: %s", i, err.Error())
+		}
+		if parsed["source_principal"] != tt.expectedSourcePrincipal {
+			t.Errorf("mismatched source principal in test %d: expected %s, got %s", i, tt.expectedSourcePrincipal, parsed["source_principal"])
+		}
+	}
+}
