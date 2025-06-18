@@ -1,0 +1,473 @@
+package envoyextproc
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
+	"net/url"
+	"strconv"
+	"strings"
+
+	ext_proc_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/open-policy-agent/opa/v1/logging"
+	"github.com/open-policy-agent/opa/v1/util"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/dynamicpb"
+
+	"github.com/open-policy-agent/opa-envoy-plugin/internal/types"
+)
+
+// RequestToInput converts an incoming ext_proc request to an input map for policy evaluation.
+func RequestToInput(req *ext_proc_v3.ProcessingRequest, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool, state *types.StreamState) (map[string]any, error) {
+	input := make(map[string]any)
+
+	// Handle different request types using a switch.
+	switch request := req.Request.(type) {
+	case *ext_proc_v3.ProcessingRequest_RequestHeaders:
+		// Extract headers and parse path/query
+		if err := handleRequestHeaders(request.RequestHeaders, logger, input, state); err != nil {
+			return nil, err
+		}
+
+	case *ext_proc_v3.ProcessingRequest_RequestBody:
+		// Extract and parse the request body if needed
+		if err := handleRequestBody(request.RequestBody, logger, input, state, protoSet, skipRequestBodyParse); err != nil {
+			return nil, err
+		}
+
+	case *ext_proc_v3.ProcessingRequest_ResponseHeaders:
+		if err := handleResponseHeaders(request.ResponseHeaders, logger, input, state); err != nil {
+			return nil, err
+		}
+
+	case *ext_proc_v3.ProcessingRequest_ResponseBody:
+		if err := handleResponseBody(request.ResponseBody, logger, input, state, protoSet, skipRequestBodyParse); err != nil {
+			return nil, err
+		}
+
+	case *ext_proc_v3.ProcessingRequest_RequestTrailers:
+		handleRequestTrailers(request.RequestTrailers, logger, input, state)
+
+	case *ext_proc_v3.ProcessingRequest_ResponseTrailers:
+		handleResponseTrailers(request.ResponseTrailers, logger, input, state)
+
+	default:
+		logger.Error("Unknown request type in ProcessingRequest")
+		return nil, fmt.Errorf("unknown request type in ProcessingRequest")
+	}
+
+	logger.Info(fmt.Sprintf("Final input map: %v", input))
+	return input, nil
+}
+
+// handleRequestHeaders processes the request headers, updates input and state.
+func handleRequestHeaders(requestHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]any, state *types.StreamState) error {
+	input["request_type"] = "request_headers"
+	headers := requestHeaders.GetHeaders()
+
+	headerMap := make(map[string]string)
+	for _, h := range headers.GetHeaders() {
+		headerMap[h.GetKey()] = h.GetValue()
+	}
+
+	path := headerMap[":path"]
+	method := headerMap[":method"]
+	scheme := headerMap[":scheme"]
+	authority := headerMap[":authority"]
+
+	input["headers"] = headerMap
+	input["path"] = path
+	input["method"] = method
+	input["scheme"] = scheme
+	input["authority"] = authority
+
+	parsedPath, parsedQuery, err := getParsedPathAndQuery(path)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error parsing path and query: %v", err))
+		return err
+	}
+
+	input["parsed_path"] = parsedPath
+	input["parsed_query"] = parsedQuery
+
+	state.Headers = headerMap
+	state.Path = path
+	state.Method = method
+	return nil
+}
+
+// handleRequestBody processes the request body if parsing is not skipped.
+func handleRequestBody(requestBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]any, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
+	input["request_type"] = "request_body"
+	body := requestBody.GetBody()
+
+	input["path"] = state.Path
+
+	if !skip {
+		logger.Info("Parsing request body")
+		parsedBody, isBodyTruncated, err := getParsedBody(logger, state.Headers, string(body), nil, nil, protoSet)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error parsing request body: %v", err))
+			return err
+		}
+		input["parsed_body"] = parsedBody
+		input["truncated_body"] = isBodyTruncated
+	}
+	return nil
+}
+
+// handleResponseHeaders processes the response headers.
+func handleResponseHeaders(responseHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]any, state *types.StreamState) error {
+	input["request_type"] = "response_headers"
+	headers := responseHeaders.GetHeaders()
+
+	headerMap := make(map[string]string)
+	for _, h := range headers.GetHeaders() {
+		headerMap[h.GetKey()] = h.GetValue()
+	}
+	input["response_headers"] = headerMap
+
+	if path, exists := headerMap[":path"]; exists {
+		input["path"] = path
+	} else {
+		logger.Warn("Path not found in response_headers")
+	}
+
+	return nil
+}
+
+// handleResponseBody processes the response body if parsing is not skipped.
+func handleResponseBody(responseBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]any, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
+	input["request_type"] = "response_body"
+	body := responseBody.GetBody()
+	if !skip {
+		parsedBody, isBodyTruncated, err := getParsedBody(logger, state.Headers, string(body), nil, nil, protoSet)
+		if err != nil {
+			return err
+		}
+		input["response_parsed_body"] = parsedBody
+		input["response_truncated_body"] = isBodyTruncated
+	}
+	return nil
+}
+
+// handleRequestTrailers processes request trailers.
+func handleRequestTrailers(requestTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]any, state *types.StreamState) {
+	input["request_type"] = "request_trailers"
+	trailers := requestTrailers.GetTrailers()
+	trailerMap := make(map[string]string)
+	for _, t := range trailers.GetHeaders() {
+		trailerMap[t.GetKey()] = t.GetValue()
+	}
+	input["request_trailers"] = trailerMap
+
+	if state.Headers != nil {
+		input["headers"] = state.Headers
+		input["path"] = state.Path
+		input["method"] = state.Method
+	} else {
+		logger.Warn("Headers not available in state during RequestTrailers processing")
+	}
+}
+
+// handleResponseTrailers processes response trailers.
+func handleResponseTrailers(responseTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]any, state *types.StreamState) {
+	input["request_type"] = "response_trailers"
+	trailers := responseTrailers.GetTrailers()
+	trailerMap := make(map[string]string)
+	for _, t := range trailers.GetHeaders() {
+		trailerMap[t.GetKey()] = t.GetValue()
+	}
+	input["response_trailers"] = trailerMap
+
+	if state.Headers != nil {
+		input["headers"] = state.Headers
+		input["path"] = state.Path
+		input["method"] = state.Method
+	} else {
+		logger.Warn("Headers not available in state during ResponseTrailers processing")
+	}
+}
+
+func getParsedPathAndQuery(path string) ([]any, map[string]any, error) {
+	parsedURL, err := url.Parse(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	fmt.Sprintf("Parsed URL: %v", parsedURL)
+
+	parsedPath := strings.Split(strings.TrimLeft(parsedURL.Path, "/"), "/")
+	parsedPathInterface := make([]any, len(parsedPath))
+	for i, v := range parsedPath {
+		parsedPathInterface[i] = v
+	}
+
+	// Log the parsed path components
+	fmt.Sprintf("Parsed path components: %v", parsedPathInterface)
+
+	parsedQueryInterface := make(map[string]any)
+	for paramKey, paramValues := range parsedURL.Query() {
+		queryValues := make([]any, len(paramValues))
+		for i, v := range paramValues {
+			queryValues[i] = v
+		}
+		parsedQueryInterface[paramKey] = queryValues
+	}
+
+	// Log the parsed query parameters
+	fmt.Sprintf("Parsed query parameters: %v", parsedQueryInterface)
+
+	return parsedPathInterface, parsedQueryInterface, nil
+}
+
+func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []any, protoSet *protoregistry.Files) (any, bool, error) {
+	var data any
+
+	if val, ok := headers["content-type"]; ok {
+		if strings.Contains(val, "application/json") {
+
+			if body == "" {
+				if len(rawBody) == 0 {
+					return nil, false, nil
+				}
+				body = string(rawBody)
+			}
+
+			if val, ok := headers["content-length"]; ok {
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(body)))
+				if err != nil {
+					return nil, false, err
+				}
+				if truncated {
+					return nil, true, nil
+				}
+			}
+
+			err := util.UnmarshalJSON([]byte(body), &data)
+			if err != nil {
+				return nil, false, err
+			}
+		} else if strings.Contains(val, "application/grpc") {
+
+			if protoSet == nil {
+				return nil, false, nil
+			}
+
+			// This happens when the plugin was configured to read gRPC payloads,
+			// but the Envoy instance requesting an authz decision didn't have
+			// pack_as_bytes set to true.
+			if len(rawBody) == 0 {
+				logger.Debug("no rawBody field sent")
+				return nil, false, nil
+			}
+			// In gRPC, a call of method DoThing on service ThingService is a
+			// POST to /ThingService/DoThing. If our path length is anything but
+			// two, something is wrong.
+			if len(parsedPath) != 2 {
+				return nil, false, fmt.Errorf("invalid parsed path")
+			}
+
+			known, truncated, err := getGRPCBody(logger, rawBody, parsedPath, &data, protoSet)
+			if err != nil {
+				return nil, false, err
+			}
+			if truncated {
+				return nil, true, nil
+			}
+			if !known {
+				return nil, false, nil
+			}
+		} else if strings.Contains(val, "application/x-www-form-urlencoded") {
+			var payload string
+			switch {
+			case body != "":
+				payload = body
+			case len(rawBody) > 0:
+				payload = string(rawBody)
+			default:
+				return nil, false, nil
+			}
+
+			if val, ok := headers["content-length"]; ok {
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(payload)))
+				if err != nil {
+					return nil, false, err
+				}
+				if truncated {
+					return nil, true, nil
+				}
+			}
+
+			parsed, err := url.ParseQuery(payload)
+			if err != nil {
+				return nil, false, err
+			}
+
+			data = map[string][]string(parsed)
+		} else if strings.Contains(val, "multipart/form-data") {
+			var payload string
+			switch {
+			case body != "":
+				payload = body
+			case len(rawBody) > 0:
+				payload = string(rawBody)
+			default:
+				return nil, false, nil
+			}
+
+			if val, ok := headers["content-length"]; ok {
+				truncated, err := checkIfHTTPBodyTruncated(val, int64(len(payload)))
+				if err != nil {
+					return nil, false, err
+				}
+				if truncated {
+					return nil, true, nil
+				}
+			}
+
+			_, params, err := mime.ParseMediaType(headers["content-type"])
+			if err != nil {
+				return nil, false, err
+			}
+
+			boundary, ok := params["boundary"]
+			if !ok {
+				return nil, false, nil
+			}
+
+			values := map[string][]any{}
+
+			mr := multipart.NewReader(strings.NewReader(payload), boundary)
+			for {
+				p, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return nil, false, err
+				}
+
+				name := p.FormName()
+				if name == "" {
+					continue
+				}
+
+				value, err := io.ReadAll(p)
+				if err != nil {
+					return nil, false, err
+				}
+
+				switch {
+				case strings.Contains(p.Header.Get("Content-Type"), "application/json"):
+					var jsonValue any
+					if err := util.UnmarshalJSON(value, &jsonValue); err != nil {
+						return nil, false, err
+					}
+					values[name] = append(values[name], jsonValue)
+				default:
+					values[name] = append(values[name], string(value))
+				}
+			}
+
+			data = values
+		} else {
+			logger.Debug("content-type: %s parsing not supported", val)
+		}
+	} else {
+		logger.Debug("no content-type header supplied, performing no body parsing")
+	}
+
+	return data, false, nil
+}
+
+func getGRPCBody(logger logging.Logger, in []byte, parsedPath []any, data any, files *protoregistry.Files) (found, truncated bool, _ error) {
+
+	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
+	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
+
+	if len(in) < 5 {
+		return false, false, fmt.Errorf("less than 5 bytes")
+	}
+
+	// Can be 0 or 1, 1 indicates that the payload is compressed.
+	// The method could be looked up in the request headers, and the
+	// request decompressed; but for now, let's skip it.
+	if in[0] != 0 {
+		logger.Debug("gRPC payload compression not supported")
+		return false, false, nil
+	}
+
+	// Note: we're only reading one message, this is the first message's size
+	size := binary.BigEndian.Uint32(in[1:5])
+	if int(size) > len(in)-5 {
+		return false, true, nil // truncated body
+	}
+	in = in[5 : size+5]
+
+	// Note: we've already checked that len(path)>=2
+	svc, err := findService(parsedPath[0].(string), files)
+	if err != nil {
+		logger.WithFields(map[string]any{"err": err}).Debug("could not find service")
+		return false, false, nil
+	}
+	msgDesc, err := findMessageInputDesc(parsedPath[1].(string), svc)
+	if err != nil {
+		logger.WithFields(map[string]any{"err": err}).Debug("could not find message")
+		return false, false, nil
+	}
+
+	msg := dynamicpb.NewMessage(msgDesc)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return true, false, err
+	}
+
+	jsonBody, err := protojson.Marshal(msg)
+	if err != nil {
+		return true, false, err
+	}
+
+	if err := util.Unmarshal([]byte(jsonBody), &data); err != nil {
+		return true, false, err
+	}
+
+	return true, false, nil
+}
+
+func findService(path string, files *protoregistry.Files) (protoreflect.ServiceDescriptor, error) {
+	desc, err := files.FindDescriptorByName(protoreflect.FullName(path))
+	if err != nil {
+		return nil, err
+	}
+	svcDesc, ok := desc.(protoreflect.ServiceDescriptor)
+	if !ok {
+		return nil, fmt.Errorf("could not find service descriptor for path %q", path)
+	}
+	return svcDesc, nil
+}
+
+func findMessageInputDesc(name string, svc protoreflect.ServiceDescriptor) (protoreflect.MessageDescriptor, error) {
+	if method := svc.Methods().ByName(protoreflect.Name(name)); method != nil {
+		if method.IsStreamingClient() {
+			return nil, fmt.Errorf("streaming client method %s not supported", method.Name())
+		}
+		return method.Input(), nil
+	}
+	return nil, fmt.Errorf("method %q not found", name)
+}
+
+func checkIfHTTPBodyTruncated(contentLength string, bodyLength int64) (bool, error) {
+	cl, err := strconv.ParseInt(contentLength, 10, 64)
+	if err != nil {
+		return false, err
+	}
+	if cl != -1 && cl > bodyLength {
+		return true, nil
+	}
+	return false, nil
+}

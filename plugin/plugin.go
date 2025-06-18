@@ -13,8 +13,14 @@ import (
 // Factory defines the interface OPA uses to instantiate a plugin.
 type Factory struct{}
 
-// PluginName is the name to register with the OPA plugin manager
-const PluginName = internal.PluginName
+// ExtProcFactory defines the factory for the ExtProc plugin.
+type ExtProcFactory struct{}
+
+// Plugin names to register with the OPA plugin manager.
+const (
+	PluginName        = internal.PluginName
+	ExtProcPluginName = "envoy_ext_proc_grpc"
+)
 
 // New returns the object initialized with a valid plugin configuration.
 func (Factory) New(m *plugins.Manager, config any) plugins.Plugin {
@@ -23,5 +29,15 @@ func (Factory) New(m *plugins.Manager, config any) plugins.Plugin {
 
 // Validate returns a valid configuration to instantiate the plugin.
 func (Factory) Validate(m *plugins.Manager, config []byte) (any, error) {
+	return internal.Validate(m, config)
+}
+
+// New returns the object initialized with a valid plugin configuration.
+func (ExtProcFactory) New(m *plugins.Manager, config any) plugins.Plugin {
+	return internal.NewExtProc(m, config.(*internal.Config))
+}
+
+// Validate returns a valid configuration to instantiate the plugin.
+func (ExtProcFactory) Validate(m *plugins.Manager, config []byte) (any, error) {
 	return internal.Validate(m, config)
 }
