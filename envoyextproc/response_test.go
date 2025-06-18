@@ -13,13 +13,13 @@ import (
 )
 
 // jsonNumber is a helper to return a json.Number type from a string.
-func jsonNumber(numStr string) interface{} {
+func jsonNumber(numStr string) any {
 	return json.Number(numStr)
 }
 
 func TestEvalResult_GetImmediateResponse(t *testing.T) {
 	tests := map[string]struct {
-		decision    interface{}
+		decision    any
 		expected    *ext_proc_v3.ImmediateResponse
 		expectError bool
 	}{
@@ -33,18 +33,18 @@ func TestEvalResult_GetImmediateResponse(t *testing.T) {
 			expectError: false,
 		},
 		"no_immediate_response_key": {
-			decision: map[string]interface{}{
+			decision: map[string]any{
 				"user": "alice",
 			},
 			expected: nil,
 		},
 		"valid_immediate_response": {
-			decision: map[string]interface{}{
-				"immediate_response": map[string]interface{}{
+			decision: map[string]any{
+				"immediate_response": map[string]any{
 					"status": jsonNumber("403"),
 					"body":   "Access denied",
-					"headers": []interface{}{
-						map[string]interface{}{"key": "X-Reason", "value": "Forbidden"},
+					"headers": []any{
+						map[string]any{"key": "X-Reason", "value": "Forbidden"},
 					},
 				},
 			},
@@ -59,11 +59,11 @@ func TestEvalResult_GetImmediateResponse(t *testing.T) {
 			},
 		},
 		"valid_immediate_response_with_grpc": {
-			decision: map[string]interface{}{
-				"immediate_response": map[string]interface{}{
+			decision: map[string]any{
+				"immediate_response": map[string]any{
 					"status":      jsonNumber("401"),
 					"body":        "Unauthorized",
-					"headers":     []interface{}{},
+					"headers":     []any{},
 					"grpc_status": float64(16), // e.g. UNAUTHENTICATED in gRPC
 					"details":     "Missing token",
 				},
@@ -81,16 +81,16 @@ func TestEvalResult_GetImmediateResponse(t *testing.T) {
 			},
 		},
 		"invalid_status_type": {
-			decision: map[string]interface{}{
-				"immediate_response": map[string]interface{}{
+			decision: map[string]any{
+				"immediate_response": map[string]any{
 					"status": "not a number",
 				},
 			},
 			expectError: true,
 		},
 		"invalid_status_code": {
-			decision: map[string]interface{}{
-				"immediate_response": map[string]interface{}{
+			decision: map[string]any{
+				"immediate_response": map[string]any{
 					"status": jsonNumber("999"), // invalid HTTP status code
 				},
 			},
@@ -120,7 +120,7 @@ func TestEvalResult_GetImmediateResponse(t *testing.T) {
 
 func TestEvalResult_GetCommonResponse(t *testing.T) {
 	tests := map[string]struct {
-		decision    interface{}
+		decision    any
 		expected    *ext_proc_v3.CommonResponse
 		expectError bool
 	}{
@@ -133,15 +133,15 @@ func TestEvalResult_GetCommonResponse(t *testing.T) {
 			expected: nil,
 		},
 		"no_modifications": {
-			decision: map[string]interface{}{
+			decision: map[string]any{
 				"user": "alice",
 			},
 			expected: nil,
 		},
 		"add_headers_only": {
-			decision: map[string]interface{}{
-				"headers_to_add": []interface{}{
-					map[string]interface{}{"key": "X-Added", "value": "HeaderVal"},
+			decision: map[string]any{
+				"headers_to_add": []any{
+					map[string]any{"key": "X-Added", "value": "HeaderVal"},
 				},
 			},
 			expected: &ext_proc_v3.CommonResponse{
@@ -154,7 +154,7 @@ func TestEvalResult_GetCommonResponse(t *testing.T) {
 			},
 		},
 		"add_body_only": {
-			decision: map[string]interface{}{
+			decision: map[string]any{
 				"body": "modified response body",
 			},
 			expected: &ext_proc_v3.CommonResponse{
@@ -167,11 +167,11 @@ func TestEvalResult_GetCommonResponse(t *testing.T) {
 			},
 		},
 		"add_headers_and_remove_headers": {
-			decision: map[string]interface{}{
-				"headers_to_add": []interface{}{
-					map[string]interface{}{"key": "X-Added-Header", "value": "Val"},
+			decision: map[string]any{
+				"headers_to_add": []any{
+					map[string]any{"key": "X-Added-Header", "value": "Val"},
 				},
-				"headers_to_remove": []interface{}{"X-Remove-Me"},
+				"headers_to_remove": []any{"X-Remove-Me"},
 			},
 			expected: &ext_proc_v3.CommonResponse{
 				HeaderMutation: &ext_proc_v3.HeaderMutation{
@@ -183,14 +183,14 @@ func TestEvalResult_GetCommonResponse(t *testing.T) {
 			},
 		},
 		"invalid_headers_to_remove": {
-			decision: map[string]interface{}{
-				"headers_to_remove": []interface{}{123}, // not a string
+			decision: map[string]any{
+				"headers_to_remove": []any{123}, // not a string
 			},
 			expectError: true,
 		},
 		"invalid_headers_to_add": {
-			decision: map[string]interface{}{
-				"headers_to_add": []interface{}{"not a map"},
+			decision: map[string]any{
+				"headers_to_add": []any{"not a map"},
 			},
 			// With no valid header entries, there are no modifications so we expect nil.
 			expected: nil,
@@ -220,9 +220,9 @@ func TestEvalResult_GetCommonResponse(t *testing.T) {
 
 func TestEvalResult_GetDynamicMetadata(t *testing.T) {
 	tests := map[string]struct {
-		decision    interface{}
+		decision    any
 		expectError bool
-		expected    map[string]interface{}
+		expected    map[string]any
 	}{
 		"no_decision": {
 			decision: nil,
@@ -233,25 +233,25 @@ func TestEvalResult_GetDynamicMetadata(t *testing.T) {
 			expected: nil,
 		},
 		"no_dynamic_metadata": {
-			decision: map[string]interface{}{
+			decision: map[string]any{
 				"user": "alice",
 			},
 			expected: nil,
 		},
 		"with_dynamic_metadata": {
-			decision: map[string]interface{}{
-				"dynamic_metadata": map[string]interface{}{
+			decision: map[string]any{
+				"dynamic_metadata": map[string]any{
 					"foo": "bar",
 					"num": 42,
 				},
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"foo": "bar",
 				"num": 42.0, // numbers are converted to float64
 			},
 		},
 		"invalid_dynamic_metadata": {
-			decision: map[string]interface{}{
+			decision: map[string]any{
 				"dynamic_metadata": "not a map",
 			},
 			expectError: true,
@@ -289,7 +289,7 @@ func TestEvalResult_GetDynamicMetadata(t *testing.T) {
 
 func TestEvalResult_GetTrailerMutation(t *testing.T) {
 	tests := map[string]struct {
-		decision    interface{}
+		decision    any
 		expectError bool
 		expected    *ext_proc_v3.HeaderMutation
 	}{
@@ -304,15 +304,15 @@ func TestEvalResult_GetTrailerMutation(t *testing.T) {
 			expected: nil,
 		},
 		"no_trailers": {
-			decision: map[string]interface{}{
+			decision: map[string]any{
 				"user": "alice",
 			},
 			expected: nil,
 		},
 		"add_trailers": {
-			decision: map[string]interface{}{
-				"trailers_to_add": []interface{}{
-					map[string]interface{}{"key": "X-Added-Trailer", "value": "Val"},
+			decision: map[string]any{
+				"trailers_to_add": []any{
+					map[string]any{"key": "X-Added-Trailer", "value": "Val"},
 				},
 			},
 			expected: &ext_proc_v3.HeaderMutation{
@@ -321,8 +321,8 @@ func TestEvalResult_GetTrailerMutation(t *testing.T) {
 			},
 		},
 		"remove_trailers": {
-			decision: map[string]interface{}{
-				"trailers_to_remove": []interface{}{"X-Remove-Trailer"},
+			decision: map[string]any{
+				"trailers_to_remove": []any{"X-Remove-Trailer"},
 			},
 			expected: &ext_proc_v3.HeaderMutation{
 				SetHeaders:    []*ext_core_v3.HeaderValueOption{}, // explicitly empty
@@ -330,11 +330,11 @@ func TestEvalResult_GetTrailerMutation(t *testing.T) {
 			},
 		},
 		"add_and_remove_trailers": {
-			decision: map[string]interface{}{
-				"trailers_to_add": []interface{}{
-					map[string]interface{}{"key": "X-Add", "value": "Val"},
+			decision: map[string]any{
+				"trailers_to_add": []any{
+					map[string]any{"key": "X-Add", "value": "Val"},
 				},
-				"trailers_to_remove": []interface{}{"X-Remove"},
+				"trailers_to_remove": []any{"X-Remove"},
 			},
 			expected: &ext_proc_v3.HeaderMutation{
 				SetHeaders:    []*ext_core_v3.HeaderValueOption{{Header: &ext_core_v3.HeaderValue{Key: "X-Add", Value: "Val"}}},
@@ -342,8 +342,8 @@ func TestEvalResult_GetTrailerMutation(t *testing.T) {
 			},
 		},
 		"invalid_trailers_to_remove": {
-			decision: map[string]interface{}{
-				"trailers_to_remove": []interface{}{123},
+			decision: map[string]any{
+				"trailers_to_remove": []any{123},
 			},
 			expectError: true,
 		},

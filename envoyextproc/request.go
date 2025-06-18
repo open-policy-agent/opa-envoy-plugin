@@ -23,8 +23,8 @@ import (
 )
 
 // RequestToInput converts an incoming ext_proc request to an input map for policy evaluation.
-func RequestToInput(req *ext_proc_v3.ProcessingRequest, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool, state *types.StreamState) (map[string]interface{}, error) {
-	input := make(map[string]interface{})
+func RequestToInput(req *ext_proc_v3.ProcessingRequest, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool, state *types.StreamState) (map[string]any, error) {
+	input := make(map[string]any)
 
 	// Handle different request types using a switch.
 	switch request := req.Request.(type) {
@@ -66,7 +66,7 @@ func RequestToInput(req *ext_proc_v3.ProcessingRequest, logger logging.Logger, p
 }
 
 // handleRequestHeaders processes the request headers, updates input and state.
-func handleRequestHeaders(requestHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]interface{}, state *types.StreamState) error {
+func handleRequestHeaders(requestHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]any, state *types.StreamState) error {
 	input["request_type"] = "request_headers"
 	headers := requestHeaders.GetHeaders()
 
@@ -102,7 +102,7 @@ func handleRequestHeaders(requestHeaders *ext_proc_v3.HttpHeaders, logger loggin
 }
 
 // handleRequestBody processes the request body if parsing is not skipped.
-func handleRequestBody(requestBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]interface{}, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
+func handleRequestBody(requestBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]any, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
 	input["request_type"] = "request_body"
 	body := requestBody.GetBody()
 
@@ -122,7 +122,7 @@ func handleRequestBody(requestBody *ext_proc_v3.HttpBody, logger logging.Logger,
 }
 
 // handleResponseHeaders processes the response headers.
-func handleResponseHeaders(responseHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]interface{}, state *types.StreamState) error {
+func handleResponseHeaders(responseHeaders *ext_proc_v3.HttpHeaders, logger logging.Logger, input map[string]any, state *types.StreamState) error {
 	input["request_type"] = "response_headers"
 	headers := responseHeaders.GetHeaders()
 
@@ -142,7 +142,7 @@ func handleResponseHeaders(responseHeaders *ext_proc_v3.HttpHeaders, logger logg
 }
 
 // handleResponseBody processes the response body if parsing is not skipped.
-func handleResponseBody(responseBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]interface{}, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
+func handleResponseBody(responseBody *ext_proc_v3.HttpBody, logger logging.Logger, input map[string]any, state *types.StreamState, protoSet *protoregistry.Files, skip bool) error {
 	input["request_type"] = "response_body"
 	body := responseBody.GetBody()
 	if !skip {
@@ -157,7 +157,7 @@ func handleResponseBody(responseBody *ext_proc_v3.HttpBody, logger logging.Logge
 }
 
 // handleRequestTrailers processes request trailers.
-func handleRequestTrailers(requestTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]interface{}, state *types.StreamState) {
+func handleRequestTrailers(requestTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]any, state *types.StreamState) {
 	input["request_type"] = "request_trailers"
 	trailers := requestTrailers.GetTrailers()
 	trailerMap := make(map[string]string)
@@ -176,7 +176,7 @@ func handleRequestTrailers(requestTrailers *ext_proc_v3.HttpTrailers, logger log
 }
 
 // handleResponseTrailers processes response trailers.
-func handleResponseTrailers(responseTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]interface{}, state *types.StreamState) {
+func handleResponseTrailers(responseTrailers *ext_proc_v3.HttpTrailers, logger logging.Logger, input map[string]any, state *types.StreamState) {
 	input["request_type"] = "response_trailers"
 	trailers := responseTrailers.GetTrailers()
 	trailerMap := make(map[string]string)
@@ -194,7 +194,7 @@ func handleResponseTrailers(responseTrailers *ext_proc_v3.HttpTrailers, logger l
 	}
 }
 
-func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, error) {
+func getParsedPathAndQuery(path string) ([]any, map[string]any, error) {
 	parsedURL, err := url.Parse(path)
 	if err != nil {
 		return nil, nil, err
@@ -203,7 +203,7 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	fmt.Sprintf("Parsed URL: %v", parsedURL)
 
 	parsedPath := strings.Split(strings.TrimLeft(parsedURL.Path, "/"), "/")
-	parsedPathInterface := make([]interface{}, len(parsedPath))
+	parsedPathInterface := make([]any, len(parsedPath))
 	for i, v := range parsedPath {
 		parsedPathInterface[i] = v
 	}
@@ -211,9 +211,9 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	// Log the parsed path components
 	fmt.Sprintf("Parsed path components: %v", parsedPathInterface)
 
-	parsedQueryInterface := make(map[string]interface{})
+	parsedQueryInterface := make(map[string]any)
 	for paramKey, paramValues := range parsedURL.Query() {
-		queryValues := make([]interface{}, len(paramValues))
+		queryValues := make([]any, len(paramValues))
 		for i, v := range paramValues {
 			queryValues[i] = v
 		}
@@ -226,8 +226,8 @@ func getParsedPathAndQuery(path string) ([]interface{}, map[string]interface{}, 
 	return parsedPathInterface, parsedQueryInterface, nil
 }
 
-func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []interface{}, protoSet *protoregistry.Files) (interface{}, bool, error) {
-	var data interface{}
+func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []any, protoSet *protoregistry.Files) (any, bool, error) {
+	var data any
 
 	if val, ok := headers["content-type"]; ok {
 		if strings.Contains(val, "application/json") {
@@ -341,7 +341,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 				return nil, false, nil
 			}
 
-			values := map[string][]interface{}{}
+			values := map[string][]any{}
 
 			mr := multipart.NewReader(strings.NewReader(payload), boundary)
 			for {
@@ -365,7 +365,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 
 				switch {
 				case strings.Contains(p.Header.Get("Content-Type"), "application/json"):
-					var jsonValue interface{}
+					var jsonValue any
 					if err := util.UnmarshalJSON(value, &jsonValue); err != nil {
 						return nil, false, err
 					}
@@ -386,7 +386,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 	return data, false, nil
 }
 
-func getGRPCBody(logger logging.Logger, in []byte, parsedPath []interface{}, data interface{}, files *protoregistry.Files) (found, truncated bool, _ error) {
+func getGRPCBody(logger logging.Logger, in []byte, parsedPath []any, data any, files *protoregistry.Files) (found, truncated bool, _ error) {
 
 	// the first 5 bytes are part of gRPC framing. We need to remove them to be able to parse
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
@@ -413,12 +413,12 @@ func getGRPCBody(logger logging.Logger, in []byte, parsedPath []interface{}, dat
 	// Note: we've already checked that len(path)>=2
 	svc, err := findService(parsedPath[0].(string), files)
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find service")
+		logger.WithFields(map[string]any{"err": err}).Debug("could not find service")
 		return false, false, nil
 	}
 	msgDesc, err := findMessageInputDesc(parsedPath[1].(string), svc)
 	if err != nil {
-		logger.WithFields(map[string]interface{}{"err": err}).Debug("could not find message")
+		logger.WithFields(map[string]any{"err": err}).Debug("could not find message")
 		return false, false, nil
 	}
 
