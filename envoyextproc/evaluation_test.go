@@ -22,24 +22,24 @@ import (
 
 type evalTestCase struct {
 	name        string
-	input       map[string]interface{}
-	expected    map[string]interface{}
+	input       map[string]any
+	expected    map[string]any
 	expectError bool
 }
 
 var testCases = []evalTestCase{
 	{
 		name: "Immediate Response - Forbidden",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path": "/forbidden",
 		},
-		expected: map[string]interface{}{
-			"immediate_response": map[string]interface{}{
+		expected: map[string]any{
+			"immediate_response": map[string]any{
 				"status": json.Number("403"),
 				"body":   "Access Denied",
-				"headers": []interface{}{
-					map[string]interface{}{"key": "Content-Type", "value": "text/plain"},
-					map[string]interface{}{"key": "X-Immediate-Response", "value": "True"},
+				"headers": []any{
+					map[string]any{"key": "Content-Type", "value": "text/plain"},
+					map[string]any{"key": "X-Immediate-Response", "value": "True"},
 				},
 				"grpc_status": json.Number("7"),
 				"details":     "Unauthorized access attempt",
@@ -48,12 +48,12 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Add Headers",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path": "/add-headers",
 		},
-		expected: map[string]interface{}{
-			"headers_to_add": []interface{}{
-				map[string]interface{}{
+		expected: map[string]any{
+			"headers_to_add": []any{
+				map[string]any{
 					"key":                  "X-Added-Header",
 					"value":                "HeaderValue",
 					"header_append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -63,11 +63,11 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Remove Headers",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path": "/remove-headers",
 		},
-		expected: map[string]interface{}{
-			"headers_to_remove": []interface{}{
+		expected: map[string]any{
+			"headers_to_remove": []any{
 				"X-Remove-Header",
 				"X-Another-Header",
 			},
@@ -75,26 +75,26 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Replace Body",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path":         "/replace-body",
 			"request_type": "request_body",
 		},
-		expected: map[string]interface{}{
+		expected: map[string]any{
 			"body": "This is the new body content",
 		},
 	},
 	{
 		name: "Dynamic Metadata",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path": "/dynamic-metadata",
-			"headers": map[string]interface{}{
+			"headers": map[string]any{
 				"x-user-id":    "12345",
 				"x-session-id": "abcde-12345",
 			},
 		},
-		expected: map[string]interface{}{
-			"dynamic_metadata": map[string]interface{}{
-				"my_extension": map[string]interface{}{
+		expected: map[string]any{
+			"dynamic_metadata": map[string]any{
+				"my_extension": map[string]any{
 					"user_id":    "12345",
 					"session_id": "abcde-12345",
 				},
@@ -103,12 +103,12 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Combined Headers and Body",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path": "/combined",
 		},
-		expected: map[string]interface{}{
-			"headers_to_add": []interface{}{
-				map[string]interface{}{
+		expected: map[string]any{
+			"headers_to_add": []any{
+				map[string]any{
 					"key":   "X-Combined-Header",
 					"value": "CombinedValue",
 				},
@@ -118,13 +118,13 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Modify Trailers",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path":         "/modify-trailers",
 			"request_type": "request_trailers",
 		},
-		expected: map[string]interface{}{
-			"trailers_to_add": []interface{}{
-				map[string]interface{}{
+		expected: map[string]any{
+			"trailers_to_add": []any{
+				map[string]any{
 					"key":   "X-Trailer-Added",
 					"value": "TrailerValue",
 				},
@@ -133,13 +133,13 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Modify Response Headers",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path":         "/modify-response-headers",
 			"request_type": "response_headers",
 		},
-		expected: map[string]interface{}{
-			"headers_to_add": []interface{}{
-				map[string]interface{}{
+		expected: map[string]any{
+			"headers_to_add": []any{
+				map[string]any{
 					"key":   "X-Response-Header",
 					"value": "ResponseHeaderValue",
 				},
@@ -148,16 +148,16 @@ var testCases = []evalTestCase{
 	},
 	{
 		name: "Default Deny",
-		input: map[string]interface{}{
+		input: map[string]any{
 			"path": "/unknown-path",
 		},
-		expected: map[string]interface{}{
-			"immediate_response": map[string]interface{}{
+		expected: map[string]any{
+			"immediate_response": map[string]any{
 				"status": json.Number("403"),
 				"body":   "Default Deny",
-				"headers": []interface{}{
-					map[string]interface{}{"key": "Content-Type", "value": "text/plain"},
-					map[string]interface{}{"key": "X-Default-Deny", "value": "True"},
+				"headers": []any{
+					map[string]any{"key": "Content-Type", "value": "text/plain"},
+					map[string]any{"key": "X-Default-Deny", "value": "True"},
 				},
 			},
 		},
@@ -195,7 +195,7 @@ func TestEval(t *testing.T) {
 			}
 
 			// Compare the decision with the expected result
-			decisionMap, ok := res.Decision.(map[string]interface{})
+			decisionMap, ok := res.Decision.(map[string]any)
 			if !ok {
 				t.Fatalf("Decision is not a map")
 			}

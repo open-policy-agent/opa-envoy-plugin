@@ -49,7 +49,7 @@ func TestRequestToInput(t *testing.T) {
 		skipRequestBodyParse bool
 		protoSet             *protoregistry.Files
 		initState            *types.StreamState
-		expectedInput        map[string]interface{}
+		expectedInput        map[string]any
 		expectError          bool
 	}{
 		"request_headers_basic": {
@@ -65,7 +65,7 @@ func TestRequestToInput(t *testing.T) {
 				},
 			},
 			initState: &types.StreamState{},
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "request_headers",
 				"headers": map[string]string{
 					":path":      "/test/path",
@@ -78,8 +78,8 @@ func TestRequestToInput(t *testing.T) {
 				"method":       "GET",
 				"scheme":       "http",
 				"authority":    "example.com",
-				"parsed_path":  []interface{}{"test", "path"},
-				"parsed_query": map[string]interface{}{},
+				"parsed_path":  []any{"test", "path"},
+				"parsed_query": map[string]any{},
 			},
 		},
 		"request_headers_missing_path": {
@@ -92,7 +92,7 @@ func TestRequestToInput(t *testing.T) {
 				},
 			},
 			initState: &types.StreamState{},
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "request_headers",
 				"headers": map[string]string{
 					":method": "GET",
@@ -102,8 +102,8 @@ func TestRequestToInput(t *testing.T) {
 				"method":       "GET",
 				"scheme":       "",
 				"authority":    "",
-				"parsed_path":  []interface{}{""},
-				"parsed_query": map[string]interface{}{},
+				"parsed_path":  []any{""},
+				"parsed_query": map[string]any{},
 			},
 		},
 		"request_body_json": {
@@ -120,10 +120,10 @@ func TestRequestToInput(t *testing.T) {
 				Path: "/api/data",
 			},
 			skipRequestBodyParse: false,
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type":   "request_body",
 				"path":           "/api/data",
-				"parsed_body":    map[string]interface{}{"action": "read", "user": "alice"},
+				"parsed_body":    map[string]any{"action": "read", "user": "alice"},
 				"truncated_body": false,
 			},
 		},
@@ -141,7 +141,7 @@ func TestRequestToInput(t *testing.T) {
 				Path: "/no-parse",
 			},
 			skipRequestBodyParse: true,
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "request_body",
 				"path":         "/no-parse",
 			},
@@ -160,7 +160,7 @@ func TestRequestToInput(t *testing.T) {
 				Path: "/unsupported",
 			},
 			skipRequestBodyParse: false,
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type":   "request_body",
 				"path":           "/unsupported",
 				"parsed_body":    nil,
@@ -182,7 +182,7 @@ func TestRequestToInput(t *testing.T) {
 				Path: "/truncated",
 			},
 			skipRequestBodyParse: false,
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type":   "request_body",
 				"path":           "/truncated",
 				"parsed_body":    nil,
@@ -201,7 +201,7 @@ func TestRequestToInput(t *testing.T) {
 				},
 			},
 			initState: &types.StreamState{},
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "response_headers",
 				"response_headers": map[string]string{
 					":status":         "200",
@@ -226,7 +226,7 @@ func TestRequestToInput(t *testing.T) {
 				Path: "/submit-form",
 			},
 			skipRequestBodyParse: false,
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type":            "response_body",
 				"response_parsed_body":    map[string][]string{"firstname": {"alice"}, "lastname": {"smith"}},
 				"response_truncated_body": false,
@@ -246,7 +246,7 @@ func TestRequestToInput(t *testing.T) {
 				Path: "/binary-data",
 			},
 			skipRequestBodyParse: false,
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "response_body",
 				// No response_parsed_body for unsupported type
 				"response_parsed_body":    nil,
@@ -267,7 +267,7 @@ func TestRequestToInput(t *testing.T) {
 				Path:   "/trailer",
 				Method: "POST",
 			},
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "request_trailers",
 				"request_trailers": map[string]string{
 					"X-Trailer": "TrailerValue",
@@ -294,7 +294,7 @@ func TestRequestToInput(t *testing.T) {
 				Path:   "/response-trailer",
 				Method: "GET",
 			},
-			expectedInput: map[string]interface{}{
+			expectedInput: map[string]any{
 				"request_type": "response_trailers",
 				"response_trailers": map[string]string{
 					"X-Response-Trailer": "ResponseTrailerValue",
@@ -341,60 +341,60 @@ func TestGetParsedPathAndQuery(t *testing.T) {
 	tests := []struct {
 		name          string
 		path          string
-		expectedPath  []interface{}
-		expectedQuery map[string]interface{}
+		expectedPath  []any
+		expectedQuery map[string]any
 	}{
 		{
 			name:          "Simple Path without Query",
 			path:          "/my/test/path",
-			expectedPath:  []interface{}{"my", "test", "path"},
-			expectedQuery: map[string]interface{}{},
+			expectedPath:  []any{"my", "test", "path"},
+			expectedQuery: map[string]any{},
 		},
 		{
 			name:         "Path with Single Query Parameter",
 			path:         "/my/test/path?a=1",
-			expectedPath: []interface{}{"my", "test", "path"},
-			expectedQuery: map[string]interface{}{
-				"a": []interface{}{"1"},
+			expectedPath: []any{"my", "test", "path"},
+			expectedQuery: map[string]any{
+				"a": []any{"1"},
 			},
 		},
 		{
 			name:         "Path with Multiple Query Parameters",
 			path:         "/my/test/path?a=1&a=2&b=2",
-			expectedPath: []interface{}{"my", "test", "path"},
-			expectedQuery: map[string]interface{}{
-				"a": []interface{}{"1", "2"},
-				"b": []interface{}{"2"},
+			expectedPath: []any{"my", "test", "path"},
+			expectedQuery: map[string]any{
+				"a": []any{"1", "2"},
+				"b": []any{"2"},
 			},
 		},
 		{
 			name:         "Path with URL Encoded Characters",
 			path:         "/%2Fmy%2Ftest%2Fpath?a=1&a=new%0aline",
-			expectedPath: []interface{}{"my", "test", "path"},
-			expectedQuery: map[string]interface{}{
-				"a": []interface{}{"1", "new\nline"},
+			expectedPath: []any{"my", "test", "path"},
+			expectedQuery: map[string]any{
+				"a": []any{"1", "new\nline"},
 			},
 		},
 		{
 			name:         "Path with Multiple Different Query Parameters",
 			path:         "/my/test/path?a=1&b=2",
-			expectedPath: []interface{}{"my", "test", "path"},
-			expectedQuery: map[string]interface{}{
-				"a": []interface{}{"1"},
-				"b": []interface{}{"2"},
+			expectedPath: []any{"my", "test", "path"},
+			expectedQuery: map[string]any{
+				"a": []any{"1"},
+				"b": []any{"2"},
 			},
 		},
 		{
 			name:          "Root Path without Query",
 			path:          "/",
-			expectedPath:  []interface{}{""},
-			expectedQuery: map[string]interface{}{},
+			expectedPath:  []any{""},
+			expectedQuery: map[string]any{},
 		},
 		{
 			name:          "Empty Path",
 			path:          "",
-			expectedPath:  []interface{}{""},
-			expectedQuery: map[string]interface{}{},
+			expectedPath:  []any{""},
+			expectedQuery: map[string]any{},
 		},
 	}
 
@@ -427,7 +427,7 @@ func TestGetParsedBody(t *testing.T) {
 	if truncated {
 		t.Fatalf("Expected not truncated, got truncated")
 	}
-	expected := map[string]interface{}{"action": "read", "user": "alice"}
+	expected := map[string]any{"action": "read", "user": "alice"}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("Expected %v, got %v", expected, got)
 	}

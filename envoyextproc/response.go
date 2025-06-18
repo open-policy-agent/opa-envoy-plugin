@@ -23,7 +23,7 @@ type EvalResult struct {
 	Revisions      map[string]string
 	DecisionID     string
 	TxnID          uint64
-	Decision       interface{}
+	Decision       any
 	Metrics        metrics.Metrics
 	Txn            storage.Transaction
 	NDBuiltinCache builtins.NDBCache
@@ -118,12 +118,12 @@ func (result *EvalResult) invalidDecisionErr() error {
 
 // GetImmediateResponse constructs an ImmediateResponse message based on the policy decision.
 func (result *EvalResult) GetImmediateResponse() (*ext_proc_v3.ImmediateResponse, error) {
-	decisionMap, ok := result.Decision.(map[string]interface{})
+	decisionMap, ok := result.Decision.(map[string]any)
 	if !ok {
 		return nil, nil // No immediate response
 	}
 
-	immediateRespData, ok := decisionMap["immediate_response"].(map[string]interface{})
+	immediateRespData, ok := decisionMap["immediate_response"].(map[string]any)
 	if !ok {
 		return nil, nil // No immediate response
 	}
@@ -163,9 +163,9 @@ func (result *EvalResult) GetImmediateResponse() (*ext_proc_v3.ImmediateResponse
 
 	// Extract headers
 	headers := []*ext_core_v3.HeaderValueOption{}
-	if headersVal, ok := immediateRespData["headers"].([]interface{}); ok {
+	if headersVal, ok := immediateRespData["headers"].([]any); ok {
 		for _, headerObj := range headersVal {
-			headerMap, ok := headerObj.(map[string]interface{})
+			headerMap, ok := headerObj.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -211,7 +211,7 @@ func (result *EvalResult) GetImmediateResponse() (*ext_proc_v3.ImmediateResponse
 
 // GetCommonResponse constructs a CommonResponse based on the policy decision.
 func (result *EvalResult) GetCommonResponse() (*ext_proc_v3.CommonResponse, error) {
-	_, ok := result.Decision.(map[string]interface{})
+	_, ok := result.Decision.(map[string]any)
 	if !ok {
 		return nil, nil // No modifications
 	}
@@ -245,7 +245,7 @@ func (result *EvalResult) GetCommonResponse() (*ext_proc_v3.CommonResponse, erro
 
 // getHeaderMutation constructs a HeaderMutation from the policy decision.
 func (result *EvalResult) getHeaderMutation() (*ext_proc_v3.HeaderMutation, error) {
-	decisionMap, ok := result.Decision.(map[string]interface{})
+	decisionMap, ok := result.Decision.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("decision is not a map")
 	}
@@ -256,13 +256,13 @@ func (result *EvalResult) getHeaderMutation() (*ext_proc_v3.HeaderMutation, erro
 
 	// Process headers to add
 	if responseHeaders, ok := decisionMap["headers_to_add"]; ok {
-		headersSlice, ok := responseHeaders.([]interface{})
+		headersSlice, ok := responseHeaders.([]any)
 		if !ok {
 			return nil, fmt.Errorf("headers_to_add is not an array")
 		}
 
 		for _, headerObj := range headersSlice {
-			headerMap, ok := headerObj.(map[string]interface{})
+			headerMap, ok := headerObj.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -287,7 +287,7 @@ func (result *EvalResult) getHeaderMutation() (*ext_proc_v3.HeaderMutation, erro
 
 	// Process headers to remove
 	if removeHeadersVal, ok := decisionMap["headers_to_remove"]; ok {
-		removeHeadersSlice, ok := removeHeadersVal.([]interface{})
+		removeHeadersSlice, ok := removeHeadersVal.([]any)
 		if !ok {
 			return nil, fmt.Errorf("headers_to_remove is not an array")
 		}
@@ -315,7 +315,7 @@ func (result *EvalResult) getHeaderMutation() (*ext_proc_v3.HeaderMutation, erro
 
 // getBodyMutation constructs a BodyMutation from the policy decision.
 func (result *EvalResult) getBodyMutation() (*ext_proc_v3.BodyMutation, error) {
-	decisionMap, ok := result.Decision.(map[string]interface{})
+	decisionMap, ok := result.Decision.(map[string]any)
 	if !ok {
 		return nil, nil
 	}
@@ -341,7 +341,7 @@ func (result *EvalResult) getBodyMutation() (*ext_proc_v3.BodyMutation, error) {
 
 // GetDynamicMetadata retrieves dynamic metadata from the policy decision.
 func (result *EvalResult) GetDynamicMetadata() (*structpb.Struct, error) {
-	decisionMap, ok := result.Decision.(map[string]interface{})
+	decisionMap, ok := result.Decision.(map[string]any)
 	if !ok {
 		return nil, nil
 	}
@@ -351,7 +351,7 @@ func (result *EvalResult) GetDynamicMetadata() (*structpb.Struct, error) {
 		return nil, nil // No dynamic metadata
 	}
 
-	metadataMap, ok := val.(map[string]interface{})
+	metadataMap, ok := val.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("dynamic_metadata is not a map")
 	}
@@ -367,7 +367,7 @@ func (result *EvalResult) GetDynamicMetadata() (*structpb.Struct, error) {
 // GetTrailerMutation constructs a HeaderMutation from the policy decision for trailers.
 func (result *EvalResult) GetTrailerMutation() (*ext_proc_v3.HeaderMutation, error) {
 	// Instead of erroring out if the decision is not a map, return nil to be consistent.
-	decisionMap, ok := result.Decision.(map[string]interface{})
+	decisionMap, ok := result.Decision.(map[string]any)
 	if !ok {
 		return nil, nil
 	}
@@ -378,13 +378,13 @@ func (result *EvalResult) GetTrailerMutation() (*ext_proc_v3.HeaderMutation, err
 
 	// Process trailers to add
 	if responseTrailers, ok := decisionMap["trailers_to_add"]; ok {
-		trailersSlice, ok := responseTrailers.([]interface{})
+		trailersSlice, ok := responseTrailers.([]any)
 		if !ok {
 			return nil, fmt.Errorf("trailers_to_add is not an array")
 		}
 
 		for _, trailerObj := range trailersSlice {
-			trailerMap, ok := trailerObj.(map[string]interface{})
+			trailerMap, ok := trailerObj.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -409,7 +409,7 @@ func (result *EvalResult) GetTrailerMutation() (*ext_proc_v3.HeaderMutation, err
 
 	// Process trailers to remove
 	if removeTrailersVal, ok := decisionMap["trailers_to_remove"]; ok {
-		removeTrailersSlice, ok := removeTrailersVal.([]interface{})
+		removeTrailersSlice, ok := removeTrailersVal.([]any)
 		if !ok {
 			return nil, fmt.Errorf("trailers_to_remove is not an array")
 		}
