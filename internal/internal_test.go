@@ -2361,8 +2361,12 @@ func getPluginManager(module string, customPluginFuncs ...customPluginFunc) (*pl
 	ctx := context.Background()
 	store := inmem.New()
 	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
-	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
-	store.Commit(ctx, txn)
+	if err := store.UpsertPolicy(ctx, txn, "example.rego", []byte(module)); err != nil {
+		return nil, err
+	}
+	if err := store.Commit(ctx, txn); err != nil {
+		return nil, err
+	}
 
 	registry := prometheus.NewRegistry()
 	m, err := plugins.New([]byte{}, "test", store, plugins.WithPrometheusRegister(registry))
