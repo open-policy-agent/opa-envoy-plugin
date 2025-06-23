@@ -48,7 +48,9 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 			logger.WithFields(map[string]any{"err": err}).Error("Unable to start new storage transaction.")
 			return err
 		}
-		defer txnClose(ctx, err)
+		defer func() {
+			_ = txnClose(ctx, err)
+		}()
 		result.Txn = txn
 	}
 
@@ -115,7 +117,8 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 
 	result.NDBuiltinCache = ndbCache
 	result.Decision = rs[0].Expressions[0].Value
-	return nil
+
+	return err
 }
 
 type hook struct {

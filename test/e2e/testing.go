@@ -39,8 +39,14 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 	ctx := context.Background()
 	store := inmem.New()
 	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
-	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
-	store.Commit(ctx, txn)
+	if err := store.UpsertPolicy(ctx, txn, "example.rego", []byte(module)); err != nil {
+		return nil, err
+	}
+
+	if err := store.Commit(ctx, txn); err != nil {
+		return nil, err
+	}
+
 	m, err := plugins.New([]byte{}, "test", store, opts...)
 	if err != nil {
 		return nil, err
