@@ -24,7 +24,7 @@ You can use this version of OPA to enforce fine-grained, context-aware access
 control policies with Envoy _without_ modifying your microservice.
 
 More information about the OPA-Envoy plugin including performance benchmarks, debugging tips, detailed usage examples
-can be found in the [OPA documentation](https://www.openpolicyagent.org/docs/edge/envoy).
+can be found in the [OPA documentation](https://www.openpolicyagent.org/docs/envoy).
 
 ## Quick Start
 
