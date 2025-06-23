@@ -20,7 +20,7 @@ availability) in order to perform the authorization check.
 
 ## Quick Start
 
-Follow the tutorial described [here](https://www.openpolicyagent.org/docs/latest/envoy-tutorial-istio/).
+Follow the tutorial described [here](https://www.openpolicyagent.org/docs/envoy/tutorial-istio/).
 
 ## Controlling the injection policy at the pod level
 
