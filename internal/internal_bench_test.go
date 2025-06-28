@@ -24,7 +24,7 @@ func BenchmarkCheck(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		output, err := server.Check(ctx, &req)
 		if err != nil {
 			b.Fatal(err)
@@ -45,7 +45,7 @@ func BenchmarkCheck_withCustomLogger(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		output, err := server.Check(ctx, &req)
 		if err != nil {
 			b.Fatal(err)

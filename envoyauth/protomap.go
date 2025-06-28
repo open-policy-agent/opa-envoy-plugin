@@ -48,7 +48,7 @@ func protomap(msg protoreflect.Message) map[string]any {
 			list := value.List()
 			listResult := make([]any, list.Len())
 			valResolver := chooseResolver(fd.Kind())
-			for i := 0; i < list.Len(); i++ {
+			for i := range list.Len() {
 				listResult[i] = valResolver(list.Get(i))
 			}
 			result[name] = listResult

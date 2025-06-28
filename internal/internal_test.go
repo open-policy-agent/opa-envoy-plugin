@@ -2219,7 +2219,7 @@ func TestPrometheusMetrics(t *testing.T) {
 	}
 	defer server.Stop(ctx)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		output, err := server.Check(ctx, &req)
 		if err != nil {
 			t.Fatal(err)
