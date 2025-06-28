@@ -199,7 +199,7 @@ func TestCheckTrigger(t *testing.T) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 
-	if !reflect.DeepEqual(originalPreparedQuery, server.preparedQuery) {
+	if originalPreparedQuery != server.preparedQuery {
 		t.Fatal("Expected same instance of prepared query")
 	}
 
@@ -215,7 +215,7 @@ func TestCheckTrigger(t *testing.T) {
 		t.Fatal("Expected request to be allowed but got:", output)
 	}
 
-	if reflect.DeepEqual(originalPreparedQuery, server.preparedQuery) {
+	if originalPreparedQuery == server.preparedQuery {
 		t.Fatal("Expected different instance of prepared query")
 	}
 }

@@ -2,6 +2,7 @@ package envoyauth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -363,7 +364,7 @@ func TestGetParsedBody(t *testing.T) {
 				t.Fatalf("expected isBodyTruncated: %v, got: %v", tc.isBodyTruncated, got)
 			}
 
-			if err != tc.err {
+			if !errors.Is(err, tc.err) {
 				t.Fatalf("expected error: %v, got: %v", tc.err, err)
 			}
 		})
@@ -575,7 +576,7 @@ func TestGetParsedBodygRPC(t *testing.T) {
 		isBodyTruncated bool
 		err             error
 	}{
-		"parsed_path_error":    {input: createCheckRequest(requestInvalidParsedPathExample), want: nil, isBodyTruncated: false, err: fmt.Errorf("invalid parsed path")},
+		"parsed_path_error":    {input: createCheckRequest(requestInvalidParsedPathExample), want: nil, isBodyTruncated: false, err: errInvalidPath},
 		"without_raw_body":     {input: createCheckRequest(requestInvalidRawBodyExample), want: nil, isBodyTruncated: false, err: nil},
 		"valid_parsed_example": {input: createCheckRequest(requestValidExample), want: expectedObject, isBodyTruncated: false, err: nil},
 		"valid_parsed_book":    {input: createCheckRequest(requestValidBook), want: expectedObjectExampleBook, isBodyTruncated: false, err: nil},
@@ -598,7 +599,7 @@ func TestGetParsedBodygRPC(t *testing.T) {
 			parsedPath, _, _ := getParsedPathAndQuery(path)
 			got, isBodyTruncated, err := getParsedBody(logger, headers, body, rawBody, parsedPath, protoSet)
 
-			if !reflect.DeepEqual(err, tc.err) {
+			if !errors.Is(err, tc.err) {
 				t.Fatalf("expected error: %v, got: %v", tc.err, err)
 			}
 

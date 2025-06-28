@@ -3,6 +3,7 @@ package envoyauth
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -32,6 +33,7 @@ var v3Info = ast.NewObject(
 	keyValue("ext_authz", "v3"),
 	keyValue("encoding", "protojson"),
 )
+var errInvalidPath = errors.New("invalid parsed path")
 
 // RequestToInput - Converts a CheckRequest in either protobuf 2 or 3 to an input map
 func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.Files, skipRequestBodyParse bool) (map[string]any, error) {
@@ -153,7 +155,7 @@ func getParsedBody(logger logging.Logger, headers map[string]string, body string
 			// POST to /ThingService/DoThing. If our path length is anything but
 			// two, something is wrong.
 			if len(parsedPath) != 2 {
-				return nil, false, fmt.Errorf("invalid parsed path")
+				return nil, false, errInvalidPath
 			}
 
 			known, truncated, err := getGRPCBody(logger, rawBody, parsedPath, &data, protoSet)
