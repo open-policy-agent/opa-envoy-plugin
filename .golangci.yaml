@@ -195,7 +195,7 @@ linters:
   enable:
     - mirror
     # - errcheck # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/723 is complete
-    # - govet # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/727 is complete
+    - govet
     - ineffassign
     - intrange
     # - revive # replacement for golint # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/724 is complete
