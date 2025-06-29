@@ -2464,14 +2464,14 @@ type testPlugin struct {
 	events []logs.EventV1
 }
 
-func (p *testPlugin) Start(context.Context) error {
+func (_ *testPlugin) Start(context.Context) error {
 	return nil
 }
 
-func (p *testPlugin) Stop(context.Context) {
+func (_ *testPlugin) Stop(context.Context) {
 }
 
-func (p *testPlugin) Reconfigure(context.Context, any) {
+func (_ *testPlugin) Reconfigure(context.Context, any) {
 }
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
@@ -2483,14 +2483,14 @@ type testPluginError struct {
 	events []logs.EventV1
 }
 
-func (p *testPluginError) Start(context.Context) error {
+func (_ *testPluginError) Start(context.Context) error {
 	return nil
 }
 
-func (p *testPluginError) Stop(context.Context) {
+func (_ *testPluginError) Stop(context.Context) {
 }
 
-func (p *testPluginError) Reconfigure(context.Context, any) {
+func (_ *testPluginError) Reconfigure(context.Context, any) {
 }
 
 func (p *testPluginError) Log(_ context.Context, event logs.EventV1) error {
