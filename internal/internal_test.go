@@ -439,6 +439,41 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	}
 }
 
+func TestCheckAllowWithSpiffeDecision(t *testing.T) {
+	request := `{
+	"attributes": {
+	  "source": {
+	    "principal": "spiffe://test-domain/test"
+	  },
+	  "request": {
+		"http": {
+		  "id": "13359530607844510314",
+		  "headers": {
+			"content-type": "application/json"
+		  },
+		  "method": "GET",
+		  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\", \"dept\": {\"it\": \"eng\"}}",
+		}
+	  }
+	}
+  }`
+
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(request), &req); err != nil {
+		panic(err)
+	}
+
+	server := testAuthzServerWithSpiffeDecision(nil, withCustomLogger(&testPlugin{}))
+	ctx := context.Background()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+}
+
 func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 	// test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2122,6 +2157,22 @@ func testAuthzServer(customConfig *Config, customPluginFuncs ...customPluginFunc
 		  "foo": "bar",
 		  "baz": "qux",
 		}`
+
+	return testAuthzServerWithModule(module, "envoy/authz/result", customConfig, customPluginFuncs...)
+}
+
+func testAuthzServerWithSpiffeDecision(customConfig *Config, customPluginFuncs ...customPluginFunc) *envoyExtAuthzGrpcServer {
+	module := `
+			package envoy.authz
+	
+			default allow = false
+	
+			allow if {
+				input.source_principal == "spiffe://test-domain/test"
+			}
+
+			result.allowed = allow
+		`
 
 	return testAuthzServerWithModule(module, "envoy/authz/result", customConfig, customPluginFuncs...)
 }
