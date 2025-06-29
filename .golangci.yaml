@@ -206,7 +206,7 @@ linters:
     - usetesting
     - typecheck
     - staticcheck
-    # - gosimple # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/726 is complete
+    - gosimple
     - prealloc
     # - unconvert # reenable after 
     - copyloopvar
