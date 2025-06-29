@@ -307,7 +307,7 @@ func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 	p.server.GracefulStop()
 }
 
-func (p *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config any) {
+func (_ *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config any) {
 	return
 }
 

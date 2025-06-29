@@ -198,7 +198,7 @@ linters:
     - govet
     - ineffassign
     - intrange
-    # - revive # replacement for golint # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/724 is complete
+    - revive
     - gofmt
     - goimports
     - unused
