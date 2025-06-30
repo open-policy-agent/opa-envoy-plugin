@@ -87,7 +87,10 @@ func TestEval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer txnClose(ctx, err)
+	defer func() {
+		_ = txnClose(ctx, err)
+	}()
+
 	er.Txn = txn
 
 	err = Eval(ctx, server, inputValue, er)
@@ -123,8 +126,12 @@ func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 	ctx := context.Background()
 	store := inmem.New()
 	txn := storage.NewTransactionOrDie(ctx, store, storage.WriteParams)
-	store.UpsertPolicy(ctx, txn, "example.rego", []byte(module))
-	store.Commit(ctx, txn)
+	if err := store.UpsertPolicy(ctx, txn, "example.rego", []byte(module)); err != nil {
+		return nil, err
+	}
+	if err := store.Commit(ctx, txn); err != nil {
+		return nil, err
+	}
 
 	m, err := plugins.New([]byte{}, "test", store,
 		plugins.EnablePrintStatements(true),

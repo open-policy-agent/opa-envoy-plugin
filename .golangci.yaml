@@ -194,8 +194,8 @@ linters:
   disable-all: true
   enable:
     - mirror
-    # - errcheck # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/723 is complete
     - govet
+    - errcheck
     - ineffassign
     - intrange
     - revive
