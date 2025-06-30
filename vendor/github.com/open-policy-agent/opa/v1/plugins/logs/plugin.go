@@ -6,7 +6,6 @@
 package logs
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -89,7 +88,7 @@ type HTTPRequestContext struct {
 func (b *BundleInfoV1) AST() ast.Value {
 	result := ast.NewObject()
 	if len(b.Revision) > 0 {
-		result.Insert(ast.InternedStringTerm("revision"), ast.StringTerm(b.Revision))
+		result.Insert(ast.InternedTerm("revision"), ast.StringTerm(b.Revision))
 	}
 	return result
 }
@@ -99,22 +98,22 @@ func (b *BundleInfoV1) AST() ast.Value {
 // mask policy to the event.
 func (e *EventV1) AST() (ast.Value, error) {
 	var err error
-	event := ast.NewObject()
+	event := ast.NewObject(
+		ast.Item(ast.InternedTerm("decision_id"), ast.StringTerm(e.DecisionID)),
+	)
 
 	if e.Labels != nil {
 		labelsObj := ast.NewObject()
 		for k, v := range e.Labels {
 			labelsObj.Insert(ast.StringTerm(k), ast.StringTerm(v))
 		}
-		event.Insert(ast.InternedStringTerm("labels"), ast.NewTerm(labelsObj))
+		event.Insert(ast.InternedTerm("labels"), ast.NewTerm(labelsObj))
 	} else {
-		event.Insert(ast.InternedStringTerm("labels"), ast.NullTerm())
+		event.Insert(ast.InternedTerm("labels"), ast.NullTerm())
 	}
 
-	event.Insert(ast.InternedStringTerm("decision_id"), ast.StringTerm(e.DecisionID))
-
 	if len(e.Revision) > 0 {
-		event.Insert(ast.InternedStringTerm("revision"), ast.StringTerm(e.Revision))
+		event.Insert(ast.InternedTerm("revision"), ast.StringTerm(e.Revision))
 	}
 
 	if len(e.Bundles) > 0 {
@@ -122,25 +121,25 @@ func (e *EventV1) AST() (ast.Value, error) {
 		for k, v := range e.Bundles {
 			bundlesObj.Insert(ast.StringTerm(k), ast.NewTerm(v.AST()))
 		}
-		event.Insert(ast.InternedStringTerm("bundles"), ast.NewTerm(bundlesObj))
+		event.Insert(ast.InternedTerm("bundles"), ast.NewTerm(bundlesObj))
 	}
 
 	if len(e.Path) > 0 {
-		event.Insert(ast.InternedStringTerm("path"), ast.StringTerm(e.Path))
+		event.Insert(ast.InternedTerm("path"), ast.StringTerm(e.Path))
 	}
 
 	if len(e.Query) > 0 {
-		event.Insert(ast.InternedStringTerm("query"), ast.StringTerm(e.Query))
+		event.Insert(ast.InternedTerm("query"), ast.StringTerm(e.Query))
 	}
 
-	if e.Input != nil {
-		if e.inputAST == nil {
-			e.inputAST, err = roundtripJSONToAST(e.Input)
-			if err != nil {
-				return nil, err
-			}
+	if e.inputAST != nil {
+		event.Insert(ast.InternedTerm("input"), ast.NewTerm(e.inputAST))
+	} else if e.Input != nil {
+		e.inputAST, err = roundtripJSONToAST(e.Input)
+		if err != nil {
+			return nil, err
 		}
-		event.Insert(ast.InternedStringTerm("input"), ast.NewTerm(e.inputAST))
+		event.Insert(ast.InternedTerm("input"), ast.NewTerm(e.inputAST))
 	}
 
 	if e.Result != nil {
@@ -148,7 +147,7 @@ func (e *EventV1) AST() (ast.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		event.Insert(ast.InternedStringTerm("result"), ast.NewTerm(results))
+		event.Insert(ast.InternedTerm("result"), ast.NewTerm(results))
 	}
 
 	if e.MappedResult != nil {
@@ -156,7 +155,7 @@ func (e *EventV1) AST() (ast.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		event.Insert(ast.InternedStringTerm("mapped_result"), ast.NewTerm(mResults))
+		event.Insert(ast.InternedTerm("mapped_result"), ast.NewTerm(mResults))
 	}
 
 	if e.NDBuiltinCache != nil {
@@ -164,7 +163,7 @@ func (e *EventV1) AST() (ast.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		event.Insert(ast.InternedStringTerm("nd_builtin_cache"), ast.NewTerm(ndbCache))
+		event.Insert(ast.InternedTerm("nd_builtin_cache"), ast.NewTerm(ndbCache))
 	}
 
 	if len(e.Erased) > 0 {
@@ -172,7 +171,7 @@ func (e *EventV1) AST() (ast.Value, error) {
 		for i, v := range e.Erased {
 			erased[i] = ast.StringTerm(v)
 		}
-		event.Insert(ast.InternedStringTerm("erased"), ast.ArrayTerm(erased...))
+		event.Insert(ast.InternedTerm("erased"), ast.ArrayTerm(erased...))
 	}
 
 	if len(e.Masked) > 0 {
@@ -180,7 +179,7 @@ func (e *EventV1) AST() (ast.Value, error) {
 		for i, v := range e.Masked {
 			masked[i] = ast.StringTerm(v)
 		}
-		event.Insert(ast.InternedStringTerm("masked"), ast.ArrayTerm(masked...))
+		event.Insert(ast.InternedTerm("masked"), ast.ArrayTerm(masked...))
 	}
 
 	if e.Error != nil {
@@ -188,11 +187,11 @@ func (e *EventV1) AST() (ast.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		event.Insert(ast.InternedStringTerm("error"), ast.NewTerm(evalErr))
+		event.Insert(ast.InternedTerm("error"), ast.NewTerm(evalErr))
 	}
 
 	if len(e.RequestedBy) > 0 {
-		event.Insert(ast.InternedStringTerm("requested_by"), ast.StringTerm(e.RequestedBy))
+		event.Insert(ast.InternedTerm("requested_by"), ast.StringTerm(e.RequestedBy))
 	}
 
 	// Use the timestamp JSON marshaller to ensure the format is the same as
@@ -201,18 +200,18 @@ func (e *EventV1) AST() (ast.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	event.Insert(ast.InternedStringTerm("timestamp"), ast.StringTerm(strings.Trim(string(timeBytes), "\"")))
+	event.Insert(ast.InternedTerm("timestamp"), ast.StringTerm(strings.Trim(string(timeBytes), "\"")))
 
 	if e.Metrics != nil {
 		m, err := ast.InterfaceToValue(e.Metrics)
 		if err != nil {
 			return nil, err
 		}
-		event.Insert(ast.InternedStringTerm("metrics"), ast.NewTerm(m))
+		event.Insert(ast.InternedTerm("metrics"), ast.NewTerm(m))
 	}
 
 	if e.RequestID > 0 {
-		event.Insert(ast.InternedStringTerm("req_id"), ast.UIntNumberTerm(e.RequestID))
+		event.Insert(ast.InternedTerm("req_id"), ast.UIntNumberTerm(e.RequestID))
 	}
 
 	return event, nil
@@ -242,7 +241,6 @@ const (
 	defaultMaskDecisionPath             = "/system/log/mask"
 	defaultDropDecisionPath             = "/system/log/drop"
 	logRateLimitExDropCounterName       = "decision_logs_dropped_rate_limit_exceeded"
-	logNDBDropCounterName               = "decision_logs_nd_builtin_cache_dropped"
 	logBufferEventDropCounterName       = "decision_logs_dropped_buffer_size_limit_exceeded"
 	logBufferSizeLimitExDropCounterName = "decision_logs_dropped_buffer_size_limit_bytes_exceeded"
 	logEncodingFailureCounterName       = "decision_logs_encoding_failure"
@@ -576,6 +574,8 @@ func New(parsedConfig *Config, manager *plugins.Manager) *Plugin {
 		preparedMask: *newPrepareOnce(),
 	}
 
+	plugin.enc.WithLogger(plugin.logger)
+
 	switch parsedConfig.Reporting.BufferType {
 	case eventBufferType:
 		plugin.eventBuffer = newEventBuffer(
@@ -906,8 +906,8 @@ func (p *Plugin) oneShot(ctx context.Context) error {
 	oldChunkEnc := p.enc
 	oldBuffer := p.buffer
 	p.buffer = newLogBuffer(*p.config.Reporting.BufferSizeLimitBytes)
-	p.enc = newChunkEncoder(*p.config.Reporting.UploadSizeLimitBytes).WithMetrics(p.metrics).
-		WithSoftLimit(oldChunkEnc.softLimit, oldChunkEnc.softLimitScaleDownExponent, oldChunkEnc.softLimitScaleUpExponent)
+	p.enc = newChunkEncoder(*p.config.Reporting.UploadSizeLimitBytes).WithMetrics(p.metrics).WithLogger(p.logger).
+		WithUncompressedLimit(oldChunkEnc.uncompressedLimit, oldChunkEnc.uncompressedLimitScaleDownExponent, oldChunkEnc.uncompressedLimitScaleUpExponent)
 	p.mtx.Unlock()
 
 	// Along with uploading the compressed events in the buffer
@@ -1023,52 +1023,21 @@ func (p *Plugin) encodeAndBufferEvent(event EventV1) {
 		return
 	}
 
-	result, err := p.encodeEvent(event)
+	eventBytes, err := json.Marshal(&event)
 	if err != nil {
-		// If there's no ND builtins cache in the event, then we don't
-		// need to retry encoding anything.
-		if event.NDBuiltinCache == nil {
-			// TODO(tsandall): revisit this now that we have an API that
-			// can return an error. Should the default behaviour be to
-			// fail-closed as we do for plugins?
-
-			p.incrMetric(logEncodingFailureCounterName)
-			p.logger.Error("Log encoding failed: %v.", err)
-			return
-		}
-
-		// Attempt to encode the event again, dropping the ND builtins cache.
-		newEvent := event
-		newEvent.NDBuiltinCache = nil
-
-		result, err = p.encodeEvent(newEvent)
-		if err != nil {
-			p.incrMetric(logEncodingFailureCounterName)
-			p.logger.Error("Log encoding failed: %v.", err)
-			return
-		}
-
-		// Re-encoding was successful, but we still need to alert users.
-		p.logger.Error("ND builtins cache dropped from this event to fit under maximum upload size limits. Increase upload size limit or change usage of non-deterministic builtins.")
-		p.incrMetric(logNDBDropCounterName)
+		p.logger.Error("Decision log dropped due to error serializing event to JSON: %v", err)
+		return
 	}
 
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
+	result, err := p.enc.Encode(event, eventBytes)
+	if err != nil {
+		return
+	}
 	for _, chunk := range result {
 		p.bufferChunk(p.buffer, chunk)
 	}
-}
-
-func (p *Plugin) encodeEvent(event EventV1) ([][]byte, error) {
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(event); err != nil {
-		return nil, err
-	}
-
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	return p.enc.WriteBytes(buf.Bytes())
 }
 
 func (p *Plugin) bufferChunk(buffer *logBuffer, bs []byte) {
