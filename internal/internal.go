@@ -307,9 +307,7 @@ func (p *envoyExtAuthzGrpcServer) Stop(ctx context.Context) {
 	p.server.GracefulStop()
 }
 
-func (_ *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config any) {
-	return
-}
+func (_ *envoyExtAuthzGrpcServer) Reconfigure(ctx context.Context, config any) {}
 
 func (p *envoyExtAuthzGrpcServer) compilerUpdated(txn storage.Transaction) {
 	p.preparedQueryDoOnce = new(sync.Once)
