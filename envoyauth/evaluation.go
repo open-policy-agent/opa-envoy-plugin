@@ -2,7 +2,7 @@ package envoyauth
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/config"
@@ -110,9 +110,9 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 	case err != nil:
 		return err
 	case len(rs) == 0:
-		return fmt.Errorf("undefined decision")
+		return errors.New("undefined decision")
 	case len(rs) > 1:
-		return fmt.Errorf("multiple evaluation results")
+		return errors.New("multiple evaluation results")
 	}
 
 	result.NDBuiltinCache = ndbCache
