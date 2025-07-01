@@ -108,7 +108,7 @@ func Validate(m *plugins.Manager, bs []byte) (*Config, error) {
 	}
 
 	if cfg.Path != "" && cfg.Query != "" {
-		return nil, fmt.Errorf("invalid config: specify a value for only the \"path\" field")
+		return nil, errors.New("invalid config: specify a value for only the \"path\" field")
 	}
 
 	var parsedQuery ast.Body

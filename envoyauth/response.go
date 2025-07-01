@@ -3,6 +3,7 @@ package envoyauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -127,7 +128,7 @@ func (result *EvalResult) IsAllowed() (bool, error) {
 		var ok, allowed bool
 
 		if val, ok = decision["allowed"]; !ok {
-			return false, fmt.Errorf("unable to determine evaluation result due to missing \"allowed\" key")
+			return false, errors.New("unable to determine evaluation result due to missing \"allowed\" key")
 		}
 
 		if allowed, ok = val.(bool); !ok {
@@ -299,7 +300,7 @@ func (result *EvalResult) GetResponseHTTPStatus() (int, error) {
 	switch decision := result.Decision.(type) {
 	case bool:
 		if decision {
-			return http.StatusOK, fmt.Errorf("HTTP status code undefined for simple 'allow'")
+			return http.StatusOK, errors.New("HTTP status code undefined for simple 'allow'")
 		}
 
 		return status, nil
@@ -332,7 +333,7 @@ func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
 	switch decision := result.Decision.(type) {
 	case bool:
 		if decision {
-			return nil, fmt.Errorf("dynamic metadata undefined for boolean decision")
+			return nil, errors.New("dynamic metadata undefined for boolean decision")
 		}
 	case map[string]any:
 		var (

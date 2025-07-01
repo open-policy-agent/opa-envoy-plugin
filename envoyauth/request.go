@@ -294,7 +294,7 @@ func getGRPCBody(logger logging.Logger, in []byte, parsedPath []string, data any
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 
 	if len(in) < 5 {
-		return false, false, fmt.Errorf("less than 5 bytes")
+		return false, false, errors.New("less than 5 bytes")
 	}
 
 	// Can be 0 or 1, 1 indicates that the payload is compressed.

@@ -2583,5 +2583,5 @@ func (_ *testPluginError) Reconfigure(context.Context, any) {
 
 func (p *testPluginError) Log(_ context.Context, event logs.EventV1) error {
 	p.events = append(p.events, event)
-	return fmt.Errorf("Bad Logger Error")
+	return errors.New("Bad Logger Error")
 }
