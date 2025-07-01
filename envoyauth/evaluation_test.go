@@ -155,7 +155,7 @@ func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 	}
 
 	path := "envoy/authz/allow"
-	query := "data." + strings.Replace(path, "/", ".", -1)
+	query := "data." + strings.ReplaceAll(path, "/", ".")
 	parsedQuery, err := ast.ParseBody(query)
 	if err != nil {
 		return nil, err

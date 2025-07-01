@@ -51,7 +51,7 @@ func TestAuthzServerWithWithOpts(module string, path string, addr string, opts .
 	if err != nil {
 		return nil, err
 	}
-	query := "data." + strings.Replace(path, "/", ".", -1)
+	query := "data." + strings.ReplaceAll(path, "/", ".")
 
 	cfgJSON := fmt.Sprintf(`{
 		addr: "%s",

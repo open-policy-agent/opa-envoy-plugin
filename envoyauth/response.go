@@ -366,7 +366,7 @@ func (result *EvalResult) GetResponseEnvoyHTTPStatus() (*ext_type_v3.HttpStatus,
 		return nil, err
 	}
 
-	//This check is partially redundant but might be more strict than http.StatusText()
+	// This check is partially redundant but might be more strict than http.StatusText()
 	if _, ok := ext_type_v3.StatusCode_name[int32(httpStatusCode)]; !ok {
 		return nil, fmt.Errorf("Invalid HTTP status code %v", httpStatusCode)
 	}
