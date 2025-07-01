@@ -334,7 +334,7 @@ func getGRPCBody(logger logging.Logger, in []byte, parsedPath []string, data any
 		return true, false, err
 	}
 
-	if err := util.Unmarshal([]byte(jsonBody), &data); err != nil {
+	if err := util.Unmarshal(jsonBody, &data); err != nil {
 		return true, false, err
 	}
 

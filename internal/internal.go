@@ -447,7 +447,7 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req any) (*ext_auth
 			HttpResponse: &ext_authz_v3.CheckResponse_DeniedResponse{
 				DeniedResponse: &ext_authz_v3.DeniedHttpResponse{
 					Status: &ext_type_v3.HttpStatus{
-						Code: ext_type_v3.StatusCode(ext_type_v3.StatusCode_BadRequest),
+						Code: ext_type_v3.StatusCode_BadRequest,
 					},
 					Body: internalErr.Error(),
 				},

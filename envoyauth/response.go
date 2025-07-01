@@ -357,7 +357,7 @@ func (result *EvalResult) GetDynamicMetadata() (*_structpb.Struct, error) {
 // GetResponseEnvoyHTTPStatus returns the http status to return if they are part of the decision
 func (result *EvalResult) GetResponseEnvoyHTTPStatus() (*ext_type_v3.HttpStatus, error) {
 	status := &ext_type_v3.HttpStatus{
-		Code: ext_type_v3.StatusCode(ext_type_v3.StatusCode_Forbidden),
+		Code: ext_type_v3.StatusCode_Forbidden,
 	}
 
 	httpStatusCode, err := result.GetResponseHTTPStatus()
