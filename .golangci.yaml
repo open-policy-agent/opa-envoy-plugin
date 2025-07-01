@@ -211,5 +211,5 @@ linters:
     - unconvert
     - copyloopvar
     # - perfsprint # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/729 is complete
-    # - gocritic # reenable after https://github.com/open-policy-agent/opa-envoy-plugin/issues/725 is complete
+    - gocritic
     # - gosec # too many false positives

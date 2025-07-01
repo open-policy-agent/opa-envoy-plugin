@@ -1205,7 +1205,7 @@ func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		countMutex.Lock()
-		count = count + 1
+		count++
 		countMutex.Unlock()
 		fmt.Fprintf(w, `{"count": %d}`, count)
 	}))
@@ -1360,7 +1360,7 @@ func TestConfigValidDefault(t *testing.T) {
 		t.Fatalf("Expected address %v but got %v", defaultAddr, config.Addr)
 	}
 
-	expected := "data." + strings.Replace(defaultPath, "/", ".", -1)
+	expected := "data." + strings.ReplaceAll(defaultPath, "/", ".")
 	if config.parsedQuery.String() != expected {
 		t.Fatalf("Expected query %v but got %v", expected, config.parsedQuery.String())
 	}
@@ -2220,7 +2220,7 @@ func testAuthzServerWithModule(module string, path string, customConfig *Config,
 
 	m.Config.NDBuiltinCache = true
 
-	query := "data." + strings.Replace(path, "/", ".", -1)
+	query := "data." + strings.ReplaceAll(path, "/", ".")
 	parsedQuery, err := ast.ParseBody(query)
 	if err != nil {
 		panic(err)
@@ -2483,10 +2483,8 @@ func assertHeaders(t *testing.T, actualHeaders []*ext_core.HeaderValueOption, ex
 
 		if expVal, ok = expectedHeaders[key]; !ok {
 			t.Fatalf("Expected header \"%v\" does not exist in map", key)
-		} else {
-			if expVal != value {
-				t.Fatalf("Expected value for header \"%v\" is \"%v\" but got \"%v\"", key, expVal, value)
-			}
+		} else if expVal != value {
+			t.Fatalf("Expected value for header \"%v\" is \"%v\" but got \"%v\"", key, expVal, value)
 		}
 	}
 }

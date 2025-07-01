@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		countMutex.Lock()
-		count = count + 1
+		count++
 		countMutex.Unlock()
 		fmt.Fprintf(w, `{"count": %d, "b3multiheader": "%s", "b3singleheader": "%s"}`, count, req.Header.Get("X-B3-Traceid"), req.Header.Get("B3"))
 	}))
