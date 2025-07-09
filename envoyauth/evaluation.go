@@ -23,6 +23,7 @@ type EvalContext interface {
 	Compiler() *ast.Compiler
 	Runtime() *ast.Term
 	InterQueryBuiltinCache() iCache.InterQueryCache
+	InterQueryBuiltinValueCache() iCache.InterQueryValueCache
 	Logger() logging.Logger
 	Config() *config.Config
 	DistributedTracing() tracing.Options
@@ -94,6 +95,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 			rego.EvalTransaction(result.Txn),
 			rego.EvalMetrics(result.Metrics),
 			rego.EvalInterQueryBuiltinCache(evalContext.InterQueryBuiltinCache()),
+			rego.EvalInterQueryBuiltinValueCache(evalContext.InterQueryBuiltinValueCache()),
 			rego.EvalPrintHook(&ph),
 			rego.EvalNDBuiltinCache(ndbCache),
 		},

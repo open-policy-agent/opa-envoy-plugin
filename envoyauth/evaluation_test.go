@@ -218,6 +218,10 @@ func (*mockExtAuthzGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
 	return nil
 }
 
+func (*mockExtAuthzGrpcServer) InterQueryBuiltinValueCache() iCache.InterQueryValueCache {
+	return nil
+}
+
 func (m *mockExtAuthzGrpcServer) PreparedQuery() *rego.PreparedEvalQuery {
 	return m.preparedQuery
 }

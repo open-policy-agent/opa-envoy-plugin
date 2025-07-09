@@ -232,6 +232,7 @@ type envoyExtAuthzGrpcServer struct {
 	preparedQueryDoOnce    *sync.Once
 	preparedQueryErr       error
 	interQueryBuiltinCache iCache.InterQueryCache
+	interQueryValueCache   iCache.InterQueryValueCache
 	distributedTracingOpts tracing.Options
 	metricAuthzDuration    prometheus.HistogramVec
 	metricErrorCounter     prometheus.CounterVec
@@ -267,6 +268,10 @@ func (p *envoyExtAuthzGrpcServer) PreparedQueryDoOnce() *sync.Once {
 
 func (p *envoyExtAuthzGrpcServer) InterQueryBuiltinCache() iCache.InterQueryCache {
 	return p.interQueryBuiltinCache
+}
+
+func (p *envoyExtAuthzGrpcServer) InterQueryBuiltinValueCache() iCache.InterQueryValueCache {
+	return p.interQueryValueCache
 }
 
 func (p *envoyExtAuthzGrpcServer) PreparedQuery() *rego.PreparedEvalQuery {
