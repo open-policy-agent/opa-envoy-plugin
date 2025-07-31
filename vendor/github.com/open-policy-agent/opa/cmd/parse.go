@@ -56,8 +56,15 @@ var parseCommand = &cobra.Command{
 		}
 		return env.CmdFlags.CheckEnvironmentVariables(cmd)
 	},
-	Run: func(_ *cobra.Command, args []string) {
-		os.Exit(parse(args, &configuredParseParams, os.Stdout, os.Stderr))
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+
+		exit := parse(args, &configuredParseParams, os.Stdout, os.Stderr)
+		if exit != 0 {
+			return newExitError(exit)
+		}
+		return nil
 	},
 }
 
@@ -132,11 +139,11 @@ func parse(args []string, params *parseParams, stdout io.Writer, stderr io.Write
 	return 0
 }
 
-func init() {
+func initParse(root *cobra.Command, _ string) {
 	addOutputFormat(parseCommand.Flags(), configuredParseParams.format)
 	parseCommand.Flags().StringVarP(&configuredParseParams.jsonInclude, "json-include", "", "", "include or exclude optional elements. By default comments are included. Current options: locations, comments. E.g. --json-include locations,-comments will include locations and exclude comments.")
 	addV1CompatibleFlag(parseCommand.Flags(), &configuredParseParams.v1Compatible, false)
 	addV0CompatibleFlag(parseCommand.Flags(), &configuredParseParams.v0Compatible, false)
 
-	RootCommand.AddCommand(parseCommand)
+	root.AddCommand(parseCommand)
 }
