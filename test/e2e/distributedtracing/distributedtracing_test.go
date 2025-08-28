@@ -1,7 +1,6 @@
 package distributedtracing
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -119,7 +118,7 @@ func TestServerSpanAndTraceIdInDecisionLogAndB3TraceHeadersPropagation(t *testin
 			t.Fatalf("did not connect: %v", err)
 		}
 		client := ext_authz.NewAuthorizationClient(conn)
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// mimicking how a grpc client would append the headers to the outgoing context
 		ctx = metadata.AppendToOutgoingContext(ctx, "x-b3-parentspanid", "2a2b3c4d5e6f7a8b")
