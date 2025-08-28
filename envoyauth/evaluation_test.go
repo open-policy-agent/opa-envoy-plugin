@@ -30,7 +30,7 @@ func (h *testPrintHook) Print(pctx print.Context, msg string) error {
 }
 
 func TestEval(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	logger := loggingtest.New()
 	logger.SetLevel(logging.Debug)

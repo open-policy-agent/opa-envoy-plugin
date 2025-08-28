@@ -1,7 +1,6 @@
 package envoyauth
 
 import (
-	"context"
 	"encoding/json"
 	"reflect"
 	"sort"
@@ -54,7 +53,7 @@ func TestIsAllowed(t *testing.T) {
 
 func TestReadRevisionsLegacy(t *testing.T) {
 	store := inmem.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tb := bundle.Manifest{
 		Revision: "abc123",
@@ -96,7 +95,7 @@ func TestReadRevisionsLegacy(t *testing.T) {
 
 func TestReadRevisionsMulti(t *testing.T) {
 	store := inmem.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	bundles := map[string]bundle.Manifest{
 		"bundle1": {

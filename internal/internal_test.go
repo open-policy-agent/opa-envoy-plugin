@@ -160,7 +160,7 @@ func TestCheckAllow(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func TestCheckTrigger(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestCheckAllowParsedPath(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestCheckAllowParsedBody(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +267,7 @@ func TestCheckAllowWithLogger(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -310,7 +310,7 @@ func TestCheckDeny(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -330,7 +330,7 @@ func TestCheckDenyDynamicMetadataDecisionID(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -349,7 +349,7 @@ func TestCheckDenyParsedBody(t *testing.T) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -372,7 +372,7 @@ func TestCheckAllowWithDryRunTrue(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(&Config{DryRun: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -395,7 +395,7 @@ func TestCheckDenyWithDryRunTrue(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(&Config{DryRun: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -418,7 +418,7 @@ func TestCheckDenyWithLogger(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -464,7 +464,7 @@ func TestCheckAllowWithSpiffeDecision(t *testing.T) {
 	}
 
 	server := testAuthzServerWithSpiffeDecision(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -496,7 +496,7 @@ func TestCheckDenyWithSpiffeDecision(t *testing.T) {
 	}
 
 	server := testAuthzServerWithSpiffeDecision(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -544,7 +544,7 @@ func TestCheckAllowWithLoggerNDBCache(t *testing.T) {
 `, ts.URL)
 
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -587,7 +587,7 @@ func TestCheckContextTimeout(t *testing.T) {
 
 	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Nanosecond*1)
 	defer cancel()
 
 	time.Sleep(time.Millisecond * 1)
@@ -633,7 +633,7 @@ func TestCheckContextTimeoutMetricsDisabled(t *testing.T) {
 
 	server := testAuthzServer(&Config{EnablePerformanceMetrics: false}, withCustomLogger(customLogger))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond*1)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Nanosecond*1)
 	defer cancel()
 
 	time.Sleep(time.Millisecond * 1)
@@ -684,7 +684,7 @@ func TestCheckIllegalDecisionWithLogger(t *testing.T) {
 		default allow = 1
 		`
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", &Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
@@ -739,7 +739,7 @@ func TestCheckDenyDecisionTruncatedBodyWithLogger(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServerWithTruncatedBody(nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -779,7 +779,7 @@ func TestCheckAllowDecisionWithSkipRequestBodyParse(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServerWithTruncatedBody(&Config{SkipRequestBodyParse: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -854,7 +854,7 @@ func TestCheckDecisionTruncatedBodyWithLogger(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServerWithTruncatedBody(nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -929,7 +929,7 @@ func TestCheckBadDecisionWithLogger(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 
 	if err != nil {
@@ -979,7 +979,7 @@ func TestCheckEvalErrorWithLogger(t *testing.T) {
         allow:= true`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", &Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 
 	if err == nil {
@@ -1036,7 +1036,7 @@ func TestCheckAllowObjectDecisionWithBadReqHeadersToRemoveWithLogger(t *testing.
 	customLogger := &testPlugin{}
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", &Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err == nil {
 		t.Fatal("Expected error but got nil")
@@ -1078,7 +1078,7 @@ func TestCheckWithLoggerError(t *testing.T) {
 	customLogger := &testPluginError{}
 
 	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1104,7 +1104,7 @@ func TestCheckWithLoggerErrorV2(t *testing.T) {
 	}
 
 	server := envoyExtAuthzV2Wrapper{testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(&testPluginError{}))}
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1131,7 +1131,7 @@ func TestCheckBadDecisionWithLoggerV2(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := envoyExtAuthzV2Wrapper{testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))}
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 
 	if err != nil {
@@ -1172,7 +1172,7 @@ func TestCheckDenyWithLoggerV2(t *testing.T) {
 
 	customLogger := &testPlugin{}
 	server := envoyExtAuthzV2Wrapper{testAuthzServer(nil, withCustomLogger(customLogger))}
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1226,7 +1226,7 @@ func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
 	`
 	module := fmt.Sprintf(moduleFmt, ts.URL)
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1459,7 +1459,7 @@ func TestCheckAllowObjectDecisionDynamicMetadata(t *testing.T) {
 	`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1513,7 +1513,7 @@ func TestCheckAllowObjectDecisionDynamicMetadataDecisionID(t *testing.T) {
 	`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1543,7 +1543,7 @@ func TestCheckAllowBooleanDecisionDynamicMetadata(t *testing.T) {
 	`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1573,7 +1573,7 @@ func TestCheckAllowBooleanDecisionDynamicMetadataDecisionID(t *testing.T) {
 	`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1603,7 +1603,7 @@ func TestCheckAllowObjectDecisionReqQueryParamsToRemove(t *testing.T) {
 		result["query_parameters_to_remove"] = query_parameters_to_remove`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1650,7 +1650,7 @@ func TestCheckAllowObjectDecisionReqQueryParamsToSet(t *testing.T) {
 		result["query_parameters_to_set"] = query_parameters_to_set`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1733,7 +1733,7 @@ func TestCheckAllowObjectDecisionReqHeadersToRemove(t *testing.T) {
 		result["request_headers_to_remove"] = request_headers_to_remove`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1782,7 +1782,7 @@ func TestCheckAllowObjectDecisionResponseHeadersToAdd(t *testing.T) {
 		result["response_headers_to_add"] = response_headers_to_add`
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1834,7 +1834,7 @@ func TestCheckAllowObjectDecisionMultiValuedHeaders(t *testing.T) {
 
 	server := testAuthzServerWithModule(module, "envoy/authz/result", nil, withCustomLogger(&testPlugin{}))
 
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1889,7 +1889,7 @@ func TestCheckAllowObjectDecision(t *testing.T) {
 	}
 
 	server := testAuthzServerWithObjectDecision(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1938,7 +1938,7 @@ func TestCheckDenyObjectDecision(t *testing.T) {
 	}
 
 	server := testAuthzServerWithObjectDecision(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -1981,7 +1981,7 @@ func TestCheckDenyWithDryRunObjectDecision(t *testing.T) {
 	}
 
 	server := testAuthzServerWithObjectDecision(&Config{DryRun: true}, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -2004,7 +2004,7 @@ func TestCheckAllowWithDryRunObjectDecision(t *testing.T) {
 	}
 
 	server := testAuthzServerWithObjectDecision(&Config{DryRun: true}, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
@@ -2059,7 +2059,7 @@ func TestPluginStatusLifeCycle(t *testing.T) {
 
 	assertPluginState(t, m, plugins.StateNotReady)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err = m.Start(ctx)
 	if err != nil {
 		t.Fatalf("Unexpected error: %s", err)
@@ -2297,7 +2297,7 @@ func TestPrometheusMetrics(t *testing.T) {
 		panic(err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	testLogPlugin := &testPlugin{}
 	server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(testLogPlugin))
 	if err := server.Start(ctx); err != nil {
@@ -2338,7 +2338,7 @@ func TestPrometheusMetrics(t *testing.T) {
 
 func TestLogWithASTError(t *testing.T) {
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	err := server.logDecision(context.Background(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
+	err := server.logDecision(t.Context(), nil, &envoyauth.EvalResult{}, &ast.Error{Code: "foo"})
 	if err != nil {
 		panic(err)
 	}
@@ -2349,7 +2349,7 @@ func TestLogWithCancelError(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	server := testAuthzServer(nil, withCustomLogger(customLogger))
-	err := server.logDecision(context.Background(), nil, &envoyauth.EvalResult{}, &topdown.Error{
+	err := server.logDecision(t.Context(), nil, &envoyauth.EvalResult{}, &topdown.Error{
 		Code:    topdown.CancelErr,
 		Message: "caller cancelled query execution",
 	})
@@ -2389,7 +2389,7 @@ func TestVersionInfoInputV3(t *testing.T) {
 		}
 		`
 	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatalf("Expected no error but got %v", err)
@@ -2417,7 +2417,7 @@ func TestVersionInfoInputV2(t *testing.T) {
 		`
 	serverV3 := testAuthzServerWithModule(module, "envoy/authz/allow", nil, withCustomLogger(customLogger))
 	server := &envoyExtAuthzV2Wrapper{serverV3}
-	ctx := context.Background()
+	ctx := t.Context()
 	output, err := server.Check(ctx, &req)
 	if err != nil {
 		t.Fatalf("Expected no error but got %v", err)
