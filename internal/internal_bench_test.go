@@ -5,7 +5,6 @@
 package internal
 
 import (
-	"context"
 	"testing"
 
 	ext_authz "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
@@ -21,7 +20,7 @@ func BenchmarkCheck(b *testing.B) {
 	}
 
 	server := testAuthzServer(nil)
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	for range b.N {
@@ -42,7 +41,7 @@ func BenchmarkCheck_withCustomLogger(b *testing.B) {
 	}
 
 	server := testAuthzServer(nil, withCustomLogger(&testPlugin{}))
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	for range b.N {
