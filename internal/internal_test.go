@@ -623,14 +623,15 @@ func TestCheckContextTimeout(t *testing.T) {
 }
 
 type testServer struct {
-    *envoyExtAuthzGrpcServer
-    beforeCheck func()
+	*envoyExtAuthzGrpcServer
+	beforeCheck func()
 }
+
 func (s *testServer) Check(ctx context.Context, req *ext_authz.CheckRequest) (*ext_authz.CheckResponse, error) {
 	if s.beforeCheck != nil {
-        s.beforeCheck()
-    }
-    return s.envoyExtAuthzGrpcServer.Check(ctx, req)
+		s.beforeCheck()
+	}
+	return s.envoyExtAuthzGrpcServer.Check(ctx, req)
 }
 
 func TestCheckContextCancelled(t *testing.T) {
@@ -642,7 +643,6 @@ func TestCheckContextCancelled(t *testing.T) {
 	// create custom logger
 	customLogger := &testPlugin{}
 
-	
 	ctx, cancel := context.WithCancel(t.Context())
 	// server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	server := &testServer{
@@ -680,7 +680,6 @@ func TestCheckContextCancelled(t *testing.T) {
 
 	assertErrorCounterMetric(t, server.envoyExtAuthzGrpcServer, CheckRequestCancelledErr)
 }
-
 
 func TestCheckContextTimeoutMetricsDisabled(t *testing.T) {
 	var req ext_authz.CheckRequest

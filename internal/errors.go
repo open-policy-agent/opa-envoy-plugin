@@ -36,7 +36,7 @@ const (
 
 	// EnvoyAuthResultErr error code returned when error in fetching result from auth eval
 	EnvoyAuthResultErr string = "envoyauth_result_error"
-	
+
 	// UnknownContextErr error code returned when EvalContext is not provided
 	UnknownContextErr string = "unknown_context_error"
 )
