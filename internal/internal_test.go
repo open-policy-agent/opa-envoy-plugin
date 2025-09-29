@@ -644,7 +644,6 @@ func TestCheckContextCancelled(t *testing.T) {
 	customLogger := &testPlugin{}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	// server := testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger))
 	server := &testServer{
 		envoyExtAuthzGrpcServer: testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger)),
 		beforeCheck: func() {
