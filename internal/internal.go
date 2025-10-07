@@ -461,9 +461,9 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req any) (*ext_auth
 		}, stop, nil
 	}
 
-	if ctx.Err() != nil {
-		err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
-		internalErr = newInternalError(CheckRequestTimeoutErr, err)
+	if ctxErr := checkCtxError(ctx); ctxErr != nil {
+		err = ctxErr.err
+		internalErr = ctxErr
 		return nil, stop, internalErr
 	}
 
@@ -757,4 +757,22 @@ func v2Status(s *ext_type_v3.HttpStatus) *ext_type_v2.HttpStatus {
 	return &ext_type_v2.HttpStatus{
 		Code: ext_type_v2.StatusCode(s.Code),
 	}
+}
+
+// checkCtxError checks if the context has an error and returns an appropriate internal Error
+func checkCtxError(ctx context.Context) *Error {
+	if ctx.Err() != nil {
+		var err error
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			err = errors.Wrap(ctx.Err(), "check request timed out before query execution")
+			return newInternalError(CheckRequestTimeoutErr, err)
+		} else if errors.Is(ctx.Err(), context.Canceled) {
+			err = errors.Wrap(ctx.Err(), "check request explicitly cancelled before query execution")
+			return newInternalError(CheckRequestCancelledErr, err)
+		} else {
+			err = errors.Wrap(ctx.Err(), "check request failed due to unknown context error")
+			return newInternalError(UnknownContextErr, err)
+		}
+	}
+	return nil
 }
