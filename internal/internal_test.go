@@ -622,6 +622,64 @@ func TestCheckContextTimeout(t *testing.T) {
 	assertErrorCounterMetric(t, server, CheckRequestTimeoutErr)
 }
 
+type testServer struct {
+	*envoyExtAuthzGrpcServer
+	beforeCheck func()
+}
+
+func (s *testServer) Check(ctx context.Context, req *ext_authz.CheckRequest) (*ext_authz.CheckResponse, error) {
+	if s.beforeCheck != nil {
+		s.beforeCheck()
+	}
+	return s.envoyExtAuthzGrpcServer.Check(ctx, req)
+}
+
+func TestCheckContextCancelled(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger
+	customLogger := &testPlugin{}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	server := &testServer{
+		envoyExtAuthzGrpcServer: testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger)),
+		beforeCheck: func() {
+			cancel()
+		},
+	}
+	_, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	expectedErrMsg := "check request explicitly cancelled before query execution: context canceled"
+	if err.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %q but got %q", expectedErrMsg, err.Error())
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	event := customLogger.events[0]
+	if event.Error == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if event.Error.Error() != expectedErrMsg {
+		t.Fatalf("Expected error message %q but got %q", expectedErrMsg, event.Error.Error())
+	}
+
+	if len((*event.Input).(map[string]any)) == 0 {
+		t.Fatalf("Expected non empty input but got %v", *event.Input)
+	}
+
+	assertErrorCounterMetric(t, server.envoyExtAuthzGrpcServer, CheckRequestCancelledErr)
+}
+
 func TestCheckContextTimeoutMetricsDisabled(t *testing.T) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {

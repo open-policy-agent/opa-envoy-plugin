@@ -25,6 +25,9 @@ const (
 	// CheckRequestTimeoutErr error code returned when context deadline exceeds before eval
 	CheckRequestTimeoutErr string = "check_request_timeout"
 
+	// CheckRequestCancelledErr error code returned when context deadline exceeds before eval
+	CheckRequestCancelledErr string = "check_request_cancelled"
+
 	// InputParseErr error code returned when unable to convert input map to ast value
 	InputParseErr string = "input_parse_error"
 
@@ -33,6 +36,9 @@ const (
 
 	// EnvoyAuthResultErr error code returned when error in fetching result from auth eval
 	EnvoyAuthResultErr string = "envoyauth_result_error"
+
+	// UnknownContextErr error code returned when EvalContext is not provided
+	UnknownContextErr string = "unknown_context_error"
 )
 
 // Is allows matching internal errors using errors.Is
