@@ -6,7 +6,7 @@ VERSION_OPA := $(shell ./build/get-opa-version.sh)
 VERSION := $(VERSION_OPA)-envoy$(shell ./build/get-plugin-rev.sh)
 VERSION_ISTIO := $(VERSION_OPA)-istio$(shell ./build/get-plugin-rev.sh)
 
-PACKAGES := $(shell go list ./.../ | grep -v 'vendor')
+PACKAGES := $(shell go list ./.../)
 
 DOCKER := docker
 
@@ -22,7 +22,7 @@ GOLANGCI_LINT_VERSION := v1.64.5
 
 # GOPROXY=off: Don't pull anything off the network
 # see https://github.com/thepudds/go-module-knobs/blob/master/README.md
-GO := CGO_ENABLED=$(CGO_ENABLED) GOARCH=$(GOARCH) GO111MODULE=on GOFLAGS=-mod=vendor GOPROXY=off go
+GO := CGO_ENABLED=$(CGO_ENABLED) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=off go
 GOVERSION := $(shell cat ./.go-version)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
