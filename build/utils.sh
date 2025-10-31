@@ -5,7 +5,7 @@ set -o pipefail
 set -o nounset
 
 function opa-envoy-plugin::go_packages() {
-    for pkg in $(go list ./.../ 2>/dev/null | grep -v vendor); do
+    for pkg in $(go list ./.../ 2>/dev/null); do
         echo $pkg
     done
 }
