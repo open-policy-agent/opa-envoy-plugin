@@ -23,7 +23,7 @@ require (
 require (
 	github.com/bytecodealliance/wasmtime-go/v37 v37.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
-	github.com/containerd/containerd/v2 v2.1.4 // indirect
+	github.com/containerd/containerd/v2 v2.1.5 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/platforms v1.0.0-rc.1 // indirect
 	github.com/containerd/typeurl/v2 v2.2.3 // indirect
