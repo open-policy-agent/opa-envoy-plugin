@@ -62,6 +62,7 @@ func TestReadRevisionsLegacy(t *testing.T) {
 
 	// write a "legacy" manifest
 	err := storage.Txn(ctx, store, storage.WriteParams, func(txn storage.Transaction) error {
+		// nolint: staticcheck // Intentional usage of deprecated function
 		if err := bundle.LegacyWriteManifestToStore(ctx, store, txn, tb); err != nil {
 			t.Fatalf("Failed to write manifest to store: %s", err)
 			return err
