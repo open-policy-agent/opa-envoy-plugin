@@ -25,9 +25,9 @@ spec:
     # You can also replace this with sample-ext-authz-http to test the other external authorizer definition.
     name: opa-ext-authz-grpc
   rules:
-  - to:
-    - operation:
-        notPaths: ["/health"]
+    - to:
+        - operation:
+            notPaths: [ "/health" ]
 ---
 ############################################################
 # ServiceEntry to register the OPA-Istio sidecars as external authorizers.
@@ -38,15 +38,15 @@ metadata:
   name: opa-ext-authz-grpc-local
 spec:
   hosts:
-  - "opa-ext-authz-grpc.local"
+    - "opa-ext-authz-grpc.local"
   exportTo:
-  - "."
+    - "."
   endpoints:
-  - address: "127.0.0.1"
+    - address: "127.0.0.1"
   ports:
-  - name: grpc
-    number: 9191
-    protocol: GRPC
+    - name: grpc
+      number: 9191
+      protocol: GRPC
   resolution: STATIC
 ---
 ############################################################
@@ -285,14 +285,14 @@ spec:
         - image: openpolicyagent/opa:latest
           name: opa
           ports:
-          - containerPort: 8443
+            - containerPort: 8443
           args:
-          - "run"
-          - "--server"
-          - "--tls-cert-file=/certs/tls.crt"
-          - "--tls-private-key-file=/certs/tls.key"
-          - "--addr=0.0.0.0:8443"
-          - "/policies/inject.rego"
+            - "run"
+            - "--server"
+            - "--tls-cert-file=/certs/tls.crt"
+            - "--tls-private-key-file=/certs/tls.key"
+            - "--addr=0.0.0.0:8443"
+            - "/policies/inject.rego"
           livenessProbe:
             httpGet:
               path: /health?plugins
@@ -372,15 +372,15 @@ webhooks:
         OC8vc0FjR2dXSSt2OFpkcnBYMUhKSEwKTk16eUJJcXVacUUxdzE4ZVN5RFY1S2NLRzF0SVFZSWt1
         VFpWeDhwU1hjMUlBOWYwCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
     rules:
-      - operations: ["CREATE"]
-        apiGroups: [""]
-        apiVersions: ["v1"]
-        resources: ["pods"]
+      - operations: [ "CREATE" ]
+        apiGroups: [ "" ]
+        apiVersions: [ "v1" ]
+        resources: [ "pods" ]
     namespaceSelector:
       matchLabels:
         opa-istio-injection: enabled
     failurePolicy: Fail
-    admissionReviewVersions: ["v1", "v1beta1"]
+    admissionReviewVersions: [ "v1", "v1beta1" ]
     sideEffects: None
 ---
 ############################################################

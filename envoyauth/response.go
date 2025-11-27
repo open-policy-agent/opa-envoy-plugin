@@ -84,6 +84,7 @@ func (result *EvalResult) ReadRevisions(ctx context.Context, store storage.Store
 	}
 
 	// Check legacy bundle manifest in the store
+	// nolint: staticcheck // Intentional usage of deprecated function
 	revision, err := bundle.LegacyReadRevisionFromStore(ctx, store, result.Txn)
 	if err != nil && !storage.IsNotFound(err) {
 		return err
