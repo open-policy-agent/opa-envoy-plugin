@@ -4,6 +4,8 @@
 
 This repository contains an extended version of OPA (**OPA-Envoy**) that allows you to enforce OPA policies with Envoy.
 
+> **Note about the repository size:** ~1 GB due to historical vendored WebAssembly binaries. For faster clones, use `git clone --depth 1`. See [partial clone options](https://github.blog/open-source/git/get-up-to-speed-with-partial-clone-and-shallow-clone/).
+
 ## Issue Management
 
 Use [GitHub Issues](https://github.com/open-policy-agent/opa-envoy-plugin/issues) to request features or file bugs.
