@@ -131,6 +131,14 @@ func getParsedPathAndQuery(path string) ([]string, map[string]any, error) {
 func getParsedBody(logger logging.Logger, headers map[string]string, body string, rawBody []byte, parsedPath []string, protoSet *protoregistry.Files) (any, bool, error) {
 	var data any
 
+	// Envoy sets x-envoy-auth-partial-body to "true" when the forwarded
+	// request body has been truncated to the configured max_request_bytes
+	// limit. This check is reliable regardless of whether Content-Length
+	// is present (e.g. HTTP/2 or chunked transfers).
+	if headers["x-envoy-auth-partial-body"] == "true" {
+		return nil, true, nil
+	}
+
 	if val, ok := headers["content-type"]; ok {
 		if strings.Contains(val, "application/json") {
 
