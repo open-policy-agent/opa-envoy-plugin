@@ -112,14 +112,19 @@ func RequestToInput(req any, logger logging.Logger, protoSet *protoregistry.File
 }
 
 func getParsedPathAndQuery(path string) ([]string, map[string]any, error) {
-	parsedURL, err := url.Parse(path)
+	rawPath, rawQuery, _ := strings.Cut(path, "?")
+
+	decodedPath, err := url.PathUnescape(rawPath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	parsedPath := strings.Split(strings.TrimLeft(parsedURL.Path, "/"), "/")
+	parsedPath := strings.Split(strings.TrimLeft(decodedPath, "/"), "/")
 
-	query := parsedURL.Query()
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return nil, nil, err
+	}
 	parsedQueryInterface := make(map[string]any, len(query))
 	for paramKey, paramValues := range query {
 		parsedQueryInterface[paramKey] = paramValues

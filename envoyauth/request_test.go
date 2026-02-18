@@ -651,6 +651,21 @@ func TestParsedPathAndQuery(t *testing.T) {
 			[]string{"my", "test", "path"},
 			map[string]any{"a": []string{"1", "new\nline"}},
 		},
+		{
+			createExtReqWithPath("//x/people"),
+			[]string{"x", "people"},
+			map[string]any{},
+		},
+		{
+			createExtReqWithPath("//admin/dashboard"),
+			[]string{"admin", "dashboard"},
+			map[string]any{},
+		},
+		{
+			createExtReqWithPath("//x/people?a=1"),
+			[]string{"x", "people"},
+			map[string]any{"a": []string{"1"}},
+		},
 	}
 
 	for _, tt := range tests {
