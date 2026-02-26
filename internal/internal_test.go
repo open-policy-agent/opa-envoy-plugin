@@ -1860,7 +1860,7 @@ func TestCheckAllowObjectDecisionResponseHeadersToAdd(t *testing.T) {
 		t.Fatalf("Expected two headers but got %v", len(headers))
 	}
 
-	keys := []string{}
+	keys := make([]string, 0, len(headers))
 	for _, h := range headers {
 		keys = append(keys, h.Header.GetKey())
 	}
@@ -2610,14 +2610,14 @@ type testPlugin struct {
 	events []logs.EventV1
 }
 
-func (_ *testPlugin) Start(context.Context) error {
+func (*testPlugin) Start(context.Context) error {
 	return nil
 }
 
-func (_ *testPlugin) Stop(context.Context) {
+func (*testPlugin) Stop(context.Context) {
 }
 
-func (_ *testPlugin) Reconfigure(context.Context, any) {
+func (*testPlugin) Reconfigure(context.Context, any) {
 }
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
@@ -2629,14 +2629,14 @@ type testPluginError struct {
 	events []logs.EventV1
 }
 
-func (_ *testPluginError) Start(context.Context) error {
+func (*testPluginError) Start(context.Context) error {
 	return nil
 }
 
-func (_ *testPluginError) Stop(context.Context) {
+func (*testPluginError) Stop(context.Context) {
 }
 
-func (_ *testPluginError) Reconfigure(context.Context, any) {
+func (*testPluginError) Reconfigure(context.Context, any) {
 }
 
 func (p *testPluginError) Log(_ context.Context, event logs.EventV1) error {
