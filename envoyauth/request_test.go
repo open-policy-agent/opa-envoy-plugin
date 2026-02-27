@@ -291,6 +291,63 @@ func TestGetParsedBody(t *testing.T) {
 			}
 		}
 	}`
+
+	requestPartialBodyJSON := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json",
+				"x-envoy-auth-partial-body": "true"
+			  },
+			  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\"}"
+			}
+		  }
+		}
+	  }`
+
+	requestNotPartialBodyJSON := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/json",
+				"x-envoy-auth-partial-body": "false"
+			  },
+			  "body": "{\"firstname\": \"foo\", \"lastname\": \"bar\"}"
+			}
+		  }
+		}
+	  }`
+
+	requestPartialBodyURLEncoded := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "application/x-www-form-urlencoded",
+				"x-envoy-auth-partial-body": "true"
+			  },
+			  "body": "firstname=foo&lastname=bar"
+			}
+		  }
+		}
+	  }`
+
+	requestPartialBodyMultipart := `{
+		"attributes": {
+		  "request": {
+			"http": {
+			  "headers": {
+				"content-type": "multipart/form-data; boundary=foo",
+				"x-envoy-auth-partial-body": "true"
+			  },
+			  "body": "--foo\nContent-Disposition: form-data; name=\"foo\"\nContent-Type: text/plain\n\nbar\n--foo--\n"
+			}
+		  }
+		}
+	  }`
+
 	expectedNumber := json.Number("42")
 	expectedObject := map[string]any{
 		"firstname": "foo",
@@ -345,6 +402,10 @@ func TestGetParsedBody(t *testing.T) {
 		"content_type_url_encoded_multiple_values":   {input: createCheckRequest(requestContentTypeURLEncodedMultipleKeys), want: expectedURLEncodedObjectMultipleValues, isBodyTruncated: false, err: nil},
 		"content_type_url_encoded_truncated":         {input: createCheckRequest(requestContentTypeURLEncodedTruncated), want: nil, isBodyTruncated: true, err: nil},
 		"content_type_json_with_raw_body":            {input: createCheckRequest(requestContentTypeJSONRawBody), want: expectedContentTypeJSONRawBody, isBodyTruncated: false, err: nil},
+		"partial_body_json":                          {input: createCheckRequest(requestPartialBodyJSON), want: nil, isBodyTruncated: true, err: nil},
+		"not_partial_body_json":                      {input: createCheckRequest(requestNotPartialBodyJSON), want: expectedObject, isBodyTruncated: false, err: nil},
+		"partial_body_url_encoded":                   {input: createCheckRequest(requestPartialBodyURLEncoded), want: nil, isBodyTruncated: true, err: nil},
+		"partial_body_multipart":                     {input: createCheckRequest(requestPartialBodyMultipart), want: nil, isBodyTruncated: true, err: nil},
 	}
 
 	for name, tc := range tests {
