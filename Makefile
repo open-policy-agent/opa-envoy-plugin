@@ -18,7 +18,7 @@ WASM_ENABLED ?= 1
 GOARCH ?= $(shell go env GOARCH)
 
 DOCKER_RUNNING ?= $(shell docker ps >/dev/null 2>&1 && echo 1 || echo 0)
-GOLANGCI_LINT_VERSION := v1.64.5
+GOLANGCI_LINT_VERSION := v2.9
 
 GO := CGO_ENABLED=$(CGO_ENABLED) GOARCH=$(GOARCH) GO111MODULE=on go
 GOVERSION := $(shell cat ./.go-version)
