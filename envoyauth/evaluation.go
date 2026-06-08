@@ -9,6 +9,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown"
 	"github.com/open-policy-agent/opa/v1/topdown/builtins"
 	iCache "github.com/open-policy-agent/opa/v1/topdown/cache"
 	"github.com/open-policy-agent/opa/v1/topdown/print"
@@ -34,6 +35,17 @@ type EvalContext interface {
 type PrepareQueryOpts struct {
 	Opts        []func(*rego.Rego)
 	PrepareOpts []rego.PrepareOption
+}
+
+func newEvaluatedRuleTracker() *topdown.EvaluatedRuleTracker {
+	return &topdown.EvaluatedRuleTracker{}
+}
+
+func evaluatedRuleLabels(t *topdown.EvaluatedRuleTracker) []map[string]any {
+	if t == nil || len(t.Labels) == 0 {
+		return nil
+	}
+	return t.Labels
 }
 
 // Eval - Evaluates an input against a provided EvalContext and yields result
@@ -64,7 +76,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 			"txn":   result.TxnID,
 		}).Debug("Executing policy query.")
 	}
-
+	tracker := newEvaluatedRuleTracker()
 	pq, err := evalContext.CreatePreparedQueryOnce(
 		PrepareQueryOpts{
 			Opts: []func(*rego.Rego){
@@ -98,6 +110,7 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 			rego.EvalInterQueryBuiltinValueCache(evalContext.InterQueryBuiltinValueCache()),
 			rego.EvalPrintHook(&ph),
 			rego.EvalNDBuiltinCache(ndbCache),
+			rego.EvalEvaluatedRuleTracker(tracker),
 		},
 		evalOpts...,
 	)
@@ -119,6 +132,8 @@ func Eval(ctx context.Context, evalContext EvalContext, input ast.Value, result 
 
 	result.NDBuiltinCache = ndbCache
 	result.Decision = rs[0].Expressions[0].Value
+
+	result.EvaluatedRuleLabels = evaluatedRuleLabels(tracker)
 
 	return err
 }
