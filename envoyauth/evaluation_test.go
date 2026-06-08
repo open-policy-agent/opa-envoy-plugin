@@ -2,6 +2,7 @@ package envoyauth
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -51,6 +52,17 @@ func TestEval(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	expectedLabels := []map[string]any{
+		{
+			"service":  "authz",
+			"severity": "low",
+			"team":     "platform",
+		},
+	}
+	if !reflect.DeepEqual(expectedLabels, res.EvaluatedRuleLabels) {
+		t.Errorf("expected evaluated rule labels %v, got %v", expectedLabels, res.EvaluatedRuleLabels)
+	}
+
 	logs := logger.Entries()
 	if exp, act := 3, len(logs); exp != act {
 		t.Fatalf("expected %d logs, got %d: %v", exp, act, logs)
@@ -70,7 +82,7 @@ func TestEval(t *testing.T) {
 	if exp, act := logging.Info, logs[2].Level; exp != act {
 		t.Errorf("expected log level info, got %d", act)
 	}
-	if exp, act := `example.rego:9: {"firstname": "foo", "lastname": "bar"}`, logs[2].Message; exp != act {
+	if exp, act := `example.rego:17: {"firstname": "foo", "lastname": "bar"}`, logs[2].Message; exp != act {
 		t.Errorf("expected log message %q, got %q", exp, act)
 	}
 	if exp, act := res.DecisionID, logs[2].Fields["decision-id"]; exp != act {
@@ -112,16 +124,24 @@ func TestEval(t *testing.T) {
 
 func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 
-	module := `
-		package envoy.authz
+	module := `# METADATA
+# scope: package
+# labels:
+#   service: authz
+#   severity: info
+package envoy.authz
 
-		default allow = false
+default allow = false
 
-		allow if {
-			input.parsed_body.firstname == "foo"
-			input.parsed_body.lastname == "bar"
-			print(input.parsed_body)
-		}`
+# METADATA
+# labels:
+#   severity: low
+#   team: platform
+allow if {
+	input.parsed_body.firstname == "foo"
+	input.parsed_body.lastname == "bar"
+	print(input.parsed_body)
+}`
 
 	ctx := context.Background()
 	store := inmem.New()
@@ -136,6 +156,7 @@ func testAuthzServer(logger logging.Logger) (*mockExtAuthzGrpcServer, error) {
 	m, err := plugins.New([]byte{}, "test", store,
 		plugins.EnablePrintStatements(true),
 		plugins.Logger(logger),
+		plugins.WithParserOptions(ast.ParserOptions{ProcessAnnotation: true}),
 	)
 	if err != nil {
 		return nil, err
