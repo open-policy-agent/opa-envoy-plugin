@@ -21,14 +21,15 @@ import (
 
 // EvalResult - Captures the result from evaluating a query against an input
 type EvalResult struct {
-	Revision       string // Deprecated: Use `revisions` instead.
-	Revisions      map[string]string
-	DecisionID     string
-	TxnID          uint64
-	Decision       any
-	Metrics        metrics.Metrics
-	Txn            storage.Transaction
-	NDBuiltinCache builtins.NDBCache
+	Revision            string // Deprecated: Use `revisions` instead.
+	Revisions           map[string]string
+	DecisionID          string
+	TxnID               uint64
+	Decision            any
+	Metrics             metrics.Metrics
+	Txn                 storage.Transaction
+	EvaluatedRuleLabels []map[string]any
+	NDBuiltinCache      builtins.NDBCache
 }
 
 // StopFunc should be called as soon as the evaluation is finished
