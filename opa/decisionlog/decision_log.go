@@ -28,10 +28,10 @@ func LogDecision(ctx context.Context, plugin *logs.Plugin, info *server.Info, re
 		bundles[name] = server.BundleInfo{Revision: rev}
 	}
 	info.Bundles = bundles
-
 	info.DecisionID = result.DecisionID
 	info.Metrics = result.Metrics
 	info.Txn = result.Txn
+	info.EvaluatedRuleLabels = result.EvaluatedRuleLabels
 
 	if err != nil {
 		switch err.(type) {
