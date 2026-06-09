@@ -16,6 +16,16 @@ jobs:
       - name: Check out code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+
       - name: Build Golang
         run: make ci-go-build
         timeout-minutes: 15
@@ -27,6 +37,16 @@ jobs:
       - name: Check out code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+
       - name: Unit Test Golang
         run: make ci-go-test
         timeout-minutes: 15
@@ -37,6 +57,16 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
 
       - name: Golang Style and Lint Check
         run: make check
@@ -52,6 +82,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+
       - name: Build and Push
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -66,6 +106,16 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
 
       - name: Build docker image
         run: make ci-go-build ci-go-build-linux-static image-quick tag-latest
@@ -95,6 +145,16 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
 
       - name: Build docker image
         run: make ci-go-build ci-go-build-linux-static image-quick tag-latest
