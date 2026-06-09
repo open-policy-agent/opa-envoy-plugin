@@ -19,6 +19,16 @@ jobs:
         # Subsequent jobs will be have the computed tag name
         run: echo "TAG_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV
 
+      - name: Sync Go version from OPA
+        run: |
+          OPA_VERSION=$(go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
+          curl -fsSL "https://raw.githubusercontent.com/open-policy-agent/opa/${OPA_VERSION}/.go-version" -o .go-version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+
       - name: Build Release Binaries
         run: make release
 
