@@ -425,7 +425,12 @@ func (p *envoyExtAuthzGrpcServer) check(ctx context.Context, req any) (*ext_auth
 				p.metricErrorCounter.With(prometheus.Labels{"reason": internalErr.Code}).Inc()
 			}
 		}
-		logErr := p.logDecision(ctx, input, result, err)
+		// Log the decision using a context that is no longer subject to the
+		// original request's cancellation/deadline. The check request may
+		// have been cancelled or timed out before query execution, but the
+		// decision should still be logged, e.g. by evaluating a mask policy,
+		// without racing against a context that is already done.
+		logErr := p.logDecision(context.WithoutCancel(ctx), input, result, err)
 		if logErr != nil {
 			_ = txnClose(ctx, logErr) // Ignore error
 			logger.WithFields(map[string]any{"err": logErr}).Debug("Error when logging event")
