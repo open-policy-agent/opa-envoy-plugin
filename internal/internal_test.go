@@ -680,6 +680,40 @@ func TestCheckContextCancelled(t *testing.T) {
 	assertErrorCounterMetric(t, server.envoyExtAuthzGrpcServer, CheckRequestCancelledErr)
 }
 
+func TestCheckContextCancelledLogsWithUncancelledContext(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
+		panic(err)
+	}
+
+	// create custom logger that captures the context it is invoked with
+	customLogger := &ctxCapturingPlugin{}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	server := &testServer{
+		envoyExtAuthzGrpcServer: testAuthzServer(&Config{EnablePerformanceMetrics: true}, withCustomLogger(customLogger)),
+		beforeCheck: func() {
+			cancel()
+		},
+	}
+	_, err := server.Check(ctx, &req)
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if len(customLogger.events) != 1 {
+		t.Fatal("Unexpected events:", customLogger.events)
+	}
+
+	// The decision must be logged using a context that is not cancelled,
+	// even though the request context was already cancelled before query
+	// execution. Otherwise the decision log plugin can lose the event, e.g.
+	// racing with the mask policy evaluation.
+	if logCtxErr := customLogger.ctx.Err(); logCtxErr != nil {
+		t.Fatalf("Expected decision logging context to not be cancelled, got: %v", logCtxErr)
+	}
+}
+
 func TestCheckContextTimeoutMetricsDisabled(t *testing.T) {
 	var req ext_authz.CheckRequest
 	if err := util.Unmarshal([]byte(exampleAllowedRequest), &req); err != nil {
@@ -2622,6 +2656,29 @@ func (*testPlugin) Reconfigure(context.Context, any) {
 
 func (p *testPlugin) Log(_ context.Context, event logs.EventV1) error {
 	p.events = append(p.events, event)
+	return nil
+}
+
+// ctxCapturingPlugin behaves like testPlugin but also records the context
+// it was invoked with, so tests can assert on its cancellation state.
+type ctxCapturingPlugin struct {
+	events []logs.EventV1
+	ctx    context.Context
+}
+
+func (*ctxCapturingPlugin) Start(context.Context) error {
+	return nil
+}
+
+func (*ctxCapturingPlugin) Stop(context.Context) {
+}
+
+func (*ctxCapturingPlugin) Reconfigure(context.Context, any) {
+}
+
+func (p *ctxCapturingPlugin) Log(ctx context.Context, event logs.EventV1) error {
+	p.events = append(p.events, event)
+	p.ctx = ctx
 	return nil
 }
 
