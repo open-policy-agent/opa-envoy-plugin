@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0
 	github.com/golang/protobuf v1.5.4
-	github.com/open-policy-agent/opa v1.21.0
+	github.com/open-policy-agent/opa v1.21.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.24.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.71.0
