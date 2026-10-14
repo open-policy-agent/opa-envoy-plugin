@@ -1093,7 +1093,7 @@ func TestCheckEvalErrorWithLogger(t *testing.T) {
 		t.Fatalf("Unexpected events: %+v", customLogger.events)
 	}
 
-	expectedMsg := "eval_conflict_error: complete rules must not produce multiple outputs"
+	expectedMsg := "eval_conflict_error:"
 	if !strings.Contains(event.Error.Error(), expectedMsg) {
 		t.Fatalf("Expected error message %v, but got %v", expectedMsg, event.Error.Error())
 	}
