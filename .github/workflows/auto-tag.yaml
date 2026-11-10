@@ -1,0 +1,59 @@
+name: Auto Tag
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only print the tag that would be pushed
+        type: boolean
+        default: true
+
+jobs:
+  tag:
+    name: Tag OPA bumps
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Tag if this commit bumps OPA
+        id: tag
+        run: |
+          # No "-N" suffix means HEAD is the commit that bumped OPA.
+          VERSION=$(make version)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-envoy$ ]]; then
+            echo "Version $VERSION is not a release version, nothing to tag"
+            exit 0
+          fi
+          TAG="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists"
+            exit 0
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Dry run, would push tag $TAG"
+            exit 0
+          fi
+          git tag "$TAG"
+          git push origin "refs/tags/$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Release
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write
+    # Tags pushed with GITHUB_TOKEN don't trigger the tag-push workflow.
+    uses: ./.github/workflows/post-tag.yaml
+    with:
+      tag_name: ${{ needs.tag.outputs.tag }}
