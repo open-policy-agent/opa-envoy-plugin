@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
 
 jobs:
   build:
@@ -14,10 +19,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag_name || github.ref }}
 
       - name: Set TAG_NAME in Environment
         # Subsequent jobs will be have the computed tag name
-        run: echo "TAG_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV
+        run: echo "TAG_NAME=${INPUT_TAG_NAME:-${GITHUB_REF##*/}}" >> $GITHUB_ENV
+        env:
+          INPUT_TAG_NAME: ${{ inputs.tag_name }}
 
       - name: Sync Go version from OPA
         run: |
