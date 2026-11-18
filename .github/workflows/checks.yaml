@@ -118,7 +118,7 @@ jobs:
           go-version-file: .go-version
 
       - name: Build docker image
-        run: make ci-go-build ci-go-build-linux-static image-quick tag-latest
+        run: make ci-go-build image-quick tag-latest
 
       - name: Setup kind/istio
         run: |
@@ -157,7 +157,7 @@ jobs:
           go-version-file: .go-version
 
       - name: Build docker image
-        run: make ci-go-build ci-go-build-linux-static image-quick tag-latest
+        run: make ci-go-build image-quick tag-latest
 
       - name: Build testsrv docker image
         run: make testsrv-image
