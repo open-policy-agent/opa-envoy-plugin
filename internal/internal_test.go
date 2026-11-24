@@ -1337,6 +1337,50 @@ func TestCheckTwiceWithCachedBuiltinCall(t *testing.T) {
 	}
 }
 
+func TestCheckTwiceWithCachedJSONSchema(t *testing.T) {
+	var req ext_authz.CheckRequest
+	if err := util.Unmarshal([]byte(exampleAllowedRequestParsedBody), &req); err != nil {
+		panic(err)
+	}
+
+	const schema = `{"type": "object", "required": ["firstname"]}`
+	module := fmt.Sprintf(`
+		package envoy.authz
+
+		allow := json.match_schema(input.parsed_body, %s)[0]
+	`, schema)
+	server := testAuthzServerWithModule(module, "envoy/authz/allow", nil)
+	ctx := t.Context()
+	output, err := server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+
+	cache := server.InterQueryBuiltinValueCache()
+	if cache == nil {
+		t.Fatal("Expected an inter-query value cache")
+	}
+	key := ast.MustParseTerm(schema).Value
+	originalSchema, ok := cache.Get(key)
+	if !ok {
+		t.Fatal("Expected the compiled schema in the cache")
+	}
+
+	output, err = server.Check(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Status.Code != int32(code.Code_OK) {
+		t.Fatal("Expected request to be allowed but got:", output)
+	}
+	if cachedSchema, ok := cache.Get(key); !ok || cachedSchema != originalSchema {
+		t.Fatal("Expected the same instance of the compiled schema")
+	}
+}
+
 func TestConfigValidWithQuery(t *testing.T) {
 	m, err := plugins.New([]byte{}, "test", inmem.New())
 	if err != nil {

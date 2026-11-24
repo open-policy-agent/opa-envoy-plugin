@@ -173,6 +173,7 @@ func newWithContext(ctx context.Context, m *plugins.Manager, cfg *Config) plugin
 		server:                 grpc.NewServer(grpcOpts...),
 		preparedQueryDoOnce:    new(sync.Once),
 		interQueryBuiltinCache: iCache.NewInterQueryCacheWithContext(ctx, m.InterQueryBuiltinCacheConfig()),
+		interQueryValueCache:   iCache.NewInterQueryValueCache(ctx, m.InterQueryBuiltinCacheConfig()),
 		distributedTracingOpts: distributedTracingOpts,
 	}
 
